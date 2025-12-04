@@ -1184,6 +1184,174 @@ class IxApplicationController extends Controller
     }
 
     /**
+     * Handle PayU Server-to-Server (S2S) Webhook.
+     * This is the most reliable way to confirm transaction status.
+     * PayU sends this POST request directly from their server to ours.
+     */
+    public function handleWebhook(Request $request): \Illuminate\Http\JsonResponse
+    {
+        $response = $request->all();
+        
+        try {
+            $payuService = new PayuService;
+
+            // Log the webhook request for debugging
+            Log::info('PayU S2S Webhook Received', [
+                'all_params' => $response,
+                'method' => $request->method(),
+                'ip' => $request->ip(),
+                'user_agent' => $request->userAgent(),
+                'headers' => $request->headers->all(),
+            ]);
+
+            // Check if required fields are present
+            $requiredFields = ['txnid', 'status', 'hash'];
+            $missingFields = array_diff($requiredFields, array_keys($response));
+            
+            if (! empty($missingFields)) {
+                Log::error('PayU S2S Webhook - Missing required fields', [
+                    'missing_fields' => $missingFields,
+                    'received_fields' => array_keys($response),
+                    'response' => $response,
+                ]);
+
+                return response()->json(['status' => 'error', 'message' => 'Missing required fields'], 400);
+            }
+
+            // Verify hash
+            $isValid = $payuService->verifyHash($response);
+
+            if (! $isValid) {
+                Log::warning('PayU S2S Webhook - Hash verification failed', [
+                    'response' => $response,
+                    'transaction_id' => $request->input('txnid'),
+                    'status' => $request->input('status'),
+                ]);
+
+                return response()->json(['status' => 'error', 'message' => 'Hash verification failed'], 400);
+            }
+
+            // Find payment transaction
+            $transactionId = $request->input('txnid');
+            $paymentTransactionId = $request->input('udf2');
+            
+            $paymentTransaction = null;
+            if ($paymentTransactionId) {
+                $paymentTransaction = PaymentTransaction::find($paymentTransactionId);
+                // Verify the transaction ID matches
+                if ($paymentTransaction && $paymentTransaction->transaction_id !== $transactionId) {
+                    $paymentTransaction = null;
+                }
+            }
+            
+            // Fallback: find by transaction ID only if udf2 lookup failed
+            if (! $paymentTransaction) {
+                $paymentTransaction = PaymentTransaction::where('transaction_id', $transactionId)->first();
+            }
+
+            if (! $paymentTransaction) {
+                Log::error('PayU S2S Webhook - Payment transaction not found', [
+                    'transaction_id' => $transactionId,
+                    'payment_transaction_id' => $paymentTransactionId,
+                ]);
+
+                return response()->json(['status' => 'error', 'message' => 'Transaction not found'], 404);
+            }
+
+            // Get PayU payment ID and status
+            $payuPaymentId = $request->input('mihpayid') 
+                ?? $request->input('payuMoneyId') 
+                ?? $request->input('payuid')
+                ?? null;
+
+            $status = $request->input('status', '');
+            $bankRefNum = $request->input('bank_ref_num');
+            $mode = $request->input('mode');
+            $error = $request->input('error');
+            $errorMessage = $request->input('error_Message') ?? $request->input('error_message');
+
+            // Determine payment status based on PayU status
+            // PayU status values: success, failure, pending, cancelled, etc.
+            $paymentStatus = 'pending';
+            if (strtolower($status) === 'success') {
+                $paymentStatus = 'success';
+            } elseif (in_array(strtolower($status), ['failure', 'failed', 'error', 'cancelled'])) {
+                $paymentStatus = 'failed';
+            }
+
+            // Update payment transaction - S2S webhook is the source of truth
+            // Add webhook timestamp to response data
+            $webhookResponse = $response;
+            $webhookResponse['webhook_received_at'] = now('Asia/Kolkata')->toDateTimeString();
+            
+            $paymentTransaction->update([
+                'payment_id' => $payuPaymentId,
+                'payment_status' => $paymentStatus,
+                'response_message' => $status ?: ($error ?: $errorMessage ?: ''),
+                'payu_response' => $webhookResponse,
+                'hash' => $request->input('hash'),
+            ]);
+
+            // If payment is successful, update application status
+            if ($paymentStatus === 'success' && $paymentTransaction->application_id) {
+                $application = Application::find($paymentTransaction->application_id);
+                if ($application && $application->status !== 'submitted') {
+                    $newStatus = $application->application_type === 'IX' ? 'submitted' : 'pending';
+
+                    $application->update([
+                        'status' => $newStatus,
+                        'submitted_at' => $application->submitted_at ?? now('Asia/Kolkata'),
+                    ]);
+
+                    ApplicationStatusHistory::log(
+                        $application->id,
+                        null,
+                        $newStatus,
+                        'system',
+                        null,
+                        'IX application submitted via PayU S2S webhook'
+                    );
+
+                    // Update application data with payment info
+                    $applicationData = $application->application_data;
+                    $applicationData['payment'] = array_merge($applicationData['payment'] ?? [], [
+                        'transaction_id' => $transactionId,
+                        'payment_id' => $payuPaymentId ?? $paymentTransaction->payment_id,
+                        'status' => 'success',
+                        'paid_at' => now('Asia/Kolkata')->toDateTimeString(),
+                        'bank_ref_num' => $bankRefNum,
+                        'mode' => $mode,
+                        'webhook_confirmed' => true,
+                    ]);
+                    $application->update(['application_data' => $applicationData]);
+                }
+            }
+
+            // Log webhook processing
+            Log::info('PayU S2S Webhook Processed Successfully', [
+                'transaction_id' => $transactionId,
+                'payment_transaction_id' => $paymentTransaction->id,
+                'payu_payment_id' => $payuPaymentId,
+                'status' => $status,
+                'payment_status' => $paymentStatus,
+                'amount' => $request->input('amount'),
+            ]);
+
+            // Return success response to PayU
+            return response()->json(['status' => 'success'], 200);
+
+        } catch (\Exception $e) {
+            Log::error('PayU S2S Webhook Exception', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'request_data' => $response,
+            ]);
+
+            return response()->json(['status' => 'error', 'message' => 'Internal server error'], 500);
+        }
+    }
+
+    /**
      * Save application data (extracted from store method for reuse).
      */
     private function saveApplicationData(array $validated, Registration $user, Request $request): ?Application

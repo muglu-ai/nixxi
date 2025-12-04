@@ -270,6 +270,9 @@ Route::prefix('user')->name('user.')->middleware(['user.auth'])->group(function 
         Route::get('/{id}', [ApplicationController::class, 'show'])->name('show');
     });
 
+    // PayU S2S Webhook (must be outside auth middleware - PayU server calls this directly)
+    Route::post('/payu/webhook', [IxApplicationController::class, 'handleWebhook'])->name('payu.webhook');
+
     // Add more User routes here
 });
 

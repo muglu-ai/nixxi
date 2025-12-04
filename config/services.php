@@ -49,6 +49,7 @@ return [
         'live_url' => env('PAYU_LIVE_URL', 'https://secure.payu.in/_payment'),
         'mode' => env('PAYU_MODE', 'test'),
         'service_provider' => env('PAYU_SERVICE_PROVIDER', 'payu_paisa'),
+        'webhook_url' => env('PAYU_WEBHOOK_URL', null), // Will be auto-generated if not set
     ],
 
 ];
