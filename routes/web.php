@@ -252,8 +252,9 @@ Route::prefix('user')->name('user.')->middleware(['user.auth'])->group(function 
             Route::post('/submit', [IxApplicationController::class, 'store'])->name('store');
             Route::post('/initiate-payment', [IxApplicationController::class, 'initiatePayment'])->name('initiate-payment');
             Route::post('/{id}/pay-now', [IxApplicationController::class, 'payNow'])->name('pay-now');
-            Route::match(['get', 'post'], '/payment-success', [IxApplicationController::class, 'paymentSuccess'])->name('payment-success');
-            Route::match(['get', 'post'], '/payment-failure', [IxApplicationController::class, 'paymentFailure'])->name('payment-failure');
+            // PayU callbacks - accept both GET and POST
+            Route::any('/payment-success', [IxApplicationController::class, 'paymentSuccess'])->name('payment-success');
+            Route::any('/payment-failure', [IxApplicationController::class, 'paymentFailure'])->name('payment-failure');
             Route::get('/preview', [IxApplicationController::class, 'preview'])->name('preview');
             Route::post('/{applicationId}/submit', [IxApplicationController::class, 'finalSubmit'])->name('final-submit');
             Route::get('/agreement', [IxApplicationController::class, 'downloadAgreement'])->name('agreement');

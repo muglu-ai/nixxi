@@ -936,6 +936,19 @@ class IxApplicationController extends Controller
         // Get all parameters from both POST and GET
         $response = array_merge($request->query(), $request->post());
         
+        // Log immediately when this method is called - even if empty
+        Log::info('=== PayU Success Callback Method Called ===', [
+            'method' => $request->method(),
+            'url' => $request->fullUrl(),
+            'has_query' => !empty($request->query()),
+            'has_post' => !empty($request->post()),
+            'query_params' => $request->query(),
+            'post_params' => $request->post(),
+            'all_input' => $request->all(),
+            'ip' => $request->ip(),
+            'user_agent' => $request->userAgent(),
+        ]);
+        
         try {
             $payuService = new PayuService;
 
@@ -1155,6 +1168,19 @@ class IxApplicationController extends Controller
      */
     public function paymentFailure(Request $request): RedirectResponse
     {
+        // Log immediately when this method is called - even if empty
+        Log::info('=== PayU Failure Callback Method Called ===', [
+            'method' => $request->method(),
+            'url' => $request->fullUrl(),
+            'has_query' => !empty($request->query()),
+            'has_post' => !empty($request->post()),
+            'query_params' => $request->query(),
+            'post_params' => $request->post(),
+            'all_input' => $request->all(),
+            'ip' => $request->ip(),
+            'user_agent' => $request->userAgent(),
+        ]);
+        
         // PayU may send data via POST or GET (query string)
         // Get all parameters from both POST and GET
         $response = array_merge($request->query(), $request->post());
