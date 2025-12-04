@@ -176,4 +176,87 @@ class PayuService
     {
         return $this->paymentUrl;
     }
+
+    /**
+     * Query PayU transaction status.
+     * This can be used to check payment status when callback doesn't have parameters.
+     */
+    public function checkTransactionStatus(string $transactionId): ?array
+    {
+        $mode = config('services.payu.mode', 'test');
+        $command = 'verify_payment';
+        
+        // Build hash for status check
+        $hashString = $this->merchantKey.'|'.$command.'|'.$transactionId.'|'.$this->salt;
+        $hash = strtolower(hash('sha512', $hashString));
+        
+        // PayU status check endpoint
+        $statusUrl = $mode === 'test' 
+            ? 'https://test.payu.in/merchant/postservice?form=2'
+            : 'https://info.payu.in/merchant/postservice?form=2';
+        
+        $postData = [
+            'key' => $this->merchantKey,
+            'command' => $command,
+            'var1' => $transactionId,
+            'hash' => $hash,
+        ];
+        
+        try {
+            $ch = curl_init();
+            curl_setopt($ch, CURLOPT_URL, $statusUrl);
+            curl_setopt($ch, CURLOPT_POST, true);
+            curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($postData));
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
+            curl_setopt($ch, CURLOPT_TIMEOUT, 30);
+            
+            $response = curl_exec($ch);
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $error = curl_error($ch);
+            curl_close($ch);
+            
+            if ($error) {
+                \Illuminate\Support\Facades\Log::error('PayU Status Check cURL Error', [
+                    'error' => $error,
+                    'transaction_id' => $transactionId,
+                ]);
+                return null;
+            }
+            
+            // Parse response (PayU returns pipe-separated values or JSON)
+            $result = [];
+            if (strpos($response, '|') !== false) {
+                // Pipe-separated format
+                $parts = explode('|', $response);
+                $result = [
+                    'status' => $parts[0] ?? '',
+                    'message' => $parts[1] ?? '',
+                    'transaction_id' => $transactionId,
+                ];
+            } else {
+                // Try JSON
+                $json = json_decode($response, true);
+                if ($json) {
+                    $result = $json;
+                } else {
+                    $result = ['raw_response' => $response];
+                }
+            }
+            
+            \Illuminate\Support\Facades\Log::info('PayU Status Check Response', [
+                'transaction_id' => $transactionId,
+                'http_code' => $httpCode,
+                'response' => $result,
+            ]);
+            
+            return $result;
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error('PayU Status Check Exception', [
+                'error' => $e->getMessage(),
+                'transaction_id' => $transactionId,
+            ]);
+            return null;
+        }
+    }
 }
