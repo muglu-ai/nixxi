@@ -1100,10 +1100,35 @@ class IxApplicationController extends Controller
             }
         }
 
-        return view('user.applications.ix.payment-confirmation', [
-            'paymentTransaction' => $paymentTransaction,
-            'application' => $paymentTransaction->application,
-        ]);
+        try {
+            // Get application if it exists - safely handle null
+            $application = null;
+            if ($paymentTransaction->application_id) {
+                $application = Application::find($paymentTransaction->application_id);
+            }
+            
+            Log::info('Rendering payment confirmation view', [
+                'payment_transaction_id' => $paymentTransaction->id,
+                'application_id' => $paymentTransaction->application_id,
+                'has_application' => $application !== null,
+            ]);
+            
+            return view('user.applications.ix.payment-confirmation', [
+                'paymentTransaction' => $paymentTransaction,
+                'application' => $application,
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Error rendering payment confirmation view', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'payment_transaction_id' => $paymentTransaction->id,
+                'payment_transaction' => $paymentTransaction->toArray(),
+            ]);
+
+            // Still show success message even if view fails
+            return redirect()->route('user.applications.index')
+                ->with('success', 'Payment was successful! Transaction ID: ' . $paymentTransaction->transaction_id);
+        }
     }
 
     /**

@@ -36,7 +36,7 @@
                                     <span class="badge bg-success">Success</span>
                                 </dd>
 
-                                @if($application)
+                                @if(isset($application) && $application)
                                 <dt class="col-sm-5">Application ID:</dt>
                                 <dd class="col-sm-7">{{ $application->application_id }}</dd>
                                 @endif
@@ -47,7 +47,7 @@
                         </div>
                     </div>
 
-                    @if($application)
+                    @if(isset($application) && $application)
                     <div class="alert alert-info">
                         <p class="mb-0">
                             <strong>Application Status:</strong> Your IX application has been submitted successfully and is now under review.
@@ -57,7 +57,7 @@
 
                     <div class="d-flex gap-2 justify-content-center mt-4">
                         <a href="{{ route('user.applications.index') }}" class="btn btn-primary">View Applications</a>
-                        @if($application)
+                        @if(isset($application) && $application)
                         <a href="{{ route('user.applications.ix.download-application-pdf', $application->id) }}" class="btn btn-outline-secondary">Download Application PDF</a>
                         @endif
                     </div>
