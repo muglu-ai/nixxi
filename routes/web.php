@@ -14,6 +14,7 @@ use App\Http\Controllers\SuperAdminController;
 use App\Http\Controllers\SuperAdminLoginController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\UserKycController;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
 // Home Route
@@ -281,3 +282,71 @@ Route::prefix('application')->name('application.')->middleware(['application'])-
     Route::get('/dashboard', [ApplicationController::class, 'index'])->name('dashboard');
     // Add more Application routes here
 });
+
+// ⚠️ TEMPORARY: Log Viewer Route - REMOVE AFTER DEBUGGING ⚠️
+Route::get('/admin/view-logs', function (Request $request) {
+    // Basic security - require user authentication
+    if (!session('user_id')) {
+        return redirect()->route('login.index')
+            ->with('error', 'Please login to view logs.');
+    }
+    
+    $logFile = storage_path('logs/laravel.log');
+    
+    if (!file_exists($logFile)) {
+        return response()->json([
+            'error' => 'Log file not found',
+            'path' => $logFile
+        ], 404);
+    }
+    
+    // Get filter parameter
+    $filter = $request->get('filter', 'all'); // all, payu, errors
+    $lines = (int) $request->get('lines', 200); // number of lines to show
+    $lines = min($lines, 1000); // limit to 1000 lines max
+    
+    // Read log file
+    $logContent = file_get_contents($logFile);
+    $logLines = explode("\n", $logContent);
+    $totalLines = count($logLines);
+    
+    // Get last N lines
+    $recentLines = array_slice($logLines, -$lines);
+    
+    // Apply filter
+    $filteredLines = [];
+    foreach ($recentLines as $line) {
+        $line = trim($line);
+        if (empty($line)) {
+            continue;
+        }
+        
+        if ($filter === 'payu') {
+            if (stripos($line, 'PayU') !== false || 
+                stripos($line, 'payment') !== false || 
+                stripos($line, 'Payment') !== false) {
+                $filteredLines[] = $line;
+            }
+        } elseif ($filter === 'errors') {
+            if (stripos($line, 'ERROR') !== false || 
+                stripos($line, 'Exception') !== false || 
+                stripos($line, 'Failed') !== false) {
+                $filteredLines[] = $line;
+            }
+        } else {
+            $filteredLines[] = $line;
+        }
+    }
+    
+    // Return HTML view
+    return response()->view('admin.logs-viewer', [
+        'logs' => $filteredLines,
+        'totalLines' => $totalLines,
+        'showingLines' => count($filteredLines),
+        'filter' => $filter,
+        'lines' => $lines,
+        'logFile' => $logFile,
+        'fileSize' => filesize($logFile),
+        'lastModified' => date('Y-m-d H:i:s', filemtime($logFile)),
+    ]);
+})->name('admin.view-logs');
