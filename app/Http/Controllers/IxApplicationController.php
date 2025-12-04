@@ -937,6 +937,7 @@ class IxApplicationController extends Controller
         $response = array_merge($request->query(), $request->post());
         
         // Log immediately when this method is called - even if empty
+        // This route is accessible without authentication since PayU redirects here
         Log::info('=== PayU Success Callback Method Called ===', [
             'method' => $request->method(),
             'url' => $request->fullUrl(),
@@ -947,6 +948,8 @@ class IxApplicationController extends Controller
             'all_input' => $request->all(),
             'ip' => $request->ip(),
             'user_agent' => $request->userAgent(),
+            'session_id' => session()->getId(),
+            'has_user_session' => !empty(session('user_id')),
         ]);
         
         try {
@@ -1169,6 +1172,7 @@ class IxApplicationController extends Controller
     public function paymentFailure(Request $request): RedirectResponse
     {
         // Log immediately when this method is called - even if empty
+        // This route is accessible without authentication since PayU redirects here
         Log::info('=== PayU Failure Callback Method Called ===', [
             'method' => $request->method(),
             'url' => $request->fullUrl(),
@@ -1179,6 +1183,8 @@ class IxApplicationController extends Controller
             'all_input' => $request->all(),
             'ip' => $request->ip(),
             'user_agent' => $request->userAgent(),
+            'session_id' => session()->getId(),
+            'has_user_session' => !empty(session('user_id')),
         ]);
         
         // PayU may send data via POST or GET (query string)

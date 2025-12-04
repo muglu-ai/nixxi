@@ -252,9 +252,6 @@ Route::prefix('user')->name('user.')->middleware(['user.auth'])->group(function 
             Route::post('/submit', [IxApplicationController::class, 'store'])->name('store');
             Route::post('/initiate-payment', [IxApplicationController::class, 'initiatePayment'])->name('initiate-payment');
             Route::post('/{id}/pay-now', [IxApplicationController::class, 'payNow'])->name('pay-now');
-            // PayU callbacks - accept both GET and POST
-            Route::any('/payment-success', [IxApplicationController::class, 'paymentSuccess'])->name('payment-success');
-            Route::any('/payment-failure', [IxApplicationController::class, 'paymentFailure'])->name('payment-failure');
             Route::get('/preview', [IxApplicationController::class, 'preview'])->name('preview');
             Route::post('/{applicationId}/submit', [IxApplicationController::class, 'finalSubmit'])->name('final-submit');
             Route::get('/agreement', [IxApplicationController::class, 'downloadAgreement'])->name('agreement');
@@ -272,11 +269,16 @@ Route::prefix('user')->name('user.')->middleware(['user.auth'])->group(function 
         Route::get('/{id}', [ApplicationController::class, 'show'])->name('show');
     });
 
-    // PayU S2S Webhook (must be outside auth middleware - PayU server calls this directly)
-    Route::post('/payu/webhook', [IxApplicationController::class, 'handleWebhook'])->name('payu.webhook');
-
     // Add more User routes here
 });
+
+// PayU Callback URLs (MUST be outside auth middleware - PayU redirects user here)
+// These routes are accessible without authentication since PayU redirects the user's browser
+Route::any('/user/applications/ix/payment-success', [IxApplicationController::class, 'paymentSuccess'])->name('user.applications.ix.payment-success');
+Route::any('/user/applications/ix/payment-failure', [IxApplicationController::class, 'paymentFailure'])->name('user.applications.ix.payment-failure');
+
+// PayU S2S Webhook (must be outside auth middleware - PayU server calls this directly)
+Route::post('/payu/webhook', [IxApplicationController::class, 'handleWebhook'])->name('payu.webhook');
 
 // Application Routes
 Route::prefix('application')->name('application.')->middleware(['application'])->group(function () {
