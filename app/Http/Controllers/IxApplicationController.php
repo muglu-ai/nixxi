@@ -915,8 +915,8 @@ class IxApplicationController extends Controller
             'firstname' => $user->fullname,
             'email' => $user->email,
             'phone' => $user->mobile,
-            'success_url' => url(route('user.applications.ix.payment-success', [], false)),
-            'failure_url' => url(route('user.applications.ix.payment-failure', [], false)),
+            'success_url' => 'https://interlinxpartnering.com/nixi/public/user/applications/ix/payment-success',
+            'failure_url' => 'https://interlinxpartnering.com/nixi/public/user/applications/ix/payment-failure',
             'udf1' => $application->application_id,
             'udf2' => (string) $paymentTransaction->id,
         ]);
@@ -932,17 +932,58 @@ class IxApplicationController extends Controller
      */
     public function paymentSuccess(Request $request): RedirectResponse|View
     {
-        $payuService = new PayuService;
-
-        // Verify hash
         $response = $request->all();
-        $isValid = $payuService->verifyHash($response);
+        
+        try {
+            $payuService = new PayuService;
 
-        if (! $isValid) {
-            Log::warning('PayU hash verification failed', ['response' => $response]);
+            // Log the full response for debugging
+            Log::info('PayU Success Callback Received', [
+                'all_params' => $response,
+                'method' => $request->method(),
+                'url' => $request->fullUrl(),
+                'headers' => $request->headers->all(),
+            ]);
+
+            // Check if required fields are present
+            $requiredFields = ['txnid', 'status', 'hash'];
+            $missingFields = array_diff($requiredFields, array_keys($response));
+            
+            if (! empty($missingFields)) {
+                Log::error('PayU Success Callback - Missing required fields', [
+                    'missing_fields' => $missingFields,
+                    'received_fields' => array_keys($response),
+                    'response' => $response,
+                ]);
+
+                return redirect()->route('user.applications.ix.create')
+                    ->with('error', 'Invalid payment response. Missing required information.');
+            }
+
+            // Verify hash
+            $isValid = $payuService->verifyHash($response);
+
+            if (! $isValid) {
+                Log::warning('PayU hash verification failed', [
+                    'response' => $response,
+                    'transaction_id' => $request->input('txnid'),
+                    'status' => $request->input('status'),
+                ]);
+
+                // In test mode, we might want to be more lenient, but still log
+                // For now, we'll still require valid hash even in test mode
+                return redirect()->route('user.applications.ix.create')
+                    ->with('error', 'Payment verification failed. Please contact support.');
+            }
+        } catch (\Exception $e) {
+            Log::error('PayU Success Callback Exception', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'request_data' => $response,
+            ]);
 
             return redirect()->route('user.applications.ix.create')
-                ->with('error', 'Payment verification failed. Please contact support.');
+                ->with('error', 'An error occurred while processing payment. Please contact support.');
         }
 
         // Find payment transaction using transaction ID and payment transaction ID from udf2

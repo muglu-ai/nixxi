@@ -75,25 +75,48 @@ class PayuService
      */
     public function verifyHash(array $response): bool
     {
-        $hashString = '';
-        $hashString .= $this->salt.'|';
-        $hashString .= $response['status'].'|';
-        $hashString .= '||||||||';
-        $hashString .= $response['udf5'].'|';
-        $hashString .= $response['udf4'].'|';
-        $hashString .= $response['udf3'].'|';
-        $hashString .= $response['udf2'].'|';
-        $hashString .= $response['udf1'].'|';
-        $hashString .= $response['email'].'|';
-        $hashString .= $response['firstname'].'|';
-        $hashString .= $response['productinfo'].'|';
-        $hashString .= $response['amount'].'|';
-        $hashString .= $response['txnid'].'|';
-        $hashString .= $this->merchantKey;
+        // Ensure all fields are strings and handle missing fields
+        $status = trim((string) ($response['status'] ?? ''));
+        $udf1 = trim((string) ($response['udf1'] ?? ''));
+        $udf2 = trim((string) ($response['udf2'] ?? ''));
+        $udf3 = trim((string) ($response['udf3'] ?? ''));
+        $udf4 = trim((string) ($response['udf4'] ?? ''));
+        $udf5 = trim((string) ($response['udf5'] ?? ''));
+        $email = trim((string) ($response['email'] ?? ''));
+        $firstname = trim((string) ($response['firstname'] ?? ''));
+        $productinfo = trim((string) ($response['productinfo'] ?? ''));
+        $amount = trim((string) ($response['amount'] ?? ''));
+        $txnid = trim((string) ($response['txnid'] ?? ''));
+        $receivedHash = strtolower(trim((string) ($response['hash'] ?? '')));
+
+        // Build hash string as per PayU formula for response verification:
+        // salt|status||||||||udf5|udf4|udf3|udf2|udf1|email|firstname|productinfo|amount|txnid|key
+        $hashString = $this->salt.'|'
+            .$status.'|'
+            .'||||||||'
+            .$udf5.'|'
+            .$udf4.'|'
+            .$udf3.'|'
+            .$udf2.'|'
+            .$udf1.'|'
+            .$email.'|'
+            .$firstname.'|'
+            .$productinfo.'|'
+            .$amount.'|'
+            .$txnid.'|'
+            .$this->merchantKey;
 
         $calculatedHash = strtolower(hash('sha512', $hashString));
 
-        return hash_equals($calculatedHash, strtolower($response['hash'] ?? ''));
+        // Log hash verification details for debugging
+        \Illuminate\Support\Facades\Log::info('PayU Hash Verification', [
+            'calculated_hash' => $calculatedHash,
+            'received_hash' => $receivedHash,
+            'hash_match' => hash_equals($calculatedHash, $receivedHash),
+            'hash_string' => $hashString,
+        ]);
+
+        return hash_equals($calculatedHash, $receivedHash);
     }
 
     /**
