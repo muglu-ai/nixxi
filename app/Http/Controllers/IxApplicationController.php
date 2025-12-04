@@ -842,8 +842,8 @@ class IxApplicationController extends Controller
             'firstname' => $user->fullname,
             'email' => $user->email,
             'phone' => $user->mobile,
-            'success_url' => route('user.applications.ix.payment-success'),
-            'failure_url' => route('user.applications.ix.payment-failure'),
+            'success_url' => url(route('user.applications.ix.payment-success', [], false)),
+            'failure_url' => url(route('user.applications.ix.payment-failure', [], false)),
             'udf1' => $application->application_id,
             'udf2' => (string) $paymentTransaction->id,
         ]);
@@ -915,8 +915,8 @@ class IxApplicationController extends Controller
             'firstname' => $user->fullname,
             'email' => $user->email,
             'phone' => $user->mobile,
-            'success_url' => route('user.applications.ix.payment-success'),
-            'failure_url' => route('user.applications.ix.payment-failure'),
+            'success_url' => url(route('user.applications.ix.payment-success', [], false)),
+            'failure_url' => url(route('user.applications.ix.payment-failure', [], false)),
             'udf1' => $application->application_id,
             'udf2' => (string) $paymentTransaction->id,
         ]);
@@ -932,7 +932,6 @@ class IxApplicationController extends Controller
      */
     public function paymentSuccess(Request $request): RedirectResponse|View
     {
-        $userId = session('user_id');
         $payuService = new PayuService;
 
         // Verify hash
@@ -946,18 +945,35 @@ class IxApplicationController extends Controller
                 ->with('error', 'Payment verification failed. Please contact support.');
         }
 
-        // Find payment transaction
+        // Find payment transaction using transaction ID and payment transaction ID from udf2
         $transactionId = $request->input('txnid');
-        $paymentTransaction = PaymentTransaction::where('transaction_id', $transactionId)
-            ->where('user_id', $userId)
-            ->first();
+        $paymentTransactionId = $request->input('udf2');
+        
+        $paymentTransaction = null;
+        if ($paymentTransactionId) {
+            $paymentTransaction = PaymentTransaction::find($paymentTransactionId);
+            // Verify the transaction ID matches
+            if ($paymentTransaction && $paymentTransaction->transaction_id !== $transactionId) {
+                $paymentTransaction = null;
+            }
+        }
+        
+        // Fallback: find by transaction ID only if udf2 lookup failed
+        if (! $paymentTransaction) {
+            $paymentTransaction = PaymentTransaction::where('transaction_id', $transactionId)->first();
+        }
 
         if (! $paymentTransaction) {
-            Log::error('Payment transaction not found', ['transaction_id' => $transactionId]);
+            Log::error('Payment transaction not found', [
+                'transaction_id' => $transactionId,
+                'payment_transaction_id' => $paymentTransactionId,
+            ]);
 
             return redirect()->route('user.applications.ix.create')
                 ->with('error', 'Payment transaction not found.');
         }
+        
+        $userId = $paymentTransaction->user_id;
 
         // Update payment transaction
         $paymentTransaction->update([
@@ -1029,12 +1045,22 @@ class IxApplicationController extends Controller
      */
     public function paymentFailure(Request $request): RedirectResponse
     {
-        $userId = session('user_id');
         $transactionId = $request->input('txnid');
-
-        $paymentTransaction = PaymentTransaction::where('transaction_id', $transactionId)
-            ->where('user_id', $userId)
-            ->first();
+        $paymentTransactionId = $request->input('udf2');
+        
+        $paymentTransaction = null;
+        if ($paymentTransactionId) {
+            $paymentTransaction = PaymentTransaction::find($paymentTransactionId);
+            // Verify the transaction ID matches
+            if ($paymentTransaction && $paymentTransaction->transaction_id !== $transactionId) {
+                $paymentTransaction = null;
+            }
+        }
+        
+        // Fallback: find by transaction ID only if udf2 lookup failed
+        if (! $paymentTransaction) {
+            $paymentTransaction = PaymentTransaction::where('transaction_id', $transactionId)->first();
+        }
 
         if ($paymentTransaction) {
             $paymentTransaction->update([
