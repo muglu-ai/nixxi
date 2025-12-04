@@ -44,8 +44,8 @@ class PayuService
         $email = trim((string) $params['email']);
 
         // Build hash string exactly as per PayU formula:
-        // sha512(key|txnid|amount|productinfo|firstname|email|udf1|udf2|udf3|udf4|udf5||||||SALT)
-        // After udf2, we need exactly 9 pipes total when udf3,4,5 are empty
+        // key|txnid|amount|productinfo|firstname|email|udf1|udf2|udf3|udf4|udf5||||||SALT
+        // After udf5, there must be exactly 6 pipes (||||||) before SALT
         $hashString = $this->merchantKey.'|'
             .$txnid.'|'
             .$amount.'|'
@@ -57,7 +57,7 @@ class PayuService
             .$udf3.'|'
             .$udf4.'|'
             .$udf5.'|'
-            .'|||||'
+            .'||||||'
             .$this->salt;
 
         // Temporary debug logging
@@ -121,13 +121,24 @@ class PayuService
 
     /**
      * Prepare payment data for PayU.
+     * 
+     * Mandatory parameters: key, txnid, amount, productinfo, firstname, email, phone, surl, furl, hash
      */
     public function preparePaymentData(array $data): array
     {
+        // Validate mandatory fields
+        $requiredFields = ['transaction_id', 'amount', 'product_info', 'firstname', 'email', 'phone', 'success_url', 'failure_url'];
+        $missingFields = array_diff($requiredFields, array_keys($data));
+        
+        if (! empty($missingFields)) {
+            throw new \InvalidArgumentException('Missing required PayU parameters: '.implode(', ', $missingFields));
+        }
+
+        // Build payment data array with all mandatory fields
         $paymentData = [
             'key' => $this->merchantKey,
             'txnid' => $data['transaction_id'],
-            'amount' => number_format($data['amount'], 2, '.', ''),
+            'amount' => number_format((float) $data['amount'], 2, '.', ''),
             'productinfo' => $data['product_info'],
             'firstname' => $data['firstname'],
             'email' => $data['email'],
@@ -142,7 +153,17 @@ class PayuService
             'udf5' => $data['udf5'] ?? '',
         ];
 
+        // Generate hash using the payment data
         $paymentData['hash'] = $this->generateHash($paymentData);
+
+        // Log payment data preparation for debugging (without sensitive data)
+        \Illuminate\Support\Facades\Log::info('PayU Payment Data Prepared', [
+            'txnid' => $paymentData['txnid'],
+            'amount' => $paymentData['amount'],
+            'surl' => $paymentData['surl'],
+            'furl' => $paymentData['furl'],
+            'hash_length' => strlen($paymentData['hash']),
+        ]);
 
         return $paymentData;
     }

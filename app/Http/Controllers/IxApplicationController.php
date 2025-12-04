@@ -1016,13 +1016,36 @@ class IxApplicationController extends Controller
         
         $userId = $paymentTransaction->user_id;
 
-        // Update payment transaction
+        // Get PayU payment ID - PayU can return it as mihpayid, payuMoneyId, or payuid
+        $payuPaymentId = $request->input('mihpayid') 
+            ?? $request->input('payuMoneyId') 
+            ?? $request->input('payuid')
+            ?? null;
+
+        // Get additional response fields
+        $status = $request->input('status', '');
+        $bankRefNum = $request->input('bank_ref_num');
+        $mode = $request->input('mode');
+        $error = $request->input('error');
+        $errorMessage = $request->input('error_Message') ?? $request->input('error_message');
+
+        // Update payment transaction with all PayU response data
         $paymentTransaction->update([
-            'payment_id' => $request->input('payuMoneyId') ?? $request->input('mihpayid'),
+            'payment_id' => $payuPaymentId,
             'payment_status' => 'success',
-            'response_message' => $request->input('status'),
+            'response_message' => $status ?: 'success',
             'payu_response' => $response,
             'hash' => $request->input('hash'),
+        ]);
+
+        // Log successful payment for debugging
+        Log::info('PayU Payment Success - Transaction Updated', [
+            'transaction_id' => $transactionId,
+            'payment_transaction_id' => $paymentTransaction->id,
+            'payu_payment_id' => $payuPaymentId,
+            'status' => $status,
+            'amount' => $request->input('amount'),
+            'bank_ref_num' => $bankRefNum,
         ]);
 
         // Update application status
@@ -1055,9 +1078,11 @@ class IxApplicationController extends Controller
                     $applicationData['pdfs'] = ['application_pdf' => $pdfPath];
                     $applicationData['payment'] = array_merge($applicationData['payment'] ?? [], [
                         'transaction_id' => $transactionId,
-                        'payment_id' => $paymentTransaction->payment_id,
+                        'payment_id' => $payuPaymentId ?? $paymentTransaction->payment_id,
                         'status' => 'success',
                         'paid_at' => now('Asia/Kolkata')->toDateTimeString(),
+                        'bank_ref_num' => $bankRefNum,
+                        'mode' => $mode,
                     ]);
                     $application->update(['application_data' => $applicationData]);
 
@@ -1086,30 +1111,71 @@ class IxApplicationController extends Controller
      */
     public function paymentFailure(Request $request): RedirectResponse
     {
-        $transactionId = $request->input('txnid');
-        $paymentTransactionId = $request->input('udf2');
+        $response = $request->all();
         
-        $paymentTransaction = null;
-        if ($paymentTransactionId) {
-            $paymentTransaction = PaymentTransaction::find($paymentTransactionId);
-            // Verify the transaction ID matches
-            if ($paymentTransaction && $paymentTransaction->transaction_id !== $transactionId) {
-                $paymentTransaction = null;
-            }
-        }
-        
-        // Fallback: find by transaction ID only if udf2 lookup failed
-        if (! $paymentTransaction) {
-            $paymentTransaction = PaymentTransaction::where('transaction_id', $transactionId)->first();
-        }
+        try {
+            // Log the failure response for debugging
+            Log::info('PayU Failure Callback Received', [
+                'all_params' => $response,
+                'method' => $request->method(),
+                'url' => $request->fullUrl(),
+            ]);
 
-        if ($paymentTransaction) {
-            $paymentTransaction->update([
-                'payment_id' => $request->input('payuMoneyId') ?? $request->input('mihpayid'),
-                'payment_status' => 'failed',
-                'response_message' => $request->input('status') ?? $request->input('error'),
-                'payu_response' => $request->all(),
-                'hash' => $request->input('hash'),
+            $transactionId = $request->input('txnid');
+            $paymentTransactionId = $request->input('udf2');
+            
+            $paymentTransaction = null;
+            if ($paymentTransactionId) {
+                $paymentTransaction = PaymentTransaction::find($paymentTransactionId);
+                // Verify the transaction ID matches
+                if ($paymentTransaction && $paymentTransaction->transaction_id !== $transactionId) {
+                    $paymentTransaction = null;
+                }
+            }
+            
+            // Fallback: find by transaction ID only if udf2 lookup failed
+            if (! $paymentTransaction) {
+                $paymentTransaction = PaymentTransaction::where('transaction_id', $transactionId)->first();
+            }
+
+            if ($paymentTransaction) {
+                // Get PayU payment ID and error details
+                $payuPaymentId = $request->input('mihpayid') 
+                    ?? $request->input('payuMoneyId') 
+                    ?? $request->input('payuid')
+                    ?? null;
+
+                $status = $request->input('status', '');
+                $error = $request->input('error');
+                $errorMessage = $request->input('error_Message') ?? $request->input('error_message');
+
+                $paymentTransaction->update([
+                    'payment_id' => $payuPaymentId,
+                    'payment_status' => 'failed',
+                    'response_message' => $status ?: $error ?: $errorMessage ?: 'Payment failed',
+                    'payu_response' => $response,
+                    'hash' => $request->input('hash'),
+                ]);
+
+                // Log failed payment for debugging
+                Log::warning('PayU Payment Failed', [
+                    'transaction_id' => $transactionId,
+                    'payment_transaction_id' => $paymentTransaction->id,
+                    'status' => $status,
+                    'error' => $error,
+                    'error_message' => $errorMessage,
+                ]);
+            } else {
+                Log::error('PayU Failure Callback - Payment transaction not found', [
+                    'transaction_id' => $transactionId,
+                    'payment_transaction_id' => $paymentTransactionId,
+                ]);
+            }
+        } catch (\Exception $e) {
+            Log::error('PayU Failure Callback Exception', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'request_data' => $response,
             ]);
         }
 
