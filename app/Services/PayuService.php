@@ -45,8 +45,8 @@ class PayuService
 
         // Build hash string exactly as per PayU formula:
         // key|txnid|amount|productinfo|firstname|email|udf1|udf2|udf3|udf4|udf5||||||SALT
-        // After udf5|, there must be exactly 6 pipes (||||||) before SALT
-        // This matches PayU's documented formula and the working previous implementation
+        // After udf5|, there must be exactly 5 pipes (|||||) before SALT
+        // Verified against PayU's error message which shows the correct format
         $hashString = $this->merchantKey.'|'
             .$txnid.'|'
             .$amount.'|'
@@ -58,7 +58,7 @@ class PayuService
             .$udf3.'|'
             .$udf4.'|'
             .$udf5.'|'
-            .'||||||'
+            .'|||||'
             .$this->salt;
 
         // Temporary debug logging
