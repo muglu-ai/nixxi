@@ -1,0 +1,97 @@
+@import 'tailwindcss';
+
+@source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
+@source '../../storage/framework/views/*.php';
+@source '../**/*.blade.php';
+@source '../**/*.js';
+
+/* Varela Round Font Face */
+@font-face {
+    font-family: 'Varela Round';
+    src: url('/fonts/VarelaRound-Regular.ttf') format('truetype');
+    font-weight: normal;
+    font-style: normal;
+    font-display: swap;
+}
+
+@theme {
+    --font-sans: 'Varela Round', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
+        'Segoe UI Symbol', 'Noto Color Emoji';
+    
+    /* Theme Colors - Red, White, Black */
+    --color-primary-red: #DC143C;
+    --color-red: #DC143C;
+    --color-white: #FFFFFF;
+    --color-black: #000000;
+    
+    /* Smaller font sizes for space management */
+    --text-xs: 0.75rem; /* 12px */
+    --text-sm: 0.8125rem; /* 13px */
+    --text-base: 0.875rem; /* 14px - smaller base */
+    --text-lg: 0.9375rem; /* 15px */
+    --text-xl: 1rem; /* 16px */
+    --text-2xl: 1.125rem; /* 18px */
+    --text-3xl: 1.25rem; /* 20px */
+}
+
+/* Base styles with theme */
+body {
+    font-family: 'Varela Round', sans-serif;
+    font-size: var(--text-base);
+    background-color: var(--color-white);
+    color: var(--color-black);
+}
+
+/* Links - Red as highlighter */
+a {
+    color: var(--color-red);
+    transition: color 0.2s ease;
+}
+
+a:hover {
+    color: #B0112E;
+    text-decoration: underline;
+}
+
+/* Buttons - Red background */
+.btn-primary,
+button[type="submit"],
+input[type="submit"] {
+    background-color: var(--color-red);
+    color: var(--color-white);
+    border: 2px solid var(--color-black);
+    font-size: var(--text-base);
+    padding: 0.5rem 1rem;
+    border-radius: 4px;
+}
+
+.btn-primary:hover,
+button[type="submit"]:hover,
+input[type="submit"]:hover {
+    background-color: #B0112E;
+    color: var(--color-white);
+}
+
+/* Form elements - smaller font */
+input,
+select,
+textarea {
+    font-size: var(--text-base);
+    border: 1px solid var(--color-black);
+    padding: 0.5rem;
+    border-radius: 3px;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+    border-color: var(--color-red);
+    border-width: 2px;
+    outline: none;
+    border-radius: 3px;
+}
+
+/* Borders - Black */
+.border {
+    border-color: var(--color-black);
+}

@@ -1,0 +1,2187 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Mail\ProfileUpdateApprovedMail;
+use App\Models\Admin;
+use App\Models\AdminAction;
+use App\Models\Application;
+use App\Models\ApplicationStatusHistory;
+use App\Models\Message;
+use App\Models\ProfileUpdateRequest;
+use App\Models\Registration;
+use Exception;
+use Illuminate\Database\QueryException;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Validation\ValidationException;
+use PDOException;
+
+class AdminController extends Controller
+{
+    /**
+     * Get current admin with roles.
+     */
+    protected function getCurrentAdmin()
+    {
+        $adminId = session('admin_id');
+
+        return Admin::with('roles')->findOrFail($adminId);
+    }
+
+    /**
+     * Check if admin has a specific role.
+     */
+    protected function hasRole(Admin $admin, string $roleSlug): bool
+    {
+        return $admin->hasRole($roleSlug);
+    }
+
+    /**
+     * Display the Admin dashboard.
+     */
+    public function index(Request $request)
+    {
+        try {
+            $admin = $this->getCurrentAdmin();
+            $adminId = $admin->id;
+
+            // Get selected role from query parameter or session
+            $selectedRole = $request->get('role', session('admin_selected_role', null));
+
+            // If admin has multiple roles and no role is selected, auto-select based on priority
+            if ($admin->roles->count() > 1 && ! $selectedRole) {
+                // Priority order: new IX workflow roles first, then legacy
+                $priorityOrder = [
+                    'ix_processor', 'ix_legal', 'ix_head', 'ceo', 'nodal_officer', 'ix_tech_team', 'ix_account',
+                    'processor', 'finance', 'technical',
+                ];
+                foreach ($priorityOrder as $priorityRole) {
+                    if ($admin->hasRole($priorityRole)) {
+                        $selectedRole = $priorityRole;
+                        break;
+                    }
+                }
+            }
+
+            // Validate selected role belongs to admin
+            if ($selectedRole && ! $admin->hasRole($selectedRole)) {
+                $selectedRole = null;
+            }
+
+            // Store selected role in session
+            if ($selectedRole) {
+                session(['admin_selected_role' => $selectedRole]);
+            }
+
+            // Calculate statistics
+            $totalUsers = Registration::count();
+            $totalApplications = Application::count();
+            $approvedApplications = Application::where('status', 'approved')->count();
+
+            // Pending applications based on selected role
+            $pendingApplications = 0;
+            $roleToUse = $selectedRole;
+            if ($admin->roles->count() === 1) {
+                $roleToUse = $admin->roles->first()->slug;
+            }
+
+            // New IX workflow roles
+            if ($roleToUse === 'ix_processor') {
+                $pendingApplications = Application::where('application_type', 'IX')
+                    ->whereIn('status', ['submitted', 'resubmitted', 'processor_resubmission', 'legal_sent_back', 'head_sent_back'])
+                    ->count();
+            } elseif ($roleToUse === 'ix_legal') {
+                $pendingApplications = Application::where('application_type', 'IX')
+                    ->where('status', 'processor_forwarded_legal')
+                    ->count();
+            } elseif ($roleToUse === 'ix_head') {
+                $pendingApplications = Application::where('application_type', 'IX')
+                    ->where('status', 'legal_forwarded_head')
+                    ->count();
+            } elseif ($roleToUse === 'ceo') {
+                $pendingApplications = Application::where('application_type', 'IX')
+                    ->where('status', 'head_forwarded_ceo')
+                    ->count();
+            } elseif ($roleToUse === 'nodal_officer') {
+                $pendingApplications = Application::where('application_type', 'IX')
+                    ->where('status', 'ceo_approved')
+                    ->count();
+            } elseif ($roleToUse === 'ix_tech_team') {
+                $pendingApplications = Application::where('application_type', 'IX')
+                    ->where('status', 'port_assigned')
+                    ->count();
+            } elseif ($roleToUse === 'ix_account') {
+                $pendingApplications = Application::where('application_type', 'IX')
+                    ->whereIn('status', ['ip_assigned', 'invoice_pending'])
+                    ->count();
+            } elseif ($roleToUse === 'processor') {
+                // Legacy
+                $pendingApplications = Application::whereIn('status', ['pending', 'processor_review'])->count();
+            } elseif ($roleToUse === 'finance') {
+                // Legacy
+                $pendingApplications = Application::whereIn('status', ['processor_approved', 'finance_review'])->count();
+            } elseif ($roleToUse === 'technical') {
+                // Legacy
+                $pendingApplications = Application::where('status', 'finance_approved')->count();
+            } else {
+                // If no role selected, show all pending IX applications
+                $pendingApplications = Application::where('application_type', 'IX')
+                    ->whereNotIn('status', ['approved', 'rejected', 'ceo_rejected', 'payment_verified'])
+                    ->count();
+            }
+
+            $recentUsers = Registration::latest()->take(10)->get();
+
+            return view('admin.dashboard', compact(
+                'admin',
+                'totalUsers',
+                'totalApplications',
+                'approvedApplications',
+                'pendingApplications',
+                'selectedRole',
+                'recentUsers'
+            ));
+        } catch (QueryException $e) {
+            Log::error('Database error loading Admin dashboard: '.$e->getMessage());
+            abort(503, 'Database connection error. Please try again later.');
+        } catch (PDOException $e) {
+            Log::error('PDO error loading Admin dashboard: '.$e->getMessage());
+            abort(503, 'Database connection error. Please try again later.');
+        } catch (Exception $e) {
+            Log::error('Error loading Admin dashboard: '.$e->getMessage());
+            abort(500, 'Unable to load dashboard. Please try again later.');
+        }
+    }
+
+    /**
+     * Display all users.
+     */
+    public function users()
+    {
+        try {
+            $users = Registration::with(['messages', 'profileUpdateRequests'])
+                ->latest()
+                ->paginate(20);
+
+            return view('admin.users.index', compact('users'));
+        } catch (QueryException $e) {
+            Log::error('Database error loading users: '.$e->getMessage());
+            abort(503, 'Database connection error. Please try again later.');
+        } catch (PDOException $e) {
+            Log::error('PDO error loading users: '.$e->getMessage());
+            abort(503, 'Database connection error. Please try again later.');
+        } catch (Exception $e) {
+            Log::error('Error loading users: '.$e->getMessage());
+
+            return redirect()->route('admin.dashboard')
+                ->with('error', 'Unable to load users. Please try again.');
+        }
+    }
+
+    /**
+     * Display user details with full history.
+     */
+    public function showUser($id)
+    {
+        try {
+            $user = Registration::with([
+                'messages',
+                'profileUpdateRequests.approver',
+                'profileUpdateRequests' => function ($query) {
+                    $query->with('approver')->latest();
+                },
+            ])->findOrFail($id);
+
+            // Get all admin actions related to this user
+            $adminActions = AdminAction::where('actionable_type', Registration::class)
+                ->where('actionable_id', $id)
+                ->orWhere(function ($query) use ($user) {
+                    $query->where('actionable_type', ProfileUpdateRequest::class)
+                        ->whereIn('actionable_id', $user->profileUpdateRequests->pluck('id'));
+                })
+                ->orWhere(function ($query) use ($user) {
+                    $query->where('actionable_type', Message::class)
+                        ->whereIn('actionable_id', $user->messages->pluck('id'));
+                })
+                ->with(['admin', 'superAdmin'])
+                ->latest()
+                ->get();
+
+            return view('admin.users.show', compact('user', 'adminActions'));
+        } catch (QueryException $e) {
+            Log::error('Database error loading user details: '.$e->getMessage());
+            abort(503, 'Database connection error. Please try again later.');
+        } catch (PDOException $e) {
+            Log::error('PDO error loading user details: '.$e->getMessage());
+            abort(503, 'Database connection error. Please try again later.');
+        } catch (Exception $e) {
+            Log::error('Error loading user details: '.$e->getMessage());
+
+            return redirect()->route('admin.users')
+                ->with('error', 'User not found.');
+        }
+    }
+
+    /**
+     * Send message to user.
+     */
+    public function sendMessage(Request $request, $userId)
+    {
+        try {
+            $validated = $request->validate([
+                'subject' => 'required|string|max:255',
+                'message' => 'required|string|min:10',
+            ], [
+                'subject.required' => 'Subject is required.',
+                'message.required' => 'Message is required.',
+                'message.min' => 'Message must be at least 10 characters.',
+            ]);
+
+            $user = Registration::findOrFail($userId);
+            $adminId = session('admin_id');
+
+            $message = Message::create([
+                'user_id' => $user->id,
+                'subject' => $validated['subject'],
+                'message' => $validated['message'],
+                'is_read' => false,
+                'sent_by' => 'admin',
+            ]);
+
+            // Log action
+            AdminAction::log(
+                $adminId,
+                'sent_message',
+                $message,
+                "Sent message to user: {$user->fullname}",
+                ['subject' => $validated['subject']]
+            );
+
+            return back()->with('success', 'Message sent successfully!');
+        } catch (ValidationException $e) {
+            return back()->withErrors($e->errors())->withInput();
+        } catch (QueryException $e) {
+            Log::error('Database error sending message: '.$e->getMessage());
+
+            return back()->with('error', 'Database connection error. Please try again later.')
+                ->withInput();
+        } catch (PDOException $e) {
+            Log::error('PDO error sending message: '.$e->getMessage());
+
+            return back()->with('error', 'Database connection error. Please try again later.')
+                ->withInput();
+        } catch (Exception $e) {
+            Log::error('Error sending message: '.$e->getMessage());
+
+            return back()->with('error', 'An error occurred while sending message. Please try again.');
+        }
+    }
+
+    /**
+     * Approve profile update request.
+     */
+    public function approveProfileUpdate($requestId)
+    {
+        try {
+            $request = ProfileUpdateRequest::with('user')->findOrFail($requestId);
+            $adminId = session('admin_id');
+
+            $request->update([
+                'status' => 'approved',
+                'approved_at' => now('Asia/Kolkata'),
+                'approved_by' => $adminId,
+            ]);
+
+            // Log action
+            AdminAction::log(
+                $adminId,
+                'approved_profile_update',
+                $request,
+                "Approved profile update request for user: {$request->user->fullname}",
+                ['user_id' => $request->user->id]
+            );
+
+            return back()->with('success', 'Profile update request approved!');
+        } catch (QueryException $e) {
+            Log::error('Database error approving profile update: '.$e->getMessage());
+
+            return back()->with('error', 'Database connection error. Please try again later.');
+        } catch (PDOException $e) {
+            Log::error('PDO error approving profile update: '.$e->getMessage());
+
+            return back()->with('error', 'Database connection error. Please try again later.');
+        } catch (Exception $e) {
+            Log::error('Error approving profile update: '.$e->getMessage());
+
+            return back()->with('error', 'An error occurred. Please try again.');
+        }
+    }
+
+    /**
+     * Approve submitted profile update (apply changes to user).
+     */
+    public function approveSubmittedUpdate($requestId)
+    {
+        try {
+            $updateRequest = ProfileUpdateRequest::with('user')->findOrFail($requestId);
+            $adminId = session('admin_id');
+
+            // Check if there's submitted data waiting for approval
+            if (! $updateRequest->submitted_data || $updateRequest->update_approved) {
+                return back()->with('error', 'This update has already been processed or has no submitted data.');
+            }
+
+            $user = $updateRequest->user;
+            $submittedData = $updateRequest->submitted_data;
+
+            // Get old email before update (to send email to new email)
+            $oldEmail = $user->email;
+            $newEmail = $submittedData['email'] ?? $user->email;
+
+            // Apply the submitted changes to user
+            $user->update($submittedData);
+
+            // Mark the update as approved
+            $updateRequest->update([
+                'update_approved' => true,
+                'update_approved_at' => now('Asia/Kolkata'),
+            ]);
+
+            // Log action
+            AdminAction::log(
+                $adminId,
+                'approved_submitted_update',
+                $updateRequest,
+                "Approved and applied profile update for user: {$user->fullname}",
+                ['user_id' => $user->id, 'changes' => $submittedData]
+            );
+
+            // Send message to user
+            Message::create([
+                'user_id' => $user->id,
+                'subject' => 'Profile Update Approved',
+                'message' => 'Your profile update has been approved and applied. Your profile information has been updated successfully.',
+                'is_read' => false,
+                'sent_by' => 'admin',
+            ]);
+
+            // Send email to updated email address
+            try {
+                Mail::to($newEmail)->send(new ProfileUpdateApprovedMail($submittedData));
+                Log::info("Profile update approved email sent to {$newEmail}");
+            } catch (Exception $e) {
+                Log::error('Failed to send profile update approved email: '.$e->getMessage());
+                // Don't fail the approval if email fails
+            }
+
+            return back()->with('success', 'Profile update approved and applied successfully!');
+        } catch (QueryException $e) {
+            Log::error('Database error approving submitted update: '.$e->getMessage());
+
+            return back()->with('error', 'Database connection error. Please try again later.');
+        } catch (PDOException $e) {
+            Log::error('PDO error approving submitted update: '.$e->getMessage());
+
+            return back()->with('error', 'Database connection error. Please try again later.');
+        } catch (Exception $e) {
+            Log::error('Error approving submitted update: '.$e->getMessage());
+
+            return back()->with('error', 'An error occurred. Please try again.');
+        }
+    }
+
+    /**
+     * Reject profile update request.
+     */
+    public function rejectProfileUpdate(Request $request, $requestId)
+    {
+        try {
+            $validated = $request->validate([
+                'admin_notes' => 'required|string|min:10',
+            ], [
+                'admin_notes.required' => 'Please provide a reason for rejection.',
+                'admin_notes.min' => 'Please provide more details (minimum 10 characters).',
+            ]);
+
+            $updateRequest = ProfileUpdateRequest::with('user')->findOrFail($requestId);
+            $adminId = session('admin_id');
+
+            $updateRequest->update([
+                'status' => 'rejected',
+                'rejected_at' => now('Asia/Kolkata'),
+                'admin_notes' => $validated['admin_notes'],
+                'approved_by' => $adminId,
+            ]);
+
+            // Log action
+            AdminAction::log(
+                $adminId,
+                'rejected_profile_update',
+                $updateRequest,
+                "Rejected profile update request for user: {$updateRequest->user->fullname}",
+                ['reason' => $validated['admin_notes']]
+            );
+
+            return back()->with('success', 'Profile update request rejected.');
+        } catch (ValidationException $e) {
+            return back()->withErrors($e->errors())->withInput();
+        } catch (QueryException $e) {
+            Log::error('Database error rejecting profile update: '.$e->getMessage());
+
+            return back()->with('error', 'Database connection error. Please try again later.')
+                ->withInput();
+        } catch (PDOException $e) {
+            Log::error('PDO error rejecting profile update: '.$e->getMessage());
+
+            return back()->with('error', 'Database connection error. Please try again later.')
+                ->withInput();
+        } catch (Exception $e) {
+            Log::error('Error rejecting profile update: '.$e->getMessage());
+
+            return back()->with('error', 'An error occurred. Please try again.');
+        }
+    }
+
+    /**
+     * Update user status.
+     */
+    public function updateUserStatus(Request $request, $userId)
+    {
+        try {
+            $validated = $request->validate([
+                'status' => 'required|in:pending,approved,rejected,active',
+            ]);
+
+            $user = Registration::findOrFail($userId);
+            $oldStatus = $user->status;
+            $user->update(['status' => $validated['status']]);
+
+            // Log action
+            AdminAction::log(
+                session('admin_id'),
+                'updated_user_status',
+                $user,
+                "Changed user status from {$oldStatus} to {$validated['status']}",
+                ['old_status' => $oldStatus, 'new_status' => $validated['status']]
+            );
+
+            return back()->with('success', 'User status updated successfully!');
+        } catch (ValidationException $e) {
+            return back()->withErrors($e->errors());
+        } catch (QueryException $e) {
+            Log::error('Database error updating user status: '.$e->getMessage());
+
+            return back()->with('error', 'Database connection error. Please try again later.');
+        } catch (PDOException $e) {
+            Log::error('PDO error updating user status: '.$e->getMessage());
+
+            return back()->with('error', 'Database connection error. Please try again later.');
+        } catch (Exception $e) {
+            Log::error('Error updating user status: '.$e->getMessage());
+
+            return back()->with('error', 'An error occurred. Please try again.');
+        }
+    }
+
+    /**
+     * Display applications based on admin role.
+     */
+    public function applications(Request $request)
+    {
+        try {
+            $admin = $this->getCurrentAdmin();
+
+            // Get selected role from query parameter or session
+            $selectedRole = $request->get('role', session('admin_selected_role', null));
+
+            // If admin has multiple roles and no role is selected, auto-select based on priority
+            if ($admin->roles->count() > 1 && ! $selectedRole) {
+                // Priority order: new IX workflow roles first, then legacy
+                $priorityOrder = [
+                    'ix_processor', 'ix_legal', 'ix_head', 'ceo', 'nodal_officer', 'ix_tech_team', 'ix_account',
+                    'processor', 'finance', 'technical',
+                ];
+                foreach ($priorityOrder as $priorityRole) {
+                    if ($admin->hasRole($priorityRole)) {
+                        $selectedRole = $priorityRole;
+                        break;
+                    }
+                }
+            }
+
+            // Validate selected role belongs to admin
+            if ($selectedRole && ! $admin->hasRole($selectedRole)) {
+                $selectedRole = null;
+            }
+
+            // Store selected role in session
+            if ($selectedRole) {
+                session(['admin_selected_role' => $selectedRole]);
+            }
+
+            // Get status filter if provided
+            $statusFilter = $request->get('status');
+
+            // Determine which role to use for filtering
+            $roleToUse = $selectedRole;
+            if ($admin->roles->count() === 1) {
+                // Single role - use that role directly
+                $roleToUse = $admin->roles->first()->slug;
+            }
+
+            // Filter applications based on selected role
+            $query = Application::with([
+                'user',
+                'processor', 'finance', 'technical', // Legacy
+                'ixProcessor', 'ixLegal', 'ixHead', 'ceo', 'nodalOfficer', 'ixTechTeam', 'ixAccount', // New
+                'statusHistory',
+            ])->where('application_type', 'IX'); // Only show IX applications for new workflow
+
+            // New IX workflow roles
+            if ($roleToUse === 'ix_processor') {
+                if ($statusFilter === 'approved') {
+                    $query->where('status', 'approved');
+                } elseif ($statusFilter === 'pending') {
+                    $query->whereIn('status', ['submitted', 'resubmitted', 'processor_resubmission']);
+                } else {
+                    // Show all applications visible to IX Processor
+                    $query->whereIn('status', ['submitted', 'resubmitted', 'processor_resubmission', 'legal_sent_back', 'head_sent_back']);
+                }
+            } elseif ($roleToUse === 'ix_legal') {
+                if ($statusFilter === 'approved') {
+                    $query->where('status', 'approved');
+                } elseif ($statusFilter === 'pending') {
+                    $query->where('status', 'processor_forwarded_legal');
+                } else {
+                    $query->whereIn('status', ['processor_forwarded_legal', 'approved']);
+                }
+            } elseif ($roleToUse === 'ix_head') {
+                if ($statusFilter === 'approved') {
+                    $query->where('status', 'approved');
+                } elseif ($statusFilter === 'pending') {
+                    $query->where('status', 'legal_forwarded_head');
+                } else {
+                    $query->whereIn('status', ['legal_forwarded_head', 'approved']);
+                }
+            } elseif ($roleToUse === 'ceo') {
+                if ($statusFilter === 'approved') {
+                    $query->where('status', 'approved');
+                } elseif ($statusFilter === 'pending') {
+                    $query->where('status', 'head_forwarded_ceo');
+                } else {
+                    $query->whereIn('status', ['head_forwarded_ceo', 'ceo_approved', 'ceo_rejected', 'approved']);
+                }
+            } elseif ($roleToUse === 'nodal_officer') {
+                if ($statusFilter === 'approved') {
+                    $query->where('status', 'approved');
+                } elseif ($statusFilter === 'pending') {
+                    $query->where('status', 'ceo_approved');
+                } else {
+                    $query->whereIn('status', ['ceo_approved', 'port_assigned', 'port_hold', 'port_not_feasible', 'customer_denied', 'approved']);
+                }
+            } elseif ($roleToUse === 'ix_tech_team') {
+                if ($statusFilter === 'approved') {
+                    $query->where('status', 'approved');
+                } elseif ($statusFilter === 'pending') {
+                    $query->where('status', 'port_assigned');
+                } else {
+                    $query->whereIn('status', ['port_assigned', 'ip_assigned', 'approved']);
+                }
+            } elseif ($roleToUse === 'ix_account') {
+                if ($statusFilter === 'approved') {
+                    $query->where('status', 'approved');
+                } elseif ($statusFilter === 'pending') {
+                    $query->whereIn('status', ['ip_assigned', 'invoice_pending']);
+                } else {
+                    $query->whereIn('status', ['ip_assigned', 'invoice_pending', 'payment_verified', 'approved']);
+                }
+            } elseif ($roleToUse === 'processor') {
+                // Legacy processor role
+                if ($statusFilter === 'approved') {
+                    $query->where('status', 'approved');
+                } elseif ($statusFilter === 'pending') {
+                    $query->whereIn('status', ['pending', 'processor_review']);
+                } else {
+                    $query->whereIn('status', ['pending', 'processor_review', 'approved']);
+                }
+            } elseif ($roleToUse === 'finance') {
+                // Legacy finance role
+                if ($statusFilter === 'approved') {
+                    $query->where('status', 'approved');
+                } elseif ($statusFilter === 'pending') {
+                    $query->whereIn('status', ['processor_approved', 'finance_review']);
+                } else {
+                    $query->whereIn('status', ['processor_approved', 'finance_review', 'approved']);
+                }
+            } elseif ($roleToUse === 'technical') {
+                // Legacy technical role
+                if ($statusFilter === 'approved') {
+                    $query->where('status', 'approved');
+                } elseif ($statusFilter === 'pending') {
+                    $query->where('status', 'finance_approved');
+                } else {
+                    $query->whereIn('status', ['finance_approved', 'approved']);
+                }
+            } else {
+                // If no role selected, show all IX applications
+                if ($statusFilter === 'approved') {
+                    $query->where('status', 'approved');
+                } elseif ($statusFilter === 'pending') {
+                    $query->whereNotIn('status', ['approved', 'rejected', 'ceo_rejected']);
+                }
+            }
+
+            $applications = $query->orderBy('submitted_at', 'desc')->paginate(20);
+
+            return view('admin.applications.index', compact('applications', 'admin', 'selectedRole'));
+        } catch (QueryException $e) {
+            Log::error('Database error loading applications: '.$e->getMessage());
+            abort(503, 'Database connection error. Please try again later.');
+        } catch (PDOException $e) {
+            Log::error('PDO error loading applications: '.$e->getMessage());
+            abort(503, 'Database connection error. Please try again later.');
+        } catch (Exception $e) {
+            Log::error('Error loading applications: '.$e->getMessage());
+
+            return redirect()->route('admin.dashboard')
+                ->with('error', 'Unable to load applications. Please try again.');
+        }
+    }
+
+    /**
+     * Show application details.
+     */
+    public function showApplication(Request $request, $id)
+    {
+        try {
+            $admin = $this->getCurrentAdmin();
+            $application = Application::with(['user', 'processor', 'finance', 'technical', 'statusHistory'])
+                ->findOrFail($id);
+
+            // Get selected role from query parameter or session
+            $selectedRole = $request->get('role', session('admin_selected_role', null));
+
+            // If admin has multiple roles and no role is selected, auto-select based on priority
+            if ($admin->roles->count() > 1 && ! $selectedRole) {
+                // Priority order: new IX workflow roles first, then legacy
+                $priorityOrder = [
+                    'ix_processor', 'ix_legal', 'ix_head', 'ceo', 'nodal_officer', 'ix_tech_team', 'ix_account',
+                    'processor', 'finance', 'technical',
+                ];
+                foreach ($priorityOrder as $priorityRole) {
+                    if ($admin->hasRole($priorityRole)) {
+                        $selectedRole = $priorityRole;
+                        break;
+                    }
+                }
+            }
+
+            // Validate selected role belongs to admin
+            if ($selectedRole && ! $admin->hasRole($selectedRole)) {
+                $selectedRole = null;
+            }
+
+            // Store selected role in session
+            if ($selectedRole) {
+                session(['admin_selected_role' => $selectedRole]);
+            }
+
+            // Admin can view all applications, but can only take actions on applications for their selected role
+            return view('admin.applications.show', compact('application', 'admin', 'selectedRole'));
+        } catch (QueryException $e) {
+            Log::error('Database error loading application: '.$e->getMessage());
+            abort(503, 'Database connection error. Please try again later.');
+        } catch (PDOException $e) {
+            Log::error('PDO error loading application: '.$e->getMessage());
+            abort(503, 'Database connection error. Please try again later.');
+        } catch (Exception $e) {
+            Log::error('Error loading application: '.$e->getMessage());
+
+            return redirect()->route('admin.applications')
+                ->with('error', 'Application not found.');
+        }
+    }
+
+    /**
+     * Processor: Approve application to Finance.
+     */
+    public function approveToFinance(Request $request, $id)
+    {
+        try {
+            $admin = $this->getCurrentAdmin();
+
+            if (! $this->hasRole($admin, 'processor')) {
+                return back()->with('error', 'You do not have permission to perform this action.');
+            }
+
+            $application = Application::with('user')->findOrFail($id);
+
+            if (! $application->isVisibleToProcessor()) {
+                return back()->with('error', 'This application is not available for processing.');
+            }
+
+            $oldStatus = $application->status;
+            $application->update([
+                'status' => 'processor_approved',
+                'current_processor_id' => $admin->id,
+            ]);
+
+            // Log status change
+            ApplicationStatusHistory::log(
+                $application->id,
+                $oldStatus,
+                'processor_approved',
+                'admin',
+                $admin->id,
+                'Application approved by Processor and forwarded to Finance'
+            );
+
+            // Log admin action
+            AdminAction::log(
+                $admin->id,
+                'approved_application',
+                $application,
+                "Approved application {$application->application_id} to Finance",
+                ['user_id' => $application->user_id]
+            );
+
+            // Send message to user
+            Message::create([
+                'user_id' => $application->user_id,
+                'subject' => 'Application Status Update',
+                'message' => "Your application {$application->application_id} has been approved by Processor and forwarded to Finance for review.",
+                'is_read' => false,
+                'sent_by' => 'admin',
+            ]);
+
+            return back()->with('success', 'Application approved and forwarded to Finance!');
+        } catch (QueryException $e) {
+            Log::error('Database error approving application: '.$e->getMessage());
+
+            return back()->with('error', 'Database connection error. Please try again later.');
+        } catch (PDOException $e) {
+            Log::error('PDO error approving application: '.$e->getMessage());
+
+            return back()->with('error', 'Database connection error. Please try again later.');
+        } catch (Exception $e) {
+            Log::error('Error approving application: '.$e->getMessage());
+
+            return back()->with('error', 'An error occurred. Please try again.');
+        }
+    }
+
+    /**
+     * Finance: Approve application to Technical.
+     */
+    public function approveToTechnical(Request $request, $id)
+    {
+        try {
+            $admin = $this->getCurrentAdmin();
+
+            if (! $this->hasRole($admin, 'finance')) {
+                return back()->with('error', 'You do not have permission to perform this action.');
+            }
+
+            $application = Application::with('user')->findOrFail($id);
+
+            if (! $application->isVisibleToFinance()) {
+                return back()->with('error', 'This application is not available for Finance review.');
+            }
+
+            $oldStatus = $application->status;
+            $application->update([
+                'status' => 'finance_approved',
+                'current_finance_id' => $admin->id,
+            ]);
+
+            // Log status change
+            ApplicationStatusHistory::log(
+                $application->id,
+                $oldStatus,
+                'finance_approved',
+                'admin',
+                $admin->id,
+                'Application approved by Finance and forwarded to Technical'
+            );
+
+            // Log admin action
+            AdminAction::log(
+                $admin->id,
+                'approved_application',
+                $application,
+                "Approved application {$application->application_id} to Technical",
+                ['user_id' => $application->user_id]
+            );
+
+            // Send message to user
+            Message::create([
+                'user_id' => $application->user_id,
+                'subject' => 'Application Status Update',
+                'message' => "Your application {$application->application_id} has been approved by Finance and forwarded to Technical for final review.",
+                'is_read' => false,
+                'sent_by' => 'admin',
+            ]);
+
+            return back()->with('success', 'Application approved and forwarded to Technical!');
+        } catch (QueryException $e) {
+            Log::error('Database error approving application: '.$e->getMessage());
+
+            return back()->with('error', 'Database connection error. Please try again later.');
+        } catch (PDOException $e) {
+            Log::error('PDO error approving application: '.$e->getMessage());
+
+            return back()->with('error', 'Database connection error. Please try again later.');
+        } catch (Exception $e) {
+            Log::error('Error approving application: '.$e->getMessage());
+
+            return back()->with('error', 'An error occurred. Please try again.');
+        }
+    }
+
+    /**
+     * Finance: Send application back to Processor.
+     */
+    public function sendBackToProcessor(Request $request, $id)
+    {
+        try {
+            $admin = $this->getCurrentAdmin();
+
+            if (! $this->hasRole($admin, 'finance')) {
+                return back()->with('error', 'You do not have permission to perform this action.');
+            }
+
+            $validated = $request->validate([
+                'rejection_reason' => 'required|string|min:10',
+            ], [
+                'rejection_reason.required' => 'Please provide a reason for rejection.',
+                'rejection_reason.min' => 'Please provide more details (minimum 10 characters).',
+            ]);
+
+            $application = Application::with('user')->findOrFail($id);
+
+            if (! $application->isVisibleToFinance()) {
+                return back()->with('error', 'This application is not available for Finance review.');
+            }
+
+            $oldStatus = $application->status;
+            $application->update([
+                'status' => 'processor_review',
+                'rejection_reason' => $validated['rejection_reason'],
+                'current_finance_id' => $admin->id,
+            ]);
+
+            // Log status change
+            ApplicationStatusHistory::log(
+                $application->id,
+                $oldStatus,
+                'processor_review',
+                'admin',
+                $admin->id,
+                $validated['rejection_reason']
+            );
+
+            // Log admin action
+            AdminAction::log(
+                $admin->id,
+                'rejected_application',
+                $application,
+                "Sent application {$application->application_id} back to Processor",
+                ['reason' => $validated['rejection_reason']]
+            );
+
+            // Send message to user
+            Message::create([
+                'user_id' => $application->user_id,
+                'subject' => 'Application Status Update',
+                'message' => "Your application {$application->application_id} has been sent back to Processor for review. Reason: {$validated['rejection_reason']}",
+                'is_read' => false,
+                'sent_by' => 'admin',
+            ]);
+
+            return back()->with('success', 'Application sent back to Processor!');
+        } catch (ValidationException $e) {
+            return back()->withErrors($e->errors())->withInput();
+        } catch (QueryException $e) {
+            Log::error('Database error sending application back: '.$e->getMessage());
+
+            return back()->with('error', 'Database connection error. Please try again later.')
+                ->withInput();
+        } catch (PDOException $e) {
+            Log::error('PDO error sending application back: '.$e->getMessage());
+
+            return back()->with('error', 'Database connection error. Please try again later.')
+                ->withInput();
+        } catch (Exception $e) {
+            Log::error('Error sending application back: '.$e->getMessage());
+
+            return back()->with('error', 'An error occurred. Please try again.');
+        }
+    }
+
+    /**
+     * Technical: Approve application (final approval).
+     */
+    public function approveApplication(Request $request, $id)
+    {
+        try {
+            $admin = $this->getCurrentAdmin();
+
+            if (! $this->hasRole($admin, 'technical')) {
+                return back()->with('error', 'You do not have permission to perform this action.');
+            }
+
+            $application = Application::with('user')->findOrFail($id);
+
+            if (! $application->isVisibleToTechnical()) {
+                return back()->with('error', 'This application is not available for Technical review.');
+            }
+
+            $oldStatus = $application->status;
+            $application->update([
+                'status' => 'approved',
+                'approved_at' => now('Asia/Kolkata'),
+                'current_technical_id' => $admin->id,
+            ]);
+
+            // Log status change
+            ApplicationStatusHistory::log(
+                $application->id,
+                $oldStatus,
+                'approved',
+                'admin',
+                $admin->id,
+                'Application approved by Technical'
+            );
+
+            // Log admin action
+            AdminAction::log(
+                $admin->id,
+                'approved_application',
+                $application,
+                "Approved application {$application->application_id}",
+                ['user_id' => $application->user_id]
+            );
+
+            // Send message to user
+            Message::create([
+                'user_id' => $application->user_id,
+                'subject' => 'Application Approved!',
+                'message' => "Congratulations! Your application {$application->application_id} has been approved by Technical. You can now view it in your Applications tab.",
+                'is_read' => false,
+                'sent_by' => 'admin',
+            ]);
+
+            return back()->with('success', 'Application approved successfully!');
+        } catch (QueryException $e) {
+            Log::error('Database error approving application: '.$e->getMessage());
+
+            return back()->with('error', 'Database connection error. Please try again later.');
+        } catch (PDOException $e) {
+            Log::error('PDO error approving application: '.$e->getMessage());
+
+            return back()->with('error', 'Database connection error. Please try again later.');
+        } catch (Exception $e) {
+            Log::error('Error approving application: '.$e->getMessage());
+
+            return back()->with('error', 'An error occurred. Please try again.');
+        }
+    }
+
+    /**
+     * Technical: Send application back to Finance.
+     */
+    public function sendBackToFinance(Request $request, $id)
+    {
+        try {
+            $admin = $this->getCurrentAdmin();
+
+            if (! $this->hasRole($admin, 'technical')) {
+                return back()->with('error', 'You do not have permission to perform this action.');
+            }
+
+            $validated = $request->validate([
+                'rejection_reason' => 'required|string|min:10',
+            ], [
+                'rejection_reason.required' => 'Please provide a reason for rejection.',
+                'rejection_reason.min' => 'Please provide more details (minimum 10 characters).',
+            ]);
+
+            $application = Application::with('user')->findOrFail($id);
+
+            if (! $application->isVisibleToTechnical()) {
+                return back()->with('error', 'This application is not available for Technical review.');
+            }
+
+            $oldStatus = $application->status;
+            $application->update([
+                'status' => 'finance_review',
+                'rejection_reason' => $validated['rejection_reason'],
+                'current_technical_id' => $admin->id,
+            ]);
+
+            // Log status change
+            ApplicationStatusHistory::log(
+                $application->id,
+                $oldStatus,
+                'finance_review',
+                'admin',
+                $admin->id,
+                $validated['rejection_reason']
+            );
+
+            // Log admin action
+            AdminAction::log(
+                $admin->id,
+                'rejected_application',
+                $application,
+                "Sent application {$application->application_id} back to Finance",
+                ['reason' => $validated['rejection_reason']]
+            );
+
+            // Send message to user
+            Message::create([
+                'user_id' => $application->user_id,
+                'subject' => 'Application Status Update',
+                'message' => "Your application {$application->application_id} has been sent back to Finance for review. Reason: {$validated['rejection_reason']}",
+                'is_read' => false,
+                'sent_by' => 'admin',
+            ]);
+
+            return back()->with('success', 'Application sent back to Finance!');
+        } catch (ValidationException $e) {
+            return back()->withErrors($e->errors())->withInput();
+        } catch (QueryException $e) {
+            Log::error('Database error sending application back: '.$e->getMessage());
+
+            return back()->with('error', 'Database connection error. Please try again later.')
+                ->withInput();
+        } catch (PDOException $e) {
+            Log::error('PDO error sending application back: '.$e->getMessage());
+
+            return back()->with('error', 'Database connection error. Please try again later.')
+                ->withInput();
+        } catch (Exception $e) {
+            Log::error('Error sending application back: '.$e->getMessage());
+
+            return back()->with('error', 'An error occurred. Please try again.');
+        }
+    }
+
+    /**
+     * Display all profile update requests and messages for admin.
+     */
+    public function requestsAndMessages()
+    {
+        try {
+            $admin = $this->getCurrentAdmin();
+
+            // Get all pending profile update requests with user info
+            $profileUpdateRequests = ProfileUpdateRequest::with(['user'])
+                ->where('status', 'pending')
+                ->latest()
+                ->paginate(20, ['*'], 'requests_page');
+
+            // Get all recent messages sent to users
+            $messages = Message::with(['user'])
+                ->latest()
+                ->paginate(20, ['*'], 'messages_page');
+
+            return view('admin.requests-messages', compact('admin', 'profileUpdateRequests', 'messages'));
+        } catch (QueryException $e) {
+            Log::error('Database error loading requests and messages: '.$e->getMessage());
+            abort(503, 'Database connection error. Please try again later.');
+        } catch (PDOException $e) {
+            Log::error('PDO error loading requests and messages: '.$e->getMessage());
+            abort(503, 'Database connection error. Please try again later.');
+        } catch (Exception $e) {
+            Log::error('Error loading requests and messages: '.$e->getMessage());
+
+            return redirect()->route('admin.dashboard')
+                ->with('error', 'Unable to load requests and messages. Please try again.');
+        }
+    }
+
+    /**
+     * Display admin messages inbox.
+     */
+    public function messages()
+    {
+        try {
+            $admin = $this->getCurrentAdmin();
+
+            // Get all messages sent to users
+            $messages = Message::with(['user'])
+                ->latest()
+                ->paginate(20);
+
+            return view('admin.messages.index', compact('admin', 'messages'));
+        } catch (QueryException $e) {
+            Log::error('Database error loading admin messages: '.$e->getMessage());
+            abort(503, 'Database connection error. Please try again later.');
+        } catch (PDOException $e) {
+            Log::error('PDO error loading admin messages: '.$e->getMessage());
+            abort(503, 'Database connection error. Please try again later.');
+        } catch (Exception $e) {
+            Log::error('Error loading admin messages: '.$e->getMessage());
+
+            return redirect()->route('admin.dashboard')
+                ->with('error', 'Unable to load messages. Please try again.');
+        }
+    }
+
+    /**
+     * Display all profile update requests.
+     */
+    public function profileUpdateRequests()
+    {
+        try {
+            $admin = $this->getCurrentAdmin();
+
+            // Get all profile update requests with user info
+            $requests = ProfileUpdateRequest::with(['user', 'approver'])
+                ->latest()
+                ->paginate(20);
+
+            return view('admin.profile-update-requests.index', compact('admin', 'requests'));
+        } catch (QueryException $e) {
+            Log::error('Database error loading profile update requests: '.$e->getMessage());
+            abort(503, 'Database connection error. Please try again later.');
+        } catch (PDOException $e) {
+            Log::error('PDO error loading profile update requests: '.$e->getMessage());
+            abort(503, 'Database connection error. Please try again later.');
+        } catch (Exception $e) {
+            Log::error('Error loading profile update requests: '.$e->getMessage());
+
+            return redirect()->route('admin.dashboard')
+                ->with('error', 'Unable to load profile update requests. Please try again.');
+        }
+    }
+
+    // ============================================
+    // NEW IX WORKFLOW METHODS
+    // ============================================
+
+    /**
+     * IX Processor: Forward application to Legal.
+     */
+    public function ixProcessorForwardToLegal(Request $request, $id)
+    {
+        try {
+            $admin = $this->getCurrentAdmin();
+
+            if (! $this->hasRole($admin, 'ix_processor')) {
+                return back()->with('error', 'You do not have permission to perform this action.');
+            }
+
+            $application = Application::with('user')->where('application_type', 'IX')->findOrFail($id);
+
+            if (! $application->isVisibleToIxProcessor()) {
+                return back()->with('error', 'This application is not available for processing.');
+            }
+
+            $oldStatus = $application->status;
+            $application->update([
+                'status' => 'processor_forwarded_legal',
+                'current_ix_processor_id' => $admin->id,
+            ]);
+
+            ApplicationStatusHistory::log(
+                $application->id,
+                $oldStatus,
+                'processor_forwarded_legal',
+                'admin',
+                $admin->id,
+                'Application forwarded to IX Legal by Processor'
+            );
+
+            AdminAction::log(
+                $admin->id,
+                'forwarded_application',
+                $application,
+                "Forwarded application {$application->application_id} to IX Legal",
+                ['user_id' => $application->user_id]
+            );
+
+            // Send email to applicant
+            try {
+                Mail::to($application->user->email)->send(
+                    new \App\Mail\IxApplicationForwardedMail(
+                        $application,
+                        'IX Legal',
+                        'IX Application Processor'
+                    )
+                );
+            } catch (Exception $e) {
+                Log::error('Error sending IX application forwarded email: '.$e->getMessage());
+            }
+
+            Message::create([
+                'user_id' => $application->user_id,
+                'subject' => 'Application Forwarded to Legal',
+                'message' => "Your application {$application->application_id} has been forwarded to IX Legal for verification of board resolution and agreement.",
+                'is_read' => false,
+                'sent_by' => 'admin',
+            ]);
+
+            return back()->with('success', 'Application forwarded to IX Legal!');
+        } catch (Exception $e) {
+            Log::error('Error forwarding application to legal: '.$e->getMessage());
+
+            return back()->with('error', 'An error occurred. Please try again.');
+        }
+    }
+
+    /**
+     * IX Processor: Request resubmission from user.
+     */
+    public function ixProcessorRequestResubmission(Request $request, $id)
+    {
+        try {
+            $admin = $this->getCurrentAdmin();
+
+            if (! $this->hasRole($admin, 'ix_processor')) {
+                return back()->with('error', 'You do not have permission to perform this action.');
+            }
+
+            $validated = $request->validate([
+                'resubmission_query' => 'required|string|min:10',
+            ], [
+                'resubmission_query.required' => 'Please provide a query or reason for resubmission.',
+                'resubmission_query.min' => 'Please provide more details (minimum 10 characters).',
+            ]);
+
+            $application = Application::with('user')->where('application_type', 'IX')->findOrFail($id);
+
+            if (! $application->isVisibleToIxProcessor()) {
+                return back()->with('error', 'This application is not available for processing.');
+            }
+
+            $oldStatus = $application->status;
+            $application->update([
+                'status' => 'processor_resubmission',
+                'resubmission_query' => $validated['resubmission_query'],
+                'current_ix_processor_id' => $admin->id,
+            ]);
+
+            ApplicationStatusHistory::log(
+                $application->id,
+                $oldStatus,
+                'processor_resubmission',
+                'admin',
+                $admin->id,
+                $validated['resubmission_query']
+            );
+
+            AdminAction::log(
+                $admin->id,
+                'requested_resubmission',
+                $application,
+                "Requested resubmission for application {$application->application_id}",
+                ['query' => $validated['resubmission_query']]
+            );
+
+            // Send resubmission email with query
+            try {
+                Mail::to($application->user->email)->send(
+                    new \App\Mail\IxApplicationResubmissionMail(
+                        $application,
+                        $validated['resubmission_query']
+                    )
+                );
+            } catch (Exception $e) {
+                Log::error('Error sending IX application resubmission email: '.$e->getMessage());
+            }
+
+            Message::create([
+                'user_id' => $application->user_id,
+                'subject' => 'Application Resubmission Required',
+                'message' => "Your application {$application->application_id} requires resubmission. Query: {$validated['resubmission_query']}",
+                'is_read' => false,
+                'sent_by' => 'admin',
+            ]);
+
+            return back()->with('success', 'Resubmission requested!');
+        } catch (Exception $e) {
+            Log::error('Error requesting resubmission: '.$e->getMessage());
+
+            return back()->with('error', 'An error occurred. Please try again.');
+        }
+    }
+
+    /**
+     * IX Legal: Forward to IX Head.
+     */
+    public function ixLegalForwardToHead(Request $request, $id)
+    {
+        try {
+            $admin = $this->getCurrentAdmin();
+
+            if (! $this->hasRole($admin, 'ix_legal')) {
+                return back()->with('error', 'You do not have permission to perform this action.');
+            }
+
+            $application = Application::with('user')->where('application_type', 'IX')->findOrFail($id);
+
+            if (! $application->isVisibleToIxLegal()) {
+                return back()->with('error', 'This application is not available for Legal review.');
+            }
+
+            $oldStatus = $application->status;
+            $application->update([
+                'status' => 'legal_forwarded_head',
+                'current_ix_legal_id' => $admin->id,
+            ]);
+
+            ApplicationStatusHistory::log(
+                $application->id,
+                $oldStatus,
+                'legal_forwarded_head',
+                'admin',
+                $admin->id,
+                'Application forwarded to IX Head by Legal'
+            );
+
+            AdminAction::log(
+                $admin->id,
+                'forwarded_application',
+                $application,
+                "Forwarded application {$application->application_id} to IX Head",
+                ['user_id' => $application->user_id]
+            );
+
+            // Send email to applicant
+            try {
+                Mail::to($application->user->email)->send(
+                    new \App\Mail\IxApplicationForwardedMail(
+                        $application,
+                        'IX Head',
+                        'IX Legal'
+                    )
+                );
+            } catch (Exception $e) {
+                Log::error('Error sending IX application forwarded email: '.$e->getMessage());
+            }
+
+            Message::create([
+                'user_id' => $application->user_id,
+                'subject' => 'Application Forwarded to IX Head',
+                'message' => "Your application {$application->application_id} has been verified by Legal and forwarded to IX Head for review.",
+                'is_read' => false,
+                'sent_by' => 'admin',
+            ]);
+
+            return back()->with('success', 'Application forwarded to IX Head!');
+        } catch (Exception $e) {
+            Log::error('Error forwarding application to head: '.$e->getMessage());
+
+            return back()->with('error', 'An error occurred. Please try again.');
+        }
+    }
+
+    /**
+     * IX Legal: Send back to Processor.
+     */
+    public function ixLegalSendBackToProcessor(Request $request, $id)
+    {
+        try {
+            $admin = $this->getCurrentAdmin();
+
+            if (! $this->hasRole($admin, 'ix_legal')) {
+                return back()->with('error', 'You do not have permission to perform this action.');
+            }
+
+            $validated = $request->validate([
+                'rejection_reason' => 'required|string|min:10',
+            ]);
+
+            $application = Application::with('user')->where('application_type', 'IX')->findOrFail($id);
+
+            if (! $application->isVisibleToIxLegal()) {
+                return back()->with('error', 'This application is not available for Legal review.');
+            }
+
+            $oldStatus = $application->status;
+            $application->update([
+                'status' => 'legal_sent_back',
+                'rejection_reason' => $validated['rejection_reason'],
+                'current_ix_legal_id' => $admin->id,
+            ]);
+
+            ApplicationStatusHistory::log(
+                $application->id,
+                $oldStatus,
+                'legal_sent_back',
+                'admin',
+                $admin->id,
+                $validated['rejection_reason']
+            );
+
+            Message::create([
+                'user_id' => $application->user_id,
+                'subject' => 'Application Sent Back to Processor',
+                'message' => "Your application {$application->application_id} has been sent back to Processor. Reason: {$validated['rejection_reason']}",
+                'is_read' => false,
+                'sent_by' => 'admin',
+            ]);
+
+            return back()->with('success', 'Application sent back to Processor!');
+        } catch (Exception $e) {
+            Log::error('Error sending application back: '.$e->getMessage());
+
+            return back()->with('error', 'An error occurred. Please try again.');
+        }
+    }
+
+    /**
+     * IX Head: Forward to CEO.
+     */
+    public function ixHeadForwardToCeo(Request $request, $id)
+    {
+        try {
+            $admin = $this->getCurrentAdmin();
+
+            if (! $this->hasRole($admin, 'ix_head')) {
+                return back()->with('error', 'You do not have permission to perform this action.');
+            }
+
+            $application = Application::with('user')->where('application_type', 'IX')->findOrFail($id);
+
+            if (! $application->isVisibleToIxHead()) {
+                return back()->with('error', 'This application is not available for IX Head review.');
+            }
+
+            $oldStatus = $application->status;
+            $application->update([
+                'status' => 'head_forwarded_ceo',
+                'current_ix_head_id' => $admin->id,
+            ]);
+
+            ApplicationStatusHistory::log(
+                $application->id,
+                $oldStatus,
+                'head_forwarded_ceo',
+                'admin',
+                $admin->id,
+                'Application forwarded to CEO by IX Head'
+            );
+
+            // Send email to applicant
+            try {
+                Mail::to($application->user->email)->send(
+                    new \App\Mail\IxApplicationForwardedMail(
+                        $application,
+                        'CEO',
+                        'IX Head'
+                    )
+                );
+            } catch (Exception $e) {
+                Log::error('Error sending IX application forwarded email: '.$e->getMessage());
+            }
+
+            Message::create([
+                'user_id' => $application->user_id,
+                'subject' => 'Application Forwarded to CEO',
+                'message' => "Your application {$application->application_id} has been reviewed by IX Head and forwarded to CEO for final approval.",
+                'is_read' => false,
+                'sent_by' => 'admin',
+            ]);
+
+            return back()->with('success', 'Application forwarded to CEO!');
+        } catch (Exception $e) {
+            Log::error('Error forwarding application to CEO: '.$e->getMessage());
+
+            return back()->with('error', 'An error occurred. Please try again.');
+        }
+    }
+
+    /**
+     * IX Head: Send back to Processor.
+     */
+    public function ixHeadSendBackToProcessor(Request $request, $id)
+    {
+        try {
+            $admin = $this->getCurrentAdmin();
+
+            if (! $this->hasRole($admin, 'ix_head')) {
+                return back()->with('error', 'You do not have permission to perform this action.');
+            }
+
+            $validated = $request->validate([
+                'rejection_reason' => 'required|string|min:10',
+            ]);
+
+            $application = Application::with('user')->where('application_type', 'IX')->findOrFail($id);
+
+            if (! $application->isVisibleToIxHead()) {
+                return back()->with('error', 'This application is not available for IX Head review.');
+            }
+
+            $oldStatus = $application->status;
+            $application->update([
+                'status' => 'head_sent_back',
+                'rejection_reason' => $validated['rejection_reason'],
+                'current_ix_head_id' => $admin->id,
+            ]);
+
+            ApplicationStatusHistory::log(
+                $application->id,
+                $oldStatus,
+                'head_sent_back',
+                'admin',
+                $admin->id,
+                $validated['rejection_reason']
+            );
+
+            Message::create([
+                'user_id' => $application->user_id,
+                'subject' => 'Application Sent Back to Processor',
+                'message' => "Your application {$application->application_id} has been sent back to Processor. Reason: {$validated['rejection_reason']}",
+                'is_read' => false,
+                'sent_by' => 'admin',
+            ]);
+
+            return back()->with('success', 'Application sent back to Processor!');
+        } catch (Exception $e) {
+            Log::error('Error sending application back: '.$e->getMessage());
+
+            return back()->with('error', 'An error occurred. Please try again.');
+        }
+    }
+
+    /**
+     * CEO: Approve and forward to Nodal Officer.
+     */
+    public function ceoApprove(Request $request, $id)
+    {
+        try {
+            $admin = $this->getCurrentAdmin();
+
+            if (! $this->hasRole($admin, 'ceo')) {
+                return back()->with('error', 'You do not have permission to perform this action.');
+            }
+
+            $application = Application::with('user')->where('application_type', 'IX')->findOrFail($id);
+
+            if (! $application->isVisibleToCeo()) {
+                return back()->with('error', 'This application is not available for CEO review.');
+            }
+
+            $oldStatus = $application->status;
+            $application->update([
+                'status' => 'ceo_approved',
+                'current_ceo_id' => $admin->id,
+            ]);
+
+            ApplicationStatusHistory::log(
+                $application->id,
+                $oldStatus,
+                'ceo_approved',
+                'admin',
+                $admin->id,
+                'Application approved by CEO and forwarded to Nodal Officer'
+            );
+
+            // Send approval email to applicant
+            try {
+                Mail::to($application->user->email)->send(
+                    new \App\Mail\IxApplicationApprovedMail(
+                        $application,
+                        'CEO'
+                    )
+                );
+            } catch (Exception $e) {
+                Log::error('Error sending IX application approved email: '.$e->getMessage());
+            }
+
+            Message::create([
+                'user_id' => $application->user_id,
+                'subject' => 'Application Approved by CEO',
+                'message' => "Congratulations! Your application {$application->application_id} has been approved by CEO and forwarded to Nodal Officer for port assignment.",
+                'is_read' => false,
+                'sent_by' => 'admin',
+            ]);
+
+            return back()->with('success', 'Application approved and forwarded to Nodal Officer!');
+        } catch (Exception $e) {
+            Log::error('Error approving application: '.$e->getMessage());
+
+            return back()->with('error', 'An error occurred. Please try again.');
+        }
+    }
+
+    /**
+     * CEO: Reject application.
+     */
+    public function ceoReject(Request $request, $id)
+    {
+        try {
+            $admin = $this->getCurrentAdmin();
+
+            if (! $this->hasRole($admin, 'ceo')) {
+                return back()->with('error', 'You do not have permission to perform this action.');
+            }
+
+            $validated = $request->validate([
+                'rejection_reason' => 'required|string|min:10',
+            ]);
+
+            $application = Application::with('user')->where('application_type', 'IX')->findOrFail($id);
+
+            if (! $application->isVisibleToCeo()) {
+                return back()->with('error', 'This application is not available for CEO review.');
+            }
+
+            $oldStatus = $application->status;
+            $application->update([
+                'status' => 'ceo_rejected',
+                'rejection_reason' => $validated['rejection_reason'],
+                'current_ceo_id' => $admin->id,
+            ]);
+
+            ApplicationStatusHistory::log(
+                $application->id,
+                $oldStatus,
+                'ceo_rejected',
+                'admin',
+                $admin->id,
+                $validated['rejection_reason']
+            );
+
+            // Send rejection email to applicant
+            try {
+                Mail::to($application->user->email)->send(
+                    new \App\Mail\IxApplicationRejectedMail(
+                        $application,
+                        'CEO',
+                        $validated['rejection_reason']
+                    )
+                );
+            } catch (Exception $e) {
+                Log::error('Error sending IX application rejected email: '.$e->getMessage());
+            }
+
+            Message::create([
+                'user_id' => $application->user_id,
+                'subject' => 'Application Rejected',
+                'message' => "Your application {$application->application_id} has been rejected by CEO. Reason: {$validated['rejection_reason']}",
+                'is_read' => false,
+                'sent_by' => 'admin',
+            ]);
+
+            return back()->with('success', 'Application rejected!');
+        } catch (Exception $e) {
+            Log::error('Error rejecting application: '.$e->getMessage());
+
+            return back()->with('error', 'An error occurred. Please try again.');
+        }
+    }
+
+    /**
+     * CEO: Send back to IX Head.
+     */
+    public function ceoSendBackToHead(Request $request, $id)
+    {
+        try {
+            $admin = $this->getCurrentAdmin();
+
+            if (! $this->hasRole($admin, 'ceo')) {
+                return back()->with('error', 'You do not have permission to perform this action.');
+            }
+
+            $validated = $request->validate([
+                'send_back_reason' => 'nullable|string|max:1000',
+            ]);
+
+            $application = Application::with('user')->where('application_type', 'IX')->findOrFail($id);
+
+            if (! $application->isVisibleToCeo()) {
+                return back()->with('error', 'This application is not available for CEO review.');
+            }
+
+            // Get the IX Head who forwarded it (from status history or current_ix_head_id)
+            $ixHeadId = $application->current_ix_head_id;
+            if (! $ixHeadId) {
+                // Try to get from status history
+                $headForwardHistory = ApplicationStatusHistory::where('application_id', $application->id)
+                    ->where('status_to', 'head_forwarded_ceo')
+                    ->where('changed_by_type', 'admin')
+                    ->latest()
+                    ->first();
+                $ixHeadId = $headForwardHistory ? $headForwardHistory->changed_by_id : null;
+            }
+
+            $oldStatus = $application->status;
+            $application->update([
+                'status' => 'ceo_sent_back_head',
+                'current_ceo_id' => $admin->id,
+                'current_ix_head_id' => $ixHeadId,
+            ]);
+
+            $notes = $validated['send_back_reason'] ?? 'Application sent back to IX Head by CEO for review';
+
+            ApplicationStatusHistory::log(
+                $application->id,
+                $oldStatus,
+                'ceo_sent_back_head',
+                'admin',
+                $admin->id,
+                $notes
+            );
+
+            Message::create([
+                'user_id' => $application->user_id,
+                'subject' => 'Application Sent Back to IX Head',
+                'message' => "Your application {$application->application_id} has been sent back to IX Head by CEO for further review.",
+                'is_read' => false,
+                'sent_by' => 'admin',
+            ]);
+
+            return back()->with('success', 'Application sent back to IX Head!');
+        } catch (Exception $e) {
+            Log::error('Error sending application back to IX Head: '.$e->getMessage());
+
+            return back()->with('error', 'An error occurred. Please try again.');
+        }
+    }
+
+    /**
+     * Nodal Officer: Assign Port and forward to Tech Team.
+     */
+    public function nodalOfficerAssignPort(Request $request, $id)
+    {
+        try {
+            $admin = $this->getCurrentAdmin();
+
+            if (! $this->hasRole($admin, 'nodal_officer')) {
+                return back()->with('error', 'You do not have permission to perform this action.');
+            }
+
+            $validated = $request->validate([
+                'assigned_port_capacity' => 'required|string',
+                'assigned_port_number' => 'nullable|string',
+            ]);
+
+            $application = Application::with('user')->where('application_type', 'IX')->findOrFail($id);
+
+            if (! $application->isVisibleToNodalOfficer()) {
+                return back()->with('error', 'This application is not available for Nodal Officer review.');
+            }
+
+            $oldStatus = $application->status;
+            $application->update([
+                'status' => 'port_assigned',
+                'assigned_port_capacity' => $validated['assigned_port_capacity'],
+                'assigned_port_number' => $validated['assigned_port_number'] ?? null,
+                'current_nodal_officer_id' => $admin->id,
+            ]);
+
+            ApplicationStatusHistory::log(
+                $application->id,
+                $oldStatus,
+                'port_assigned',
+                'admin',
+                $admin->id,
+                "Port assigned: {$validated['assigned_port_capacity']}"
+            );
+
+            Message::create([
+                'user_id' => $application->user_id,
+                'subject' => 'Port Assigned',
+                'message' => "Port has been assigned for your application {$application->application_id}. Port Capacity: {$validated['assigned_port_capacity']}",
+                'is_read' => false,
+                'sent_by' => 'admin',
+            ]);
+
+            return back()->with('success', 'Port assigned and forwarded to Tech Team!');
+        } catch (Exception $e) {
+            Log::error('Error assigning port: '.$e->getMessage());
+
+            return back()->with('error', 'An error occurred. Please try again.');
+        }
+    }
+
+    /**
+     * Nodal Officer: Hold application.
+     */
+    public function nodalOfficerHold(Request $request, $id)
+    {
+        try {
+            $admin = $this->getCurrentAdmin();
+
+            if (! $this->hasRole($admin, 'nodal_officer')) {
+                return back()->with('error', 'You do not have permission to perform this action.');
+            }
+
+            $validated = $request->validate([
+                'rejection_reason' => 'required|string|min:10',
+            ]);
+
+            $application = Application::with('user')->where('application_type', 'IX')->findOrFail($id);
+
+            if (! $application->isVisibleToNodalOfficer()) {
+                return back()->with('error', 'This application is not available for Nodal Officer review.');
+            }
+
+            $oldStatus = $application->status;
+            $application->update([
+                'status' => 'port_hold',
+                'rejection_reason' => $validated['rejection_reason'],
+                'current_nodal_officer_id' => $admin->id,
+            ]);
+
+            ApplicationStatusHistory::log(
+                $application->id,
+                $oldStatus,
+                'port_hold',
+                'admin',
+                $admin->id,
+                $validated['rejection_reason']
+            );
+
+            Message::create([
+                'user_id' => $application->user_id,
+                'subject' => 'Application On Hold',
+                'message' => "Your application {$application->application_id} has been put on hold. Reason: {$validated['rejection_reason']}",
+                'is_read' => false,
+                'sent_by' => 'admin',
+            ]);
+
+            return back()->with('success', 'Application put on hold!');
+        } catch (Exception $e) {
+            Log::error('Error holding application: '.$e->getMessage());
+
+            return back()->with('error', 'An error occurred. Please try again.');
+        }
+    }
+
+    /**
+     * Nodal Officer: Mark as Not Feasible.
+     */
+    public function nodalOfficerNotFeasible(Request $request, $id)
+    {
+        try {
+            $admin = $this->getCurrentAdmin();
+
+            if (! $this->hasRole($admin, 'nodal_officer')) {
+                return back()->with('error', 'You do not have permission to perform this action.');
+            }
+
+            $validated = $request->validate([
+                'rejection_reason' => 'required|string|min:10',
+            ]);
+
+            $application = Application::with('user')->where('application_type', 'IX')->findOrFail($id);
+
+            if (! $application->isVisibleToNodalOfficer()) {
+                return back()->with('error', 'This application is not available for Nodal Officer review.');
+            }
+
+            $oldStatus = $application->status;
+            $application->update([
+                'status' => 'port_not_feasible',
+                'rejection_reason' => $validated['rejection_reason'],
+                'current_nodal_officer_id' => $admin->id,
+            ]);
+
+            ApplicationStatusHistory::log(
+                $application->id,
+                $oldStatus,
+                'port_not_feasible',
+                'admin',
+                $admin->id,
+                $validated['rejection_reason']
+            );
+
+            Message::create([
+                'user_id' => $application->user_id,
+                'subject' => 'Application Not Feasible',
+                'message' => "Your application {$application->application_id} has been marked as not feasible. Reason: {$validated['rejection_reason']}",
+                'is_read' => false,
+                'sent_by' => 'admin',
+            ]);
+
+            return back()->with('success', 'Application marked as not feasible!');
+        } catch (Exception $e) {
+            Log::error('Error marking application as not feasible: '.$e->getMessage());
+
+            return back()->with('error', 'An error occurred. Please try again.');
+        }
+    }
+
+    /**
+     * Nodal Officer: Customer Denied.
+     */
+    public function nodalOfficerCustomerDenied(Request $request, $id)
+    {
+        try {
+            $admin = $this->getCurrentAdmin();
+
+            if (! $this->hasRole($admin, 'nodal_officer')) {
+                return back()->with('error', 'You do not have permission to perform this action.');
+            }
+
+            $application = Application::with('user')->where('application_type', 'IX')->findOrFail($id);
+
+            if (! $application->isVisibleToNodalOfficer()) {
+                return back()->with('error', 'This application is not available for Nodal Officer review.');
+            }
+
+            $oldStatus = $application->status;
+            $application->update([
+                'status' => 'customer_denied',
+                'current_nodal_officer_id' => $admin->id,
+            ]);
+
+            ApplicationStatusHistory::log(
+                $application->id,
+                $oldStatus,
+                'customer_denied',
+                'admin',
+                $admin->id,
+                'Customer denied the port assignment'
+            );
+
+            Message::create([
+                'user_id' => $application->user_id,
+                'subject' => 'Application Status Update',
+                'message' => "Your application {$application->application_id} has been marked as customer denied.",
+                'is_read' => false,
+                'sent_by' => 'admin',
+            ]);
+
+            return back()->with('success', 'Application marked as customer denied!');
+        } catch (Exception $e) {
+            Log::error('Error marking application as customer denied: '.$e->getMessage());
+
+            return back()->with('error', 'An error occurred. Please try again.');
+        }
+    }
+
+    /**
+     * Nodal Officer: Forward back to Processor.
+     */
+    public function nodalOfficerForwardToProcessor(Request $request, $id)
+    {
+        try {
+            $admin = $this->getCurrentAdmin();
+
+            if (! $this->hasRole($admin, 'nodal_officer')) {
+                return back()->with('error', 'You do not have permission to perform this action.');
+            }
+
+            $validated = $request->validate([
+                'rejection_reason' => 'required|string|min:10',
+            ]);
+
+            $application = Application::with('user')->where('application_type', 'IX')->findOrFail($id);
+
+            if (! $application->isVisibleToNodalOfficer()) {
+                return back()->with('error', 'This application is not available for Nodal Officer review.');
+            }
+
+            $oldStatus = $application->status;
+            $application->update([
+                'status' => 'processor_resubmission',
+                'rejection_reason' => $validated['rejection_reason'],
+                'current_nodal_officer_id' => $admin->id,
+            ]);
+
+            ApplicationStatusHistory::log(
+                $application->id,
+                $oldStatus,
+                'processor_resubmission',
+                'admin',
+                $admin->id,
+                $validated['rejection_reason']
+            );
+
+            Message::create([
+                'user_id' => $application->user_id,
+                'subject' => 'Application Sent Back to Processor',
+                'message' => "Your application {$application->application_id} has been sent back to Processor. Reason: {$validated['rejection_reason']}",
+                'is_read' => false,
+                'sent_by' => 'admin',
+            ]);
+
+            return back()->with('success', 'Application sent back to Processor!');
+        } catch (Exception $e) {
+            Log::error('Error forwarding application to processor: '.$e->getMessage());
+
+            return back()->with('error', 'An error occurred. Please try again.');
+        }
+    }
+
+    /**
+     * IX Tech Team: Assign IP and make live.
+     */
+    public function ixTechTeamAssignIp(Request $request, $id)
+    {
+        try {
+            $admin = $this->getCurrentAdmin();
+
+            if (! $this->hasRole($admin, 'ix_tech_team')) {
+                return back()->with('error', 'You do not have permission to perform this action.');
+            }
+
+            $validated = $request->validate([
+                'assigned_ip' => 'required|string',
+                'customer_id' => 'required|string',
+                'membership_id' => 'required|string',
+            ]);
+
+            $application = Application::with('user')->where('application_type', 'IX')->findOrFail($id);
+
+            if (! $application->isVisibleToIxTechTeam()) {
+                return back()->with('error', 'This application is not available for Tech Team review.');
+            }
+
+            $oldStatus = $application->status;
+            $application->update([
+                'status' => 'ip_assigned',
+                'assigned_ip' => $validated['assigned_ip'],
+                'customer_id' => $validated['customer_id'],
+                'membership_id' => $validated['membership_id'],
+                'current_ix_tech_team_id' => $admin->id,
+            ]);
+
+            ApplicationStatusHistory::log(
+                $application->id,
+                $oldStatus,
+                'ip_assigned',
+                'admin',
+                $admin->id,
+                "IP assigned: {$validated['assigned_ip']}, Customer ID: {$validated['customer_id']}, Membership ID: {$validated['membership_id']}"
+            );
+
+            // Generate membership and IX invoice (TODO: Implement invoice generation)
+            // Send email with details
+            try {
+                Mail::to($application->user->email)->send(
+                    new \App\Mail\IxApplicationIpAssignedMail(
+                        $application,
+                        $validated['assigned_ip'],
+                        $validated['customer_id'],
+                        $validated['membership_id']
+                    )
+                );
+            } catch (Exception $e) {
+                Log::error('Error sending IX application IP assigned email: '.$e->getMessage());
+            }
+
+            Message::create([
+                'user_id' => $application->user_id,
+                'subject' => 'IP Assigned - Application Live',
+                'message' => "Your application {$application->application_id} is now live! IP: {$validated['assigned_ip']}, Customer ID: {$validated['customer_id']}, Membership ID: {$validated['membership_id']}",
+                'is_read' => false,
+                'sent_by' => 'admin',
+            ]);
+
+            return back()->with('success', 'IP assigned and application is now live!');
+        } catch (Exception $e) {
+            Log::error('Error assigning IP: '.$e->getMessage());
+
+            return back()->with('error', 'An error occurred. Please try again.');
+        }
+    }
+
+    /**
+     * IX Account: Generate Invoice.
+     */
+    public function ixAccountGenerateInvoice(Request $request, $id)
+    {
+        try {
+            $admin = $this->getCurrentAdmin();
+
+            if (! $this->hasRole($admin, 'ix_account')) {
+                return back()->with('error', 'You do not have permission to perform this action.');
+            }
+
+            $application = Application::with('user')->where('application_type', 'IX')->findOrFail($id);
+
+            if (! $application->isVisibleToIxAccount()) {
+                return back()->with('error', 'This application is not available for Account review.');
+            }
+
+            $oldStatus = $application->status;
+            $application->update([
+                'status' => 'invoice_pending',
+                'current_ix_account_id' => $admin->id,
+            ]);
+
+            ApplicationStatusHistory::log(
+                $application->id,
+                $oldStatus,
+                'invoice_pending',
+                'admin',
+                $admin->id,
+                'Invoice generated by IX Account'
+            );
+
+            // TODO: Generate invoice PDF and send email
+            Message::create([
+                'user_id' => $application->user_id,
+                'subject' => 'Invoice Generated',
+                'message' => "Invoice has been generated for your application {$application->application_id}. Please complete the payment.",
+                'is_read' => false,
+                'sent_by' => 'admin',
+            ]);
+
+            return back()->with('success', 'Invoice generated!');
+        } catch (Exception $e) {
+            Log::error('Error generating invoice: '.$e->getMessage());
+
+            return back()->with('error', 'An error occurred. Please try again.');
+        }
+    }
+
+    /**
+     * IX Account: Verify Payment.
+     */
+    public function ixAccountVerifyPayment(Request $request, $id)
+    {
+        try {
+            $admin = $this->getCurrentAdmin();
+
+            if (! $this->hasRole($admin, 'ix_account')) {
+                return back()->with('error', 'You do not have permission to perform this action.');
+            }
+
+            $application = Application::with('user')->where('application_type', 'IX')->findOrFail($id);
+
+            if (! $application->isVisibleToIxAccount()) {
+                return back()->with('error', 'This application is not available for Account review.');
+            }
+
+            $oldStatus = $application->status;
+            $application->update([
+                'status' => 'payment_verified',
+                'current_ix_account_id' => $admin->id,
+            ]);
+
+            ApplicationStatusHistory::log(
+                $application->id,
+                $oldStatus,
+                'payment_verified',
+                'admin',
+                $admin->id,
+                'Payment verified by IX Account'
+            );
+
+            Message::create([
+                'user_id' => $application->user_id,
+                'subject' => 'Payment Verified',
+                'message' => "Payment has been verified for your application {$application->application_id}. Your application is now complete.",
+                'is_read' => false,
+                'sent_by' => 'admin',
+            ]);
+
+            return back()->with('success', 'Payment verified!');
+        } catch (Exception $e) {
+            Log::error('Error verifying payment: '.$e->getMessage());
+
+            return back()->with('error', 'An error occurred. Please try again.');
+        }
+    }
+}

@@ -1,0 +1,1248 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Http\Requests\StoreIxApplicationRequest;
+use App\Models\Application;
+use App\Models\ApplicationStatusHistory;
+use App\Models\GstVerification;
+use App\Models\IxApplicationPricing;
+use App\Models\IxLocation;
+use App\Models\IxPortPricing;
+use App\Models\PaymentTransaction;
+use App\Models\Registration;
+use App\Models\UserKycProfile;
+use App\Services\PayuService;
+use Barryvdh\DomPDF\Facade\Pdf;
+use Exception;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\View\View;
+
+class IxApplicationController extends Controller
+{
+    /**
+     * Show IX application wizard.
+     */
+    public function create(): View|RedirectResponse
+    {
+        $userId = session('user_id');
+        $user = Registration::find($userId);
+
+        if (! $user) {
+            return redirect()->route('login.index')
+                ->with('error', 'User session expired. Please login again.');
+        }
+
+        // Clean up old IX drafts (older than 15 days)
+        $deletedDraftsCount = Application::where('user_id', $userId)
+            ->where('application_type', 'IX')
+            ->where('status', 'draft')
+            ->where('updated_at', '<', now()->subDays(15))
+            ->delete();
+
+        if ($deletedDraftsCount > 0) {
+            session()->flash('info', 'We removed '.$deletedDraftsCount.' IX draft application(s) older than 15 days. You can start a fresh application below.');
+        }
+
+        if (! in_array($user->status, ['approved', 'active'], true)) {
+            return redirect()->route('user.dashboard')
+                ->with('error', 'Your account must be approved before submitting an IX application.');
+        }
+
+        $gstVerification = GstVerification::where('user_id', $userId)
+            ->where('is_verified', true)
+            ->latest()
+            ->first();
+
+        $kycProfile = UserKycProfile::where('user_id', $userId)
+            ->latest()
+            ->first();
+
+        $locations = IxLocation::active()
+            ->orderBy('node_type')
+            ->orderBy('state')
+            ->orderBy('name')
+            ->get();
+
+        $portPricings = IxPortPricing::active()
+            ->orderBy('node_type')
+            ->orderBy('display_order')
+            ->orderBy('port_capacity')
+            ->get()
+            ->groupBy('node_type');
+
+        // Get active application pricing from database
+        $applicationPricing = IxApplicationPricing::getActive();
+        if (! $applicationPricing) {
+            // Fallback to default if no pricing is set
+            $applicationPricing = (object) [
+                'application_fee' => 1000.00,
+                'gst_percentage' => 18.00,
+                'total_amount' => 1180.00,
+            ];
+        }
+
+        return view('user.applications.ix.create', [
+            'user' => $user,
+            'gstVerification' => $gstVerification,
+            'gstState' => $gstVerification?->state,
+            'kycProfile' => $kycProfile,
+            'locations' => $locations,
+            'portPricings' => $portPricings,
+            'applicationPricing' => $applicationPricing,
+        ]);
+    }
+
+    /**
+     * Save draft or submit IX application.
+     */
+    public function store(StoreIxApplicationRequest $request): RedirectResponse|JsonResponse
+    {
+        $userId = session('user_id');
+        $user = Registration::find($userId);
+
+        if (! $user) {
+            return redirect()->route('login.index')
+                ->with('error', 'User session expired. Please login again.');
+        }
+
+        if (! in_array($user->status, ['approved', 'active'], true)) {
+            return redirect()->route('user.dashboard')
+                ->with('error', 'Your account must be approved before submitting an IX application.');
+        }
+
+        $validated = $request->validated();
+        $isDraft = $request->input('is_draft', false);
+        $isPreview = $request->input('is_preview', false);
+        $applicationId = $request->input('application_id');
+
+        // If an application_id is provided, we are updating that specific draft.
+        // Otherwise, we will always create a new application record so that
+        // users can have multiple IX applications (draft, submitted, etc.).
+        $existingDraft = null;
+        if ($applicationId) {
+            $existingDraft = Application::where('user_id', $userId)
+                ->where('application_type', 'IX')
+                ->where('application_id', $applicationId)
+                ->where('status', 'draft')
+                ->latest()
+                ->first();
+        }
+
+        // Handle location and pricing - always try to get if location_id is provided
+        $location = null;
+        $pricing = null;
+        $payableAmount = 0;
+
+        if (isset($validated['location_id'])) {
+            try {
+                $location = IxLocation::active()->findOrFail($validated['location_id']);
+
+                if (isset($validated['port_capacity'])) {
+                    $pricing = IxPortPricing::active()
+                        ->where('node_type', $location->node_type)
+                        ->where('port_capacity', $validated['port_capacity'])
+                        ->first();
+
+                    if (! $pricing && (! $isDraft || $isPreview)) {
+                        return back()->with('error', 'Selected port capacity is not available for this location.')
+                            ->withInput();
+                    }
+
+                    if ($pricing && isset($validated['billing_plan'])) {
+                        $payableAmount = $pricing->getAmountForPlan($validated['billing_plan']);
+                    }
+                }
+            } catch (\Exception $e) {
+                if (! $isDraft || $isPreview) {
+                    Log::error('Error fetching location: '.$e->getMessage());
+
+                    return back()->with('error', 'Selected location is invalid.')
+                        ->withInput();
+                }
+            }
+        }
+
+        // Handle file uploads
+        $documentFields = [
+            'agreement_file',
+            'license_isp_file',
+            'license_vno_file',
+            'cdn_declaration_file',
+            'general_declaration_file',
+            'board_resolution_file',
+            'whois_details_file',
+            'pan_document_file',
+            'gstin_document_file',
+            'msme_document_file',
+            'incorporation_document_file',
+            'authorized_rep_document_file',
+        ];
+
+        $storedDocuments = [];
+        $storagePrefix = 'applications/'.$userId.'/ix/'.now()->format('YmdHis');
+
+        // If updating draft, merge with existing documents
+        if ($existingDraft && isset($existingDraft->application_data['documents'])) {
+            $storedDocuments = $existingDraft->application_data['documents'];
+        }
+
+        foreach ($documentFields as $field) {
+            if ($request->hasFile($field)) {
+                $storedDocuments[$field] = $request->file($field)
+                    ->store($storagePrefix, 'public');
+            }
+        }
+
+        $memberType = null;
+        if (isset($validated['member_type'])) {
+            $memberType = $validated['member_type'] === 'others'
+                ? ($validated['member_type_other'] ?? 'Others')
+                : strtoupper($validated['member_type']);
+        }
+
+        // Prepare application data
+        $applicationData = [];
+
+        // Always save location if location_id is provided
+        if ($location) {
+            $applicationData['location'] = [
+                'id' => $location->id,
+                'name' => $location->name,
+                'state' => $location->state,
+                'node_type' => $location->node_type,
+                'switch_details' => $location->switch_details,
+                'nodal_officer' => $location->nodal_officer,
+            ];
+        } elseif (isset($validated['location_id'])) {
+            // If location_id is provided but location not found, try to get basic info
+            try {
+                $locationFromDb = IxLocation::find($validated['location_id']);
+                if ($locationFromDb) {
+                    $applicationData['location'] = [
+                        'id' => $locationFromDb->id,
+                        'name' => $locationFromDb->name,
+                        'state' => $locationFromDb->state,
+                        'node_type' => $locationFromDb->node_type,
+                        'switch_details' => $locationFromDb->switch_details,
+                        'nodal_officer' => $locationFromDb->nodal_officer,
+                    ];
+                }
+            } catch (\Exception $e) {
+                Log::warning('Could not fetch location for ID: '.$validated['location_id']);
+            }
+        }
+
+        // Always save port_selection if port_capacity is provided
+        if (isset($validated['port_capacity'])) {
+            if ($pricing) {
+                $applicationData['port_selection'] = [
+                    'capacity' => $validated['port_capacity'],
+                    'billing_plan' => $validated['billing_plan'] ?? null,
+                    'amount' => $payableAmount,
+                    'currency' => $pricing->currency,
+                ];
+            } else {
+                // Save port capacity even if pricing not found
+                $applicationData['port_selection'] = [
+                    'capacity' => $validated['port_capacity'],
+                    'billing_plan' => $validated['billing_plan'] ?? null,
+                    'amount' => $payableAmount,
+                    'currency' => 'INR',
+                ];
+            }
+        }
+        if (isset($validated['ip_prefix_count'])) {
+            $applicationData['ip_prefix'] = [
+                'count' => $validated['ip_prefix_count'],
+                'source' => $validated['ip_prefix_source'] ?? null,
+                'provider' => $validated['ip_prefix_provider'] ?? null,
+            ];
+        }
+        if (isset($validated['pre_peering_connectivity'])) {
+            $applicationData['peering'] = [
+                'pre_nixi_connectivity' => $validated['pre_peering_connectivity'],
+                'asn_number' => $validated['asn_number'] ?? null,
+            ];
+        }
+        if (isset($validated['router_height_u']) || isset($validated['router_make_model'])) {
+            $applicationData['router_details'] = [
+                'height_u' => $validated['router_height_u'] ?? null,
+                'make_model' => $validated['router_make_model'] ?? null,
+                'serial_number' => $validated['router_serial_number'] ?? null,
+            ];
+        }
+
+        $applicationData['member_type'] = $memberType;
+        $applicationData['documents'] = $storedDocuments;
+
+        // Get application pricing from database
+        $applicationPricing = IxApplicationPricing::getActive();
+        $applicationFee = $applicationPricing ? (float) $applicationPricing->total_amount : 1000.00;
+
+        if ((! $isDraft || $isPreview) && isset($validated['billing_plan']) && $pricing) {
+            $applicationData['payment'] = [
+                'status' => 'pending',
+                'plan' => $validated['billing_plan'],
+                'amount' => $applicationFee, // Use application fee from database
+                'application_fee' => $applicationPricing ? (float) $applicationPricing->application_fee : 1000.00,
+                'gst_percentage' => $applicationPricing ? (float) $applicationPricing->gst_percentage : 18.00,
+                'total_amount' => $applicationFee,
+                'currency' => 'INR',
+                'declaration_confirmed_at' => now('Asia/Kolkata')->toDateTimeString(),
+            ];
+        }
+
+        // Merge with existing data if updating draft (new data takes precedence, but preserve existing if new is missing)
+        if ($existingDraft && $existingDraft->application_data) {
+            $existingData = $existingDraft->application_data;
+
+            // Start with existing data
+            $mergedData = $existingData;
+
+            // Override with new data where it exists
+            foreach ($applicationData as $key => $value) {
+                $mergedData[$key] = $value;
+            }
+
+            // For nested arrays, replace completely if new data exists, otherwise keep existing
+            if (isset($applicationData['location'])) {
+                $mergedData['location'] = $applicationData['location'];
+            } elseif (isset($existingData['location'])) {
+                $mergedData['location'] = $existingData['location'];
+            }
+
+            if (isset($applicationData['port_selection'])) {
+                $mergedData['port_selection'] = $applicationData['port_selection'];
+            } elseif (isset($existingData['port_selection'])) {
+                $mergedData['port_selection'] = $existingData['port_selection'];
+            }
+
+            if (isset($applicationData['ip_prefix'])) {
+                $mergedData['ip_prefix'] = $applicationData['ip_prefix'];
+            } elseif (isset($existingData['ip_prefix'])) {
+                $mergedData['ip_prefix'] = $existingData['ip_prefix'];
+            }
+
+            if (isset($applicationData['peering'])) {
+                $mergedData['peering'] = $applicationData['peering'];
+            } elseif (isset($existingData['peering'])) {
+                $mergedData['peering'] = $existingData['peering'];
+            }
+
+            if (isset($applicationData['router_details'])) {
+                $mergedData['router_details'] = $applicationData['router_details'];
+            } elseif (isset($existingData['router_details'])) {
+                $mergedData['router_details'] = $existingData['router_details'];
+            }
+
+            if (isset($applicationData['payment'])) {
+                $mergedData['payment'] = $applicationData['payment'];
+            } elseif (isset($existingData['payment'])) {
+                $mergedData['payment'] = $existingData['payment'];
+            }
+
+            // Documents should be merged (keep existing, add new)
+            if (isset($existingData['documents']) && isset($applicationData['documents'])) {
+                $mergedData['documents'] = array_merge($existingData['documents'], $applicationData['documents']);
+            } elseif (isset($applicationData['documents'])) {
+                $mergedData['documents'] = $applicationData['documents'];
+            } elseif (isset($existingData['documents'])) {
+                $mergedData['documents'] = $existingData['documents'];
+            }
+
+            $applicationData = $mergedData;
+        }
+
+        // Save or update application
+        // For IX applications, keep as 'draft' until payment is made
+        // Status will be changed to 'submitted' only after successful payment
+        if ($existingDraft) {
+            $application = $existingDraft;
+            $application->update([
+                'application_data' => $applicationData,
+                'status' => $isDraft ? 'draft' : 'draft', // Keep as draft until payment
+                'submitted_at' => null, // Will be set after payment
+            ]);
+        } else {
+            $application = Application::create([
+                'user_id' => $userId,
+                'pan_card_no' => $user->pancardno,
+                'application_id' => Application::generateApplicationId(),
+                'application_type' => 'IX',
+                'status' => $isDraft ? 'draft' : 'draft', // Keep as draft until payment
+                'application_data' => $applicationData,
+                'submitted_at' => null, // Will be set after payment
+            ]);
+        }
+
+        // Handle preview - return JSON
+        if ($isPreview) {
+            return response()->json([
+                'success' => true,
+                'application_id' => $application->application_id,
+                'message' => 'Application data saved for preview.',
+            ]);
+        }
+
+        // Handle draft save
+        if ($isDraft) {
+            return response()->json([
+                'success' => true,
+                'application_id' => $application->application_id,
+                'message' => 'Application draft saved successfully.',
+            ]);
+        }
+
+        // Final submission - status remains 'draft' until payment
+        ApplicationStatusHistory::log(
+            $application->id,
+            null,
+            'draft',
+            'user',
+            $userId,
+            'IX application form submitted, awaiting payment'
+        );
+
+        // Generate application PDF
+        try {
+            $applicationPdf = $this->generateApplicationPdf($application);
+            $pdfPath = 'applications/'.$userId.'/ix/'.$application->application_id.'_application.pdf';
+            Storage::disk('public')->put($pdfPath, $applicationPdf->output());
+            $applicationData['pdfs'] = ['application_pdf' => $pdfPath];
+            $application->update(['application_data' => $applicationData]);
+        } catch (Exception $e) {
+            Log::error('Error generating IX application PDF: '.$e->getMessage());
+        }
+
+        Log::info('IX application submitted', [
+            'application_id' => $application->application_id,
+            'user_id' => $userId,
+        ]);
+
+        return redirect()->route('user.applications.index')
+            ->with('success', 'IX application submitted successfully. You can download the application PDF from the applications list.');
+    }
+
+    /**
+     * Show preview of IX application.
+     */
+    public function preview(Request $request): View|RedirectResponse
+    {
+        $userId = session('user_id');
+        $user = Registration::find($userId);
+
+        if (! $user) {
+            return redirect()->route('login.index')
+                ->with('error', 'User session expired. Please login again.');
+        }
+
+        $applicationId = $request->input('application_id');
+        if (! $applicationId) {
+            return redirect()->route('user.applications.ix.create')
+                ->with('error', 'Application ID is required for preview.');
+        }
+
+        $application = Application::where('user_id', $userId)
+            ->where('application_id', $applicationId)
+            ->whereIn('status', ['draft', 'pending'])
+            ->first();
+
+        if (! $application) {
+            return redirect()->route('user.applications.ix.create')
+                ->with('error', 'Application not found or already submitted.');
+        }
+
+        $kyc = UserKycProfile::where('user_id', $userId)->first();
+        $gstVerification = GstVerification::where('user_id', $userId)
+            ->where('is_verified', true)
+            ->latest()
+            ->first();
+
+        return view('user.applications.ix.preview', [
+            'user' => $user,
+            'application' => $application,
+            'kyc' => $kyc,
+            'gstVerification' => $gstVerification,
+        ]);
+    }
+
+    /**
+     * Download IX agreement template with user details.
+     */
+    public function downloadAgreement(): \Symfony\Component\HttpFoundation\BinaryFileResponse
+    {
+        $userId = session('user_id');
+        $user = Registration::find($userId);
+        $kyc = UserKycProfile::where('user_id', $userId)->first();
+        $gstVerification = GstVerification::where('user_id', $userId)
+            ->where('is_verified', true)
+            ->latest()
+            ->first();
+
+        $companyName = $gstVerification?->legal_name ?? $gstVerification?->trade_name ?? $user->fullname;
+        $companyAddress = $gstVerification?->primary_address ?? '';
+
+        $pdf = Pdf::loadView('user.applications.ix.pdf.agreement', [
+            'generatedAt' => now('Asia/Kolkata')->format('d M Y, h:i A'),
+            'companyName' => $companyName,
+            'companyAddress' => $companyAddress,
+            'user' => $user,
+            'gstVerification' => $gstVerification,
+        ])->setPaper('a4', 'portrait');
+
+        $tmpPath = storage_path('app/public/temp');
+        if (! is_dir($tmpPath)) {
+            mkdir($tmpPath, 0775, true);
+        }
+
+        $filePath = $tmpPath.'/nixi-ix-agreement-template.pdf';
+        $pdf->save($filePath);
+
+        return response()->download($filePath)->deleteFileAfterSend(true);
+    }
+
+    /**
+     * Generate application PDF with all user details.
+     */
+    private function generateApplicationPdf(Application $application)
+    {
+        $user = $application->user;
+        $data = $application->application_data;
+        $kyc = UserKycProfile::where('user_id', $user->id)->first();
+        $gstVerification = GstVerification::where('user_id', $user->id)
+            ->where('is_verified', true)
+            ->latest()
+            ->first();
+
+        // Convert uploaded PDFs to images for embedding
+        $pdfImages = [];
+        $documentNames = [
+            'agreement_file' => 'Signed Agreement with NIXI',
+            'license_isp_file' => 'ISP License',
+            'license_vno_file' => 'VNO License',
+            'cdn_declaration_file' => 'CDN Declaration',
+            'general_declaration_file' => 'General Declaration',
+            'board_resolution_file' => 'Board Resolution',
+            'whois_details_file' => 'Whois Details',
+            'pan_document_file' => 'PAN Document',
+            'gstin_document_file' => 'GSTIN Document',
+            'msme_document_file' => 'MSME Certificate',
+            'incorporation_document_file' => 'Certificate of Incorporation',
+            'authorized_rep_document_file' => 'Authorized Representative Document',
+        ];
+
+        if (isset($data['documents']) && ! empty($data['documents'])) {
+            foreach ($data['documents'] as $field => $path) {
+                $fullPath = storage_path('app/public/'.$path);
+
+                if (! file_exists($fullPath)) {
+                    Log::warning('PDF file not found: '.$fullPath);
+                    $pdfImages[$field] = [
+                        'images' => [],
+                        'name' => $documentNames[$field] ?? $field,
+                        'path' => $path,
+                    ];
+
+                    continue;
+                }
+
+                $fileExtension = strtolower(pathinfo($fullPath, PATHINFO_EXTENSION));
+
+                if ($fileExtension === 'pdf' && extension_loaded('imagick')) {
+                    $images = [];
+                    try {
+                        // Try to read all pages
+                        $imagick = new \Imagick;
+                        $imagick->setResolution(150, 150);
+                        $imagick->setBackgroundColor(new \ImagickPixel('white'));
+
+                        // Read all pages
+                        $imagick->readImage($fullPath);
+                        $imagick->setImageFormat('png');
+                        $imagick->setImageCompressionQuality(90);
+
+                        // Convert each page
+                        $numPages = $imagick->getNumberImages();
+                        for ($i = 0; $i < $numPages && $i < 10; $i++) { // Limit to 10 pages max
+                            $imagick->setIteratorIndex($i);
+                            $imagick->setImageFormat('png');
+                            $images[] = base64_encode($imagick->getImageBlob());
+                        }
+
+                        $pdfImages[$field] = [
+                            'images' => $images,
+                            'name' => $documentNames[$field] ?? $field,
+                            'path' => $path,
+                        ];
+
+                        $imagick->clear();
+                        $imagick->destroy();
+                    } catch (\Exception $e) {
+                        Log::error('Failed to convert PDF to image for field '.$field.': '.$e->getMessage().' | File: '.$fullPath);
+                        // Try simpler single page conversion
+                        try {
+                            $imagick = new \Imagick;
+                            $imagick->setResolution(150, 150);
+                            $imagick->readImage($fullPath.'[0]');
+                            $imagick->setImageFormat('png');
+                            $imagick->setImageCompressionQuality(90);
+                            $images = [base64_encode($imagick->getImageBlob())];
+                            $pdfImages[$field] = [
+                                'images' => $images,
+                                'name' => $documentNames[$field] ?? $field,
+                                'path' => $path,
+                            ];
+                            $imagick->clear();
+                            $imagick->destroy();
+                        } catch (\Exception $e2) {
+                            Log::error('Fallback PDF conversion failed: '.$e2->getMessage());
+                            // Still include it so user knows document exists
+                            $pdfImages[$field] = [
+                                'images' => [],
+                                'name' => $documentNames[$field] ?? $field,
+                                'path' => $path,
+                                'error' => true,
+                            ];
+                        }
+                    }
+                } else {
+                    $pdfImages[$field] = [
+                        'images' => [],
+                        'name' => $documentNames[$field] ?? $field,
+                        'path' => $path,
+                    ];
+                }
+            }
+        }
+
+        $pdf = Pdf::loadView('user.applications.ix.pdf.application', [
+            'application' => $application,
+            'user' => $user,
+            'data' => $data,
+            'kyc' => $kyc,
+            'gstVerification' => $gstVerification,
+            'pdfImages' => $pdfImages,
+        ])->setPaper('a4', 'portrait')
+            ->setOption('enable-local-file-access', true);
+
+        return $pdf;
+    }
+
+    /**
+     * Download application PDF.
+     */
+    public function downloadApplicationPdf($id): \Symfony\Component\HttpFoundation\BinaryFileResponse|RedirectResponse
+    {
+        try {
+            $userId = session('user_id');
+            $application = Application::with(['user', 'gstVerification'])
+                ->where('id', $id)
+                ->where('user_id', $userId)
+                ->where('application_type', 'IX')
+                ->firstOrFail();
+
+            $applicationPdf = $this->generateApplicationPdf($application);
+
+            $tmpPath = storage_path('app/public/temp');
+            if (! is_dir($tmpPath)) {
+                mkdir($tmpPath, 0775, true);
+            }
+
+            $fileName = $application->application_id.'_application.pdf';
+            $filePath = $tmpPath.'/'.$fileName;
+            $applicationPdf->save($filePath);
+
+            return response()->download($filePath, $fileName)->deleteFileAfterSend(true);
+        } catch (Exception $e) {
+            Log::error('Error downloading IX application PDF: '.$e->getMessage());
+
+            return redirect()->route('user.applications.index')
+                ->with('error', 'Unable to download application PDF.');
+        }
+    }
+
+    /**
+     * Fetch active IX locations for AJAX filtering.
+     */
+    public function locations(Request $request): JsonResponse
+    {
+        $state = $request->get('state');
+
+        $locations = IxLocation::active()
+            ->when($state, fn ($query) => $query->where('state', $state))
+            ->orderBy('node_type')
+            ->orderBy('state')
+            ->orderBy('name')
+            ->get();
+
+        return response()->json([
+            'success' => true,
+            'data' => $locations,
+        ]);
+    }
+
+    /**
+     * Fetch IX port pricing grid.
+     */
+    public function pricing(Request $request): JsonResponse
+    {
+        $nodeType = $request->get('node_type');
+
+        $pricings = IxPortPricing::active()
+            ->when($nodeType, fn ($query) => $query->where('node_type', $nodeType))
+            ->orderBy('node_type')
+            ->orderBy('display_order')
+            ->orderBy('port_capacity')
+            ->get()
+            ->groupBy('node_type');
+
+        return response()->json([
+            'success' => true,
+            'data' => $pricings,
+        ]);
+    }
+
+    /**
+     * Fetch current IX application pricing (for live updates).
+     */
+    public function getApplicationPricing(): JsonResponse
+    {
+        $applicationPricing = IxApplicationPricing::getActive();
+        if (! $applicationPricing) {
+            // Fallback to default if no pricing is set
+            $applicationPricing = (object) [
+                'application_fee' => 1000.00,
+                'gst_percentage' => 18.00,
+                'total_amount' => 1180.00,
+            ];
+        }
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'application_fee' => (float) $applicationPricing->application_fee,
+                'gst_percentage' => (float) $applicationPricing->gst_percentage,
+                'total_amount' => (float) $applicationPricing->total_amount,
+            ],
+        ]);
+    }
+
+    /**
+     * Final submit application from preview.
+     */
+    public function finalSubmit(string $applicationId): RedirectResponse
+    {
+        $userId = session('user_id');
+        $application = Application::where('user_id', $userId)
+            ->where('application_id', $applicationId)
+            ->whereIn('status', ['draft', 'pending'])
+            ->firstOrFail();
+
+        // Keep as draft until payment is made
+        $application->update([
+            'status' => 'draft',
+            'submitted_at' => null, // Will be set after payment
+        ]);
+
+        ApplicationStatusHistory::log(
+            $application->id,
+            null,
+            'draft',
+            'user',
+            $userId,
+            'IX application form submitted, awaiting payment'
+        );
+
+        // Generate application PDF
+        try {
+            $applicationPdf = $this->generateApplicationPdf($application);
+            $pdfPath = 'applications/'.$userId.'/ix/'.$application->application_id.'_application.pdf';
+            Storage::disk('public')->put($pdfPath, $applicationPdf->output());
+            $applicationData = $application->application_data;
+            $applicationData['pdfs'] = ['application_pdf' => $pdfPath];
+            $application->update(['application_data' => $applicationData]);
+        } catch (Exception $e) {
+            Log::error('Error generating IX application PDF: '.$e->getMessage());
+        }
+
+        Log::info('IX application submitted', [
+            'application_id' => $application->application_id,
+            'user_id' => $userId,
+        ]);
+
+        return redirect()->route('user.applications.index')
+            ->with('success', 'IX application submitted successfully. You can download the application PDF from the applications list.');
+    }
+
+    /**
+     * Initiate payment for IX application.
+     */
+    public function initiatePayment(StoreIxApplicationRequest $request): JsonResponse
+    {
+        $userId = session('user_id');
+        $user = Registration::find($userId);
+
+        if (! $user) {
+            return response()->json([
+                'success' => false,
+                'message' => 'User session expired. Please login again.',
+            ], 401);
+        }
+
+        // First, save the application
+        $validated = $request->validated();
+        $validated['is_draft'] = false;
+        $validated['is_preview'] = false;
+
+        $application = $this->saveApplicationData($validated, $user, $request);
+
+        if (! $application) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to save application.',
+            ], 500);
+        }
+
+        // Get active application pricing from database
+        $applicationPricing = IxApplicationPricing::getActive();
+        if (! $applicationPricing) {
+            // Fallback to default if no pricing is set
+            $amount = 1000.00;
+        } else {
+            $amount = (float) $applicationPricing->total_amount;
+        }
+
+        // Generate transaction ID
+        $transactionId = 'TXN'.time().rand(1000, 9999);
+
+        // Create payment transaction
+        $paymentTransaction = PaymentTransaction::create([
+            'user_id' => $userId,
+            'application_id' => $application->id,
+            'transaction_id' => $transactionId,
+            'payment_mode' => config('services.payu.mode', 'test'),
+            'payment_status' => 'pending',
+            'amount' => $amount,
+            'currency' => 'INR',
+            'product_info' => 'NIXI IX Application Fee',
+        ]);
+
+        // Prepare payment data
+        $payuService = new PayuService;
+        $paymentData = $payuService->preparePaymentData([
+            'transaction_id' => $transactionId,
+            'amount' => $amount,
+            'product_info' => 'NIXI IX Application Fee',
+            'firstname' => $user->fullname,
+            'email' => $user->email,
+            'phone' => $user->mobile,
+            'success_url' => route('user.applications.ix.payment-success'),
+            'failure_url' => route('user.applications.ix.payment-failure'),
+            'udf1' => $application->application_id,
+            'udf2' => (string) $paymentTransaction->id,
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'payment_url' => $payuService->getPaymentUrl(),
+            'payment_form' => $paymentData,
+        ]);
+    }
+
+    /**
+     * Retry payment for an existing IX application draft with pending payment.
+     */
+    public function payNow(int $id): RedirectResponse|View
+    {
+        $userId = session('user_id');
+        $user = Registration::find($userId);
+
+        if (! $user) {
+            return redirect()->route('login.index')
+                ->with('error', 'User session expired. Please login again.');
+        }
+
+        $application = Application::where('id', $id)
+            ->where('user_id', $userId)
+            ->where('application_type', 'IX')
+            ->where('status', 'draft')
+            ->firstOrFail();
+
+        $data = $application->application_data ?? [];
+        $payment = $data['payment'] ?? null;
+
+        if (! $payment || ($payment['status'] ?? null) !== 'pending') {
+            return redirect()->route('user.applications.index')
+                ->with('error', 'This application is not waiting for payment or has already been paid.');
+        }
+
+        // Get active application pricing from database (use current pricing, not stored)
+        $applicationPricing = IxApplicationPricing::getActive();
+        if (! $applicationPricing) {
+            // Fallback to default if no pricing is set
+            $amount = 1000.00;
+        } else {
+            $amount = (float) $applicationPricing->total_amount;
+        }
+
+        // Generate new transaction ID for this retry
+        $transactionId = 'TXN'.time().rand(1000, 9999);
+
+        // Create payment transaction record
+        $paymentTransaction = PaymentTransaction::create([
+            'user_id' => $userId,
+            'application_id' => $application->id,
+            'transaction_id' => $transactionId,
+            'payment_mode' => config('services.payu.mode', 'test'),
+            'payment_status' => 'pending',
+            'amount' => $amount,
+            'currency' => $payment['currency'] ?? 'INR',
+            'product_info' => 'NIXI IX Application Fee',
+        ]);
+
+        $payuService = new PayuService;
+
+        $paymentData = $payuService->preparePaymentData([
+            'transaction_id' => $transactionId,
+            'amount' => $amount,
+            'product_info' => 'NIXI IX Application Fee',
+            'firstname' => $user->fullname,
+            'email' => $user->email,
+            'phone' => $user->mobile,
+            'success_url' => route('user.applications.ix.payment-success'),
+            'failure_url' => route('user.applications.ix.payment-failure'),
+            'udf1' => $application->application_id,
+            'udf2' => (string) $paymentTransaction->id,
+        ]);
+
+        return view('user.applications.ix.payu-redirect', [
+            'paymentUrl' => $payuService->getPaymentUrl(),
+            'paymentForm' => $paymentData,
+        ]);
+    }
+
+    /**
+     * Handle payment success callback from PayU.
+     */
+    public function paymentSuccess(Request $request): RedirectResponse|View
+    {
+        $userId = session('user_id');
+        $payuService = new PayuService;
+
+        // Verify hash
+        $response = $request->all();
+        $isValid = $payuService->verifyHash($response);
+
+        if (! $isValid) {
+            Log::warning('PayU hash verification failed', ['response' => $response]);
+
+            return redirect()->route('user.applications.ix.create')
+                ->with('error', 'Payment verification failed. Please contact support.');
+        }
+
+        // Find payment transaction
+        $transactionId = $request->input('txnid');
+        $paymentTransaction = PaymentTransaction::where('transaction_id', $transactionId)
+            ->where('user_id', $userId)
+            ->first();
+
+        if (! $paymentTransaction) {
+            Log::error('Payment transaction not found', ['transaction_id' => $transactionId]);
+
+            return redirect()->route('user.applications.ix.create')
+                ->with('error', 'Payment transaction not found.');
+        }
+
+        // Update payment transaction
+        $paymentTransaction->update([
+            'payment_id' => $request->input('payuMoneyId') ?? $request->input('mihpayid'),
+            'payment_status' => 'success',
+            'response_message' => $request->input('status'),
+            'payu_response' => $response,
+            'hash' => $request->input('hash'),
+        ]);
+
+        // Update application status
+        if ($paymentTransaction->application_id) {
+            $application = Application::find($paymentTransaction->application_id);
+            if ($application) {
+                // Use new workflow status for IX applications
+                $newStatus = $application->application_type === 'IX' ? 'submitted' : 'pending';
+
+                $application->update([
+                    'status' => $newStatus,
+                    'submitted_at' => now('Asia/Kolkata'),
+                ]);
+
+                ApplicationStatusHistory::log(
+                    $application->id,
+                    null,
+                    $newStatus,
+                    'user',
+                    $userId,
+                    'IX application submitted with payment'
+                );
+
+                // Generate application PDF
+                try {
+                    $applicationPdf = $this->generateApplicationPdf($application);
+                    $pdfPath = 'applications/'.$userId.'/ix/'.$application->application_id.'_application.pdf';
+                    Storage::disk('public')->put($pdfPath, $applicationPdf->output());
+                    $applicationData = $application->application_data;
+                    $applicationData['pdfs'] = ['application_pdf' => $pdfPath];
+                    $applicationData['payment'] = array_merge($applicationData['payment'] ?? [], [
+                        'transaction_id' => $transactionId,
+                        'payment_id' => $paymentTransaction->payment_id,
+                        'status' => 'success',
+                        'paid_at' => now('Asia/Kolkata')->toDateTimeString(),
+                    ]);
+                    $application->update(['application_data' => $applicationData]);
+
+                    // Send email to applicant and IX team
+                    try {
+                        Mail::to($application->user->email)->send(
+                            new \App\Mail\IxApplicationSubmittedMail($application)
+                        );
+                    } catch (Exception $e) {
+                        Log::error('Error sending IX application submitted email: '.$e->getMessage());
+                    }
+                } catch (Exception $e) {
+                    Log::error('Error generating IX application PDF: '.$e->getMessage());
+                }
+            }
+        }
+
+        return view('user.applications.ix.payment-confirmation', [
+            'paymentTransaction' => $paymentTransaction,
+            'application' => $paymentTransaction->application,
+        ]);
+    }
+
+    /**
+     * Handle payment failure callback from PayU.
+     */
+    public function paymentFailure(Request $request): RedirectResponse
+    {
+        $userId = session('user_id');
+        $transactionId = $request->input('txnid');
+
+        $paymentTransaction = PaymentTransaction::where('transaction_id', $transactionId)
+            ->where('user_id', $userId)
+            ->first();
+
+        if ($paymentTransaction) {
+            $paymentTransaction->update([
+                'payment_id' => $request->input('payuMoneyId') ?? $request->input('mihpayid'),
+                'payment_status' => 'failed',
+                'response_message' => $request->input('status') ?? $request->input('error'),
+                'payu_response' => $request->all(),
+                'hash' => $request->input('hash'),
+            ]);
+        }
+
+        return redirect()->route('user.applications.ix.create')
+            ->with('error', 'Payment failed. Please try again or contact support if the amount was deducted.');
+    }
+
+    /**
+     * Save application data (extracted from store method for reuse).
+     */
+    private function saveApplicationData(array $validated, Registration $user, Request $request): ?Application
+    {
+        $userId = $user->id;
+        $applicationId = $request->input('application_id');
+
+        // If an application_id is provided, update that specific draft.
+        // Otherwise, always create a new IX application so users can
+        // have multiple applications regardless of other drafts.
+        $existingDraft = null;
+        if ($applicationId) {
+            $existingDraft = Application::where('user_id', $userId)
+                ->where('application_type', 'IX')
+                ->where('application_id', $applicationId)
+                ->where('status', 'draft')
+                ->latest()
+                ->first();
+        }
+
+        // Handle location and pricing
+        $location = null;
+        $pricing = null;
+        $payableAmount = 0;
+
+        if (isset($validated['location_id'])) {
+            try {
+                $location = IxLocation::active()->findOrFail($validated['location_id']);
+
+                if (isset($validated['port_capacity'])) {
+                    $pricing = IxPortPricing::active()
+                        ->where('node_type', $location->node_type)
+                        ->where('port_capacity', $validated['port_capacity'])
+                        ->first();
+
+                    if ($pricing && isset($validated['billing_plan'])) {
+                        $payableAmount = $pricing->getAmountForPlan($validated['billing_plan']);
+                    }
+                }
+            } catch (\Exception $e) {
+                Log::error('Error fetching location: '.$e->getMessage());
+            }
+        }
+
+        // Handle file uploads
+        $documentFields = [
+            'agreement_file',
+            'license_isp_file',
+            'license_vno_file',
+            'cdn_declaration_file',
+            'general_declaration_file',
+            'board_resolution_file',
+            'whois_details_file',
+            'pan_document_file',
+            'gstin_document_file',
+            'msme_document_file',
+            'incorporation_document_file',
+            'authorized_rep_document_file',
+        ];
+
+        $storedDocuments = [];
+        $storagePrefix = 'applications/'.$userId.'/ix/'.now()->format('YmdHis');
+
+        if ($existingDraft && isset($existingDraft->application_data['documents'])) {
+            $storedDocuments = $existingDraft->application_data['documents'];
+        }
+
+        foreach ($documentFields as $field) {
+            if ($request->hasFile($field)) {
+                $storedDocuments[$field] = $request->file($field)
+                    ->store($storagePrefix, 'public');
+            }
+        }
+
+        $memberType = null;
+        if (isset($validated['member_type'])) {
+            $memberType = $validated['member_type'] === 'others'
+                ? ($validated['member_type_other'] ?? 'Others')
+                : strtoupper($validated['member_type']);
+        }
+
+        // Prepare application data
+        $applicationData = [];
+
+        if ($location) {
+            $applicationData['location'] = [
+                'id' => $location->id,
+                'name' => $location->name,
+                'state' => $location->state,
+                'node_type' => $location->node_type,
+                'switch_details' => $location->switch_details,
+                'nodal_officer' => $location->nodal_officer,
+            ];
+        }
+
+        if (isset($validated['port_capacity'])) {
+            if ($pricing) {
+                $applicationData['port_selection'] = [
+                    'capacity' => $validated['port_capacity'],
+                    'billing_plan' => $validated['billing_plan'] ?? null,
+                    'amount' => $payableAmount,
+                    'currency' => $pricing->currency,
+                ];
+            } else {
+                $applicationData['port_selection'] = [
+                    'capacity' => $validated['port_capacity'],
+                    'billing_plan' => $validated['billing_plan'] ?? null,
+                    'amount' => $payableAmount,
+                    'currency' => 'INR',
+                ];
+            }
+        }
+
+        if (isset($validated['ip_prefix_count'])) {
+            $applicationData['ip_prefix'] = [
+                'count' => $validated['ip_prefix_count'],
+                'source' => $validated['ip_prefix_source'] ?? null,
+                'provider' => $validated['ip_prefix_provider'] ?? null,
+            ];
+        }
+
+        if (isset($validated['pre_peering_connectivity'])) {
+            $applicationData['peering'] = [
+                'pre_nixi_connectivity' => $validated['pre_peering_connectivity'],
+                'asn_number' => $validated['asn_number'] ?? null,
+            ];
+        }
+
+        if (isset($validated['router_height_u']) || isset($validated['router_make_model'])) {
+            $applicationData['router_details'] = [
+                'height_u' => $validated['router_height_u'] ?? null,
+                'make_model' => $validated['router_make_model'] ?? null,
+                'serial_number' => $validated['router_serial_number'] ?? null,
+            ];
+        }
+
+        $applicationData['member_type'] = $memberType;
+        $applicationData['documents'] = $storedDocuments;
+
+        // Get application pricing from database
+        $applicationPricing = IxApplicationPricing::getActive();
+        $applicationFee = $applicationPricing ? (float) $applicationPricing->total_amount : 1000.00;
+
+        if (isset($validated['billing_plan']) && $pricing) {
+            $applicationData['payment'] = [
+                'status' => 'pending',
+                'plan' => $validated['billing_plan'],
+                'amount' => $applicationFee, // Use application fee from database
+                'application_fee' => $applicationPricing ? (float) $applicationPricing->application_fee : 1000.00,
+                'gst_percentage' => $applicationPricing ? (float) $applicationPricing->gst_percentage : 18.00,
+                'total_amount' => $applicationFee,
+                'currency' => 'INR',
+                'declaration_confirmed_at' => now('Asia/Kolkata')->toDateTimeString(),
+            ];
+        }
+
+        // Merge with existing data if updating draft
+        if ($existingDraft && $existingDraft->application_data) {
+            $existingData = $existingDraft->application_data;
+            $mergedData = $existingData;
+
+            foreach ($applicationData as $key => $value) {
+                $mergedData[$key] = $value;
+            }
+
+            if (isset($applicationData['documents'])) {
+                $mergedData['documents'] = array_merge($existingData['documents'] ?? [], $applicationData['documents']);
+            }
+
+            $applicationData = $mergedData;
+        }
+
+        // Save or update application
+        if ($existingDraft) {
+            $application = $existingDraft;
+            $application->update([
+                'application_data' => $applicationData,
+                'status' => 'draft',
+                'submitted_at' => null,
+            ]);
+        } else {
+            $application = Application::create([
+                'user_id' => $userId,
+                'pan_card_no' => $user->pancardno,
+                'application_id' => Application::generateApplicationId(),
+                'application_type' => 'IX',
+                'status' => 'draft',
+                'application_data' => $applicationData,
+                'submitted_at' => null,
+            ]);
+        }
+
+        return $application;
+    }
+}

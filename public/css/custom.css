@@ -1,0 +1,294 @@
+/* Varela Round Font Face */
+@font-face {
+    font-family: 'Varela Round';
+    src: url('../fonts/VarelaRound-Regular.ttf') format('truetype');
+    font-weight: normal;
+    font-style: normal;
+    font-display: swap;
+}
+
+/* Theme Variables */
+:root {
+    --color-primary-red: #DC143C;
+    --color-red: #DC143C;
+    --color-white: #FFFFFF;
+    --color-black: #000000;
+    --color-text: #000000;
+    --color-bg: #FFFFFF;
+    --font-size-base: 0.875rem; /* 14px - smaller for space management */
+    --font-size-sm: 0.75rem; /* 12px */
+    --font-size-lg: 0.9375rem; /* 15px */
+}
+
+/* Base Styles */
+* {
+    font-family: 'Varela Round', sans-serif;
+}
+
+body {
+    font-family: 'Varela Round', sans-serif;
+    font-size: var(--font-size-base);
+    background-color: var(--color-bg);
+    color: var(--color-text);
+    line-height: 1.5;
+}
+
+/* Typography - Smaller sizes for space management */
+h1, h2, h3, h4, h5, h6 {
+    font-family: 'Varela Round', sans-serif;
+    color: var(--color-black);
+    font-weight: 500;
+    margin-bottom: 0.5rem;
+}
+
+h1 { font-size: 1.5rem; }
+h2 { font-size: 1.25rem; }
+h3 { font-size: 1.125rem; }
+h4 { font-size: 1rem; }
+h5 { font-size: 0.9375rem; }
+h6 { font-size: 0.875rem; }
+
+p {
+    font-size: var(--font-size-base);
+    margin-bottom: 0.75rem;
+}
+
+/* Links - Red as highlighter */
+a {
+    color: var(--color-red);
+    text-decoration: none;
+    transition: all 0.2s ease;
+}
+
+a:hover,
+a:focus {
+    color: #B0112E;
+    text-decoration: underline;
+}
+
+a:active {
+    color: #8B0E24;
+}
+
+/* Buttons - Red background, white text */
+.btn,
+button[type="submit"],
+input[type="submit"],
+input[type="button"] {
+    font-family: 'Varela Round', sans-serif;
+    font-size: var(--font-size-base);
+    background-color: var(--color-red);
+    color: var(--color-white);
+    border: 2px solid var(--color-black);
+    padding: 0.5rem 1rem;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-decoration: none;
+    display: inline-block;
+}
+
+.btn:hover,
+button[type="submit"]:hover,
+input[type="submit"]:hover,
+input[type="button"]:hover {
+    background-color: #B0112E;
+    color: var(--color-white);
+    border-color: var(--color-black);
+}
+
+.btn:active,
+button[type="submit"]:active,
+input[type="submit"]:active,
+input[type="button"]:active {
+    background-color: #8B0E24;
+}
+
+.btn:focus,
+button[type="submit"]:focus,
+input[type="submit"]:focus,
+input[type="button"]:focus {
+    outline: 2px solid var(--color-red);
+    outline-offset: 2px;
+}
+
+/* Secondary button style */
+.btn-secondary {
+    background-color: var(--color-white);
+    color: var(--color-black);
+    border: 2px solid var(--color-black);
+}
+
+.btn-secondary:hover {
+    background-color: var(--color-black);
+    color: var(--color-white);
+}
+
+/* Form Elements - Smaller fonts and 2-column layout */
+.form-group {
+    margin-bottom: 0.75rem;
+}
+
+.form-row {
+    display: flex;
+    flex-wrap: wrap;
+    margin-left: -0.5rem;
+    margin-right: -0.5rem;
+}
+
+.form-row > .form-group {
+    flex: 1 1 0;
+    min-width: 0;
+    padding-left: 0.5rem;
+    padding-right: 0.5rem;
+}
+
+@media (max-width: 767px) {
+    .form-row > .form-group {
+        flex: 1 1 100%;
+    }
+}
+
+label {
+    font-family: 'Varela Round', sans-serif;
+    font-size: var(--font-size-sm);
+    color: var(--color-black);
+    display: block;
+    margin-bottom: 0.25rem;
+    font-weight: 500;
+}
+
+input[type="text"],
+input[type="email"],
+input[type="password"],
+input[type="number"],
+input[type="tel"],
+input[type="url"],
+input[type="date"],
+input[type="time"],
+input[type="datetime-local"],
+select,
+textarea {
+    font-family: 'Varela Round', sans-serif;
+    font-size: var(--font-size-base);
+    width: 100%;
+    padding: 0.5rem;
+    border: 1px solid var(--color-black);
+    background-color: var(--color-white);
+    color: var(--color-black);
+    border-radius: 3px;
+    transition: border-color 0.2s ease;
+}
+
+input[type="text"]:focus,
+input[type="email"]:focus,
+input[type="password"]:focus,
+input[type="number"]:focus,
+input[type="tel"]:focus,
+input[type="url"]:focus,
+input[type="date"]:focus,
+input[type="time"]:focus,
+input[type="datetime-local"]:focus,
+select:focus,
+textarea:focus {
+    outline: none;
+    border-color: var(--color-red);
+    border-width: 2px;
+}
+
+input::placeholder,
+textarea::placeholder {
+    color: #666;
+    font-size: var(--font-size-sm);
+}
+
+textarea {
+    resize: vertical;
+    min-height: 80px;
+}
+
+/* Borders - Black */
+.border {
+    border: 1px solid var(--color-black);
+}
+
+.border-top {
+    border-top: 1px solid var(--color-black);
+}
+
+.border-bottom {
+    border-bottom: 1px solid var(--color-black);
+}
+
+.border-left {
+    border-left: 1px solid var(--color-black);
+}
+
+.border-right {
+    border-right: 1px solid var(--color-black);
+}
+
+/* Underlines - Black */
+hr {
+    border: none;
+    border-top: 1px solid var(--color-black);
+    margin: 1rem 0;
+}
+
+/* Utility Classes */
+.text-red {
+    color: var(--color-red);
+}
+
+.text-black {
+    color: var(--color-black);
+}
+
+.text-white {
+    color: var(--color-white);
+}
+
+.bg-red {
+    background-color: var(--color-red);
+}
+
+.bg-white {
+    background-color: var(--color-white);
+}
+
+.bg-black {
+    background-color: var(--color-black);
+}
+
+/* Interactive Elements */
+.link-red {
+    color: var(--color-red);
+    text-decoration: underline;
+    text-decoration-color: var(--color-red);
+}
+
+.link-red:hover {
+    color: #B0112E;
+    text-decoration-color: #B0112E;
+}
+
+/* Cards and Containers */
+.card {
+    background-color: var(--color-white);
+    border: 1px solid var(--color-black);
+    padding: 1rem;
+    margin-bottom: 1rem;
+    border-radius: 4px;
+}
+
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 1rem;
+}
+
+/* Simple, clean design - no icons */
+.icon {
+    display: none;
+}
+
