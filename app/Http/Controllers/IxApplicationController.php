@@ -932,7 +932,9 @@ class IxApplicationController extends Controller
      */
     public function paymentSuccess(Request $request): RedirectResponse|View
     {
-        $response = $request->all();
+        // PayU may send data via POST or GET (query string)
+        // Get all parameters from both POST and GET
+        $response = array_merge($request->query(), $request->post());
         
         try {
             $payuService = new PayuService;
@@ -942,6 +944,9 @@ class IxApplicationController extends Controller
                 'all_params' => $response,
                 'method' => $request->method(),
                 'url' => $request->fullUrl(),
+                'query_params' => $request->query(),
+                'post_params' => $request->post(),
+                'all_input' => $request->all(),
                 'headers' => $request->headers->all(),
             ]);
 
@@ -987,20 +992,32 @@ class IxApplicationController extends Controller
         }
 
         // Find payment transaction using transaction ID and payment transaction ID from udf2
-        $transactionId = $request->input('txnid');
-        $paymentTransactionId = $request->input('udf2');
+        // PayU may send via GET or POST, so check both
+        $transactionId = $response['txnid'] ?? $request->input('txnid');
+        $paymentTransactionId = $response['udf2'] ?? $request->input('udf2');
+        
+        Log::info('PayU Success - Looking up transaction', [
+            'transaction_id' => $transactionId,
+            'payment_transaction_id' => $paymentTransactionId,
+            'has_txnid' => !empty($transactionId),
+            'has_udf2' => !empty($paymentTransactionId),
+        ]);
         
         $paymentTransaction = null;
         if ($paymentTransactionId) {
             $paymentTransaction = PaymentTransaction::find($paymentTransactionId);
-            // Verify the transaction ID matches
-            if ($paymentTransaction && $paymentTransaction->transaction_id !== $transactionId) {
+            // Verify the transaction ID matches if provided
+            if ($paymentTransaction && $transactionId && $paymentTransaction->transaction_id !== $transactionId) {
+                Log::warning('PayU Success - Transaction ID mismatch', [
+                    'expected' => $paymentTransaction->transaction_id,
+                    'received' => $transactionId,
+                ]);
                 $paymentTransaction = null;
             }
         }
         
         // Fallback: find by transaction ID only if udf2 lookup failed
-        if (! $paymentTransaction) {
+        if (! $paymentTransaction && $transactionId) {
             $paymentTransaction = PaymentTransaction::where('transaction_id', $transactionId)->first();
         }
 
@@ -1008,10 +1025,12 @@ class IxApplicationController extends Controller
             Log::error('Payment transaction not found', [
                 'transaction_id' => $transactionId,
                 'payment_transaction_id' => $paymentTransactionId,
+                'all_response_data' => $response,
+                'request_url' => $request->fullUrl(),
             ]);
 
             return redirect()->route('user.applications.ix.create')
-                ->with('error', 'Payment transaction not found.');
+                ->with('error', 'Payment transaction not found. Transaction ID: ' . ($transactionId ?? 'N/A'));
         }
         
         $userId = $paymentTransaction->user_id;
@@ -1136,7 +1155,9 @@ class IxApplicationController extends Controller
      */
     public function paymentFailure(Request $request): RedirectResponse
     {
-        $response = $request->all();
+        // PayU may send data via POST or GET (query string)
+        // Get all parameters from both POST and GET
+        $response = array_merge($request->query(), $request->post());
         
         try {
             // Log the failure response for debugging
@@ -1144,22 +1165,37 @@ class IxApplicationController extends Controller
                 'all_params' => $response,
                 'method' => $request->method(),
                 'url' => $request->fullUrl(),
+                'query_params' => $request->query(),
+                'post_params' => $request->post(),
+                'all_input' => $request->all(),
             ]);
 
-            $transactionId = $request->input('txnid');
-            $paymentTransactionId = $request->input('udf2');
+            // Get transaction ID and payment transaction ID from response (works with both GET and POST)
+            $transactionId = $response['txnid'] ?? $request->input('txnid');
+            $paymentTransactionId = $response['udf2'] ?? $request->input('udf2');
+            
+            Log::info('PayU Failure - Looking up transaction', [
+                'transaction_id' => $transactionId,
+                'payment_transaction_id' => $paymentTransactionId,
+                'has_txnid' => !empty($transactionId),
+                'has_udf2' => !empty($paymentTransactionId),
+            ]);
             
             $paymentTransaction = null;
             if ($paymentTransactionId) {
                 $paymentTransaction = PaymentTransaction::find($paymentTransactionId);
-                // Verify the transaction ID matches
-                if ($paymentTransaction && $paymentTransaction->transaction_id !== $transactionId) {
+                // Verify the transaction ID matches if provided
+                if ($paymentTransaction && $transactionId && $paymentTransaction->transaction_id !== $transactionId) {
+                    Log::warning('PayU Failure - Transaction ID mismatch', [
+                        'expected' => $paymentTransaction->transaction_id,
+                        'received' => $transactionId,
+                    ]);
                     $paymentTransaction = null;
                 }
             }
             
             // Fallback: find by transaction ID only if udf2 lookup failed
-            if (! $paymentTransaction) {
+            if (! $paymentTransaction && $transactionId) {
                 $paymentTransaction = PaymentTransaction::where('transaction_id', $transactionId)->first();
             }
 
