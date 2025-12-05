@@ -55,10 +55,20 @@
                     </div>
                     @endif
 
+                    @if(isset($showLoginLink) && $showLoginLink)
+                    <div class="alert alert-warning">
+                        <p class="mb-2"><strong>Note:</strong> Your session has expired. Please login to view your application details.</p>
+                    </div>
+                    @endif
+
                     <div class="d-flex gap-2 justify-content-center mt-4">
-                        <a href="{{ route('user.applications.index') }}" class="btn btn-primary">View Applications</a>
-                        @if(isset($application) && $application)
-                        <a href="{{ route('user.applications.ix.download-application-pdf', $application->id) }}" class="btn btn-outline-secondary">Download Application PDF</a>
+                        @if(isset($showLoginLink) && $showLoginLink)
+                            <a href="{{ route('login.index') }}" class="btn btn-primary">Login to View Applications</a>
+                        @else
+                            <a href="{{ route('user.applications.index') }}" class="btn btn-primary">View Applications</a>
+                            @if(isset($application) && $application)
+                            <a href="{{ route('user.applications.ix.download-application-pdf', $application->id) }}" class="btn btn-outline-secondary">Download Application PDF</a>
+                            @endif
                         @endif
                     </div>
                 </div>

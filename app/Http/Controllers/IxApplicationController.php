@@ -974,7 +974,7 @@ class IxApplicationController extends Controller
             $requiredFields = ['txnid', 'status', 'hash'];
             $missingFields = array_diff($requiredFields, array_keys($response));
             
-            // If no parameters received, try to find recent pending transaction
+            // If no parameters received, try to find recent transaction
             if (empty($response) || ! empty($missingFields)) {
                 Log::warning('PayU Success Callback - Missing required fields or empty response', [
                     'missing_fields' => $missingFields,
@@ -983,100 +983,175 @@ class IxApplicationController extends Controller
                     'user_id' => session('user_id'),
                 ]);
 
-                // Try to find the most recent pending payment transaction for this user
+                // First, try to find transaction by user session if available
                 $userId = session('user_id');
+                $recentTransaction = null;
+                
                 if ($userId) {
+                    // Try to find the most recent pending or successful payment transaction for this user
                     $recentTransaction = PaymentTransaction::where('user_id', $userId)
-                        ->where('payment_status', 'pending')
+                        ->whereIn('payment_status', ['pending', 'success'])
+                        ->orderBy('updated_at', 'desc')
                         ->orderBy('created_at', 'desc')
+                        ->first();
+                }
+                
+                // If no user session or no transaction found, look for recently updated successful transactions
+                // This handles the case where webhook updated the transaction but user session expired
+                if (! $recentTransaction) {
+                    $recentTransaction = PaymentTransaction::where('payment_status', 'success')
+                        ->where('updated_at', '>=', now()->subMinutes(10)) // Within last 10 minutes
+                        ->orderBy('updated_at', 'desc')
                         ->first();
                     
                     if ($recentTransaction) {
-                        Log::info('PayU Success - Found recent pending transaction without parameters', [
+                        Log::info('PayU Success - Found recent successful transaction without session', [
+                            'transaction_id' => $recentTransaction->transaction_id,
+                            'payment_transaction_id' => $recentTransaction->id,
+                            'user_id' => $recentTransaction->user_id,
+                        ]);
+                    }
+                }
+                
+                if ($recentTransaction) {
+                    // Check if transaction is already successful (updated by webhook)
+                    if ($recentTransaction->payment_status === 'success') {
+                        Log::info('PayU Success - Transaction already marked as successful (likely updated by webhook)', [
                             'transaction_id' => $recentTransaction->transaction_id,
                             'payment_transaction_id' => $recentTransaction->id,
                         ]);
                         
-                        // Try to query PayU API for transaction status
-                        try {
-                            $payuService = new PayuService;
-                            $statusResponse = $payuService->checkTransactionStatus($recentTransaction->transaction_id);
+                        // Get application if exists
+                        $application = null;
+                        if ($recentTransaction->application_id) {
+                            $application = Application::find($recentTransaction->application_id);
+                        }
+                        
+                        // If user session exists, redirect to applications page
+                        if ($userId) {
+                            return redirect()->route('user.applications.index')
+                                ->with('success', 'Payment successful! Your application has been submitted. Transaction ID: ' . $recentTransaction->transaction_id);
+                        }
+                        
+                        // If no session, show success page with login link
+                        return view('user.applications.ix.payment-confirmation', [
+                            'paymentTransaction' => $recentTransaction,
+                            'application' => $application,
+                            'showLoginLink' => true,
+                        ]);
+                    }
+                    
+                    // Transaction is still pending, try to query PayU API
+                    Log::info('PayU Success - Found recent pending transaction without parameters', [
+                        'transaction_id' => $recentTransaction->transaction_id,
+                        'payment_transaction_id' => $recentTransaction->id,
+                    ]);
+                    
+                    // Try to query PayU API for transaction status
+                    try {
+                        $payuService = new PayuService;
+                        $statusResponse = $payuService->checkTransactionStatus($recentTransaction->transaction_id);
+                        
+                        // PayU Verify Payment API returns: {status: 1, msg: "...", transaction_details: {txnid: {...}}}
+                        if ($statusResponse && isset($statusResponse['status']) && $statusResponse['status'] == 1) {
+                            // API call succeeded, check transaction status
+                            $txnStatus = strtolower($statusResponse['transaction_status'] ?? '');
                             
-                            // PayU Verify Payment API returns: {status: 1, msg: "...", transaction_details: {txnid: {...}}}
-                            if ($statusResponse && isset($statusResponse['status']) && $statusResponse['status'] == 1) {
-                                // API call succeeded, check transaction status
-                                $txnStatus = strtolower($statusResponse['transaction_status'] ?? '');
+                            if ($txnStatus === 'success' || $txnStatus === 'captured') {
+                                // Payment is successful according to PayU
+                                $recentTransaction->update([
+                                    'payment_status' => 'success',
+                                    'payment_id' => $statusResponse['mihpayid'] ?? null,
+                                    'response_message' => $statusResponse['field9'] ?? $statusResponse['msg'] ?? 'Payment successful (verified via PayU API)',
+                                    'payu_response' => $statusResponse,
+                                ]);
                                 
-                                if ($txnStatus === 'success' || $txnStatus === 'captured') {
-                                    // Payment is successful according to PayU
-                                    $recentTransaction->update([
-                                        'payment_status' => 'success',
-                                        'payment_id' => $statusResponse['mihpayid'] ?? null,
-                                        'response_message' => $statusResponse['field9'] ?? $statusResponse['msg'] ?? 'Payment successful (verified via PayU API)',
-                                        'payu_response' => $statusResponse,
-                                    ]);
-                                    
-                                    // Update application if exists
-                                    if ($recentTransaction->application_id) {
-                                        $application = Application::find($recentTransaction->application_id);
-                                        if ($application) {
-                                            $newStatus = $application->application_type === 'IX' ? 'submitted' : 'pending';
-                                            $application->update([
-                                                'status' => $newStatus,
-                                                'submitted_at' => $application->submitted_at ?? now('Asia/Kolkata'),
-                                            ]);
-                                            
-                                            ApplicationStatusHistory::log(
-                                                $application->id,
-                                                null,
-                                                $newStatus,
-                                                'system',
-                                                null,
-                                                'IX application submitted - payment verified via PayU API'
-                                            );
-                                        }
+                                // Update application if exists
+                                if ($recentTransaction->application_id) {
+                                    $application = Application::find($recentTransaction->application_id);
+                                    if ($application) {
+                                        $newStatus = $application->application_type === 'IX' ? 'submitted' : 'pending';
+                                        $application->update([
+                                            'status' => $newStatus,
+                                            'submitted_at' => $application->submitted_at ?? now('Asia/Kolkata'),
+                                        ]);
+                                        
+                                        ApplicationStatusHistory::log(
+                                            $application->id,
+                                            null,
+                                            $newStatus,
+                                            'system',
+                                            null,
+                                            'IX application submitted - payment verified via PayU API'
+                                        );
                                     }
-                                    
+                                }
+                                
+                                // If user session exists, redirect to applications page
+                                if ($userId) {
                                     return redirect()->route('user.applications.index')
                                         ->with('success', 'Payment successful! Your application has been submitted. Transaction ID: ' . $recentTransaction->transaction_id);
-                                } elseif ($txnStatus === 'failure' || $txnStatus === 'dropped' || $txnStatus === 'cancelled') {
-                                    // Payment failed according to PayU
-                                    $recentTransaction->update([
-                                        'payment_status' => 'failed',
-                                        'payment_id' => $statusResponse['mihpayid'] ?? null,
-                                        'response_message' => $statusResponse['error_message'] ?? $statusResponse['field9'] ?? 'Payment failed (verified via PayU API)',
-                                        'payu_response' => $statusResponse,
-                                    ]);
-                                    
+                                }
+                                
+                                // If no session, show success page with login link
+                                $application = $recentTransaction->application_id ? Application::find($recentTransaction->application_id) : null;
+                                return view('user.applications.ix.payment-confirmation', [
+                                    'paymentTransaction' => $recentTransaction,
+                                    'application' => $application,
+                                    'showLoginLink' => true,
+                                ]);
+                            } elseif ($txnStatus === 'failure' || $txnStatus === 'dropped' || $txnStatus === 'cancelled') {
+                                // Payment failed according to PayU
+                                $recentTransaction->update([
+                                    'payment_status' => 'failed',
+                                    'payment_id' => $statusResponse['mihpayid'] ?? null,
+                                    'response_message' => $statusResponse['error_message'] ?? $statusResponse['field9'] ?? 'Payment failed (verified via PayU API)',
+                                    'payu_response' => $statusResponse,
+                                ]);
+                                
+                                if ($userId) {
                                     return redirect()->route('user.applications.index')
                                         ->with('error', 'Payment failed. Please try again. Transaction ID: ' . $recentTransaction->transaction_id);
                                 }
-                            } elseif ($statusResponse && isset($statusResponse['status']) && $statusResponse['status'] == 0) {
-                                // Transaction not found or API call failed
-                                Log::warning('PayU Verify Payment API - Transaction not found', [
-                                    'transaction_id' => $recentTransaction->transaction_id,
-                                    'response' => $statusResponse,
-                                ]);
+                                
+                                return redirect()->route('login.index')
+                                    ->with('error', 'Payment failed. Please login to try again. Transaction ID: ' . $recentTransaction->transaction_id);
                             }
-                        } catch (\Exception $e) {
-                            Log::error('Error checking PayU transaction status', [
-                                'error' => $e->getMessage(),
+                        } elseif ($statusResponse && isset($statusResponse['status']) && $statusResponse['status'] == 0) {
+                            // Transaction not found or API call failed
+                            Log::warning('PayU Verify Payment API - Transaction not found', [
                                 'transaction_id' => $recentTransaction->transaction_id,
-                                'trace' => $e->getTraceAsString(),
+                                'response' => $statusResponse,
                             ]);
                         }
-                        
-                        // If API check didn't work, show processing message
-                        // The webhook will update the status when PayU confirms
+                    } catch (\Exception $e) {
+                        Log::error('Error checking PayU transaction status', [
+                            'error' => $e->getMessage(),
+                            'transaction_id' => $recentTransaction->transaction_id,
+                            'trace' => $e->getTraceAsString(),
+                        ]);
+                    }
+                    
+                    // If API check didn't work, show processing message
+                    // The webhook will update the status when PayU confirms
+                    if ($userId) {
                         return redirect()->route('user.applications.index')
                             ->with('info', 'Your payment is being processed. Please check back in a few moments. Transaction ID: ' . $recentTransaction->transaction_id);
                     }
+                    
+                    return redirect()->route('login.index')
+                        ->with('info', 'Your payment is being processed. Please login to check your application status. Transaction ID: ' . $recentTransaction->transaction_id);
                 }
 
                 // If we can't find a transaction, show a helpful message
                 // The S2S webhook will handle the actual status update
-                return redirect()->route('user.applications.index')
-                    ->with('info', 'Payment is being processed. Please check your applications in a few moments. If payment was deducted, the status will update automatically via webhook.');
+                if ($userId) {
+                    return redirect()->route('user.applications.index')
+                        ->with('info', 'Payment is being processed. Please check your applications in a few moments. If payment was deducted, the status will update automatically via webhook.');
+                }
+                
+                return redirect()->route('login.index')
+                    ->with('info', 'Payment is being processed. Please login to check your application status. If payment was deducted, the status will update automatically.');
             }
 
             // Verify hash
