@@ -15,7 +15,7 @@
                     <p class="text-muted">
                         If you are not redirected automatically within a few seconds, click the button below.
                     </p>
-                    <form id="payuRedirectForm" method="POST" action="{{ $paymentUrl }}">
+                    <form name="payu" id="payuRedirectForm" method="POST" action="{{ $paymentUrl }}">
                         @foreach($paymentForm as $key => $value)
                             <input type="hidden" name="{{ $key }}" value="{{ $value }}">
                         @endforeach
@@ -31,12 +31,26 @@
 
 @push('scripts')
 <script>
+    // Auto-submit form on page load as per PayU documentation
+    // Reference: PayU Hosted Checkout API Documentation - Step 1.3
     document.addEventListener('DOMContentLoaded', function () {
         const form = document.getElementById('payuRedirectForm');
         if (form) {
-            form.submit();
+            // Use setTimeout to ensure form is fully rendered
+            setTimeout(function() {
+                form.submit();
+            }, 100);
         }
     });
+    
+    // Fallback: Also support onload event (as per PayU documentation example)
+    window.onload = function() {
+        const form = document.forms.payu || document.getElementById('payuRedirectForm');
+        if (form && !form.dataset.submitted) {
+            form.dataset.submitted = 'true';
+            form.submit();
+        }
+    };
 </script>
 @endpush
 @endsection

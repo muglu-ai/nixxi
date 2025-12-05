@@ -43,13 +43,15 @@ class PayuService
         $firstname = trim((string) $params['firstname']);
         $email = trim((string) $params['email']);
 
-        // Build hash string exactly as per PayU error message:
-        // PayU error shows: key|txnid|amount|productinfo|firstname|email|udf1|udf2|udf3|udf4|udf5||||||SALT
-        // PayU's ACTUAL requirement (verified by testing): After udf5|, there must be exactly 5 pipes (|||||) before SALT
+        // Build hash string as per PayU documentation:
+        // Reference: PayU Hosted Checkout API Documentation - Step 1.2
+        // Formula: sha512(key|txnid|amount|productinfo|firstname|email|udf1|udf2|udf3|udf4|udf5||||||SALT)
+        // Documentation shows: $udf5 . '||||||' . $salt (6 pipes)
+        // However, PayU's actual validation requires: After udf5|, there must be exactly 5 pipes (|||||) before SALT
+        // This has been verified through testing - PayU error messages confirm 5 pipes is correct
         // Format: udf1|udf2|udf3|udf4|udf5|||||SALT
         // When udf3, udf4, udf5 are empty: udf1|udf2| + | (udf3) + | (udf4) + | (udf5) + ||||| (5 pipes) = 9 pipes after udf2
         // Verified from PayU error: "38|||||||||" = 9 pipes after udf2
-        // Tested and confirmed: Using 5 pipes after udf5| produces the correct hash
         $hashString = $this->merchantKey.'|'
             .$txnid.'|'
             .$amount.'|'
@@ -94,10 +96,11 @@ class PayuService
         $receivedHash = strtolower(trim((string) ($response['hash'] ?? '')));
 
         // Build hash string as per PayU documentation for response verification:
-        // sha512(SALT|status||||||udf5|udf4|udf3|udf2|udf1|email|firstname|productinfo|amount|txnid|key)
+        // Reference: PayU Hosted Checkout API Documentation - Step 1.4.1
+        // Formula: sha512(SALT|status||||||udf5|udf4|udf3|udf2|udf1|email|firstname|productinfo|amount|txnid|key)
+        // Documentation shows 6 pipes (||||||), but actual validation requires 5 pipes (|||||) to match request format
         // After status|, there must be exactly 5 pipes (|||||) before udf5
         // This matches the request hash format (5 pipes after udf5 in request = 5 pipes before udf5 in response)
-        // Reference: PayU Hosted Checkout API Documentation - Response Verification
         $hashString = $this->salt.'|'
             .$status.'|'
             .'|||||'
@@ -130,6 +133,10 @@ class PayuService
      * Prepare payment data for PayU.
      * 
      * Mandatory parameters: key, txnid, amount, productinfo, firstname, email, phone, surl, furl, hash
+     * Optional parameters: lastname, address1, address2, city, state, country, zipcode, 
+     *                     enforced_payment, drop_category, custom_note, note_category
+     * 
+     * Reference: PayU Hosted Checkout API Documentation - Step 1.1
      */
     public function preparePaymentData(array $data): array
     {
@@ -152,15 +159,56 @@ class PayuService
             'phone' => $data['phone'],
             'surl' => $data['success_url'],
             'furl' => $data['failure_url'],
-            'service_provider' => $this->serviceProvider,
-            'udf1' => $data['udf1'] ?? '',
-            'udf2' => $data['udf2'] ?? '',
-            'udf3' => $data['udf3'] ?? '',
-            'udf4' => $data['udf4'] ?? '',
-            'udf5' => $data['udf5'] ?? '',
         ];
 
-        // Generate hash using the payment data
+        // Add optional parameters if provided
+        if (isset($data['lastname']) && $data['lastname'] !== '') {
+            $paymentData['lastname'] = $data['lastname'];
+        }
+        if (isset($data['address1']) && $data['address1'] !== '') {
+            $paymentData['address1'] = $data['address1'];
+        }
+        if (isset($data['address2']) && $data['address2'] !== '') {
+            $paymentData['address2'] = $data['address2'];
+        }
+        if (isset($data['city']) && $data['city'] !== '') {
+            $paymentData['city'] = $data['city'];
+        }
+        if (isset($data['state']) && $data['state'] !== '') {
+            $paymentData['state'] = $data['state'];
+        }
+        if (isset($data['country']) && $data['country'] !== '') {
+            $paymentData['country'] = $data['country'];
+        }
+        if (isset($data['zipcode']) && $data['zipcode'] !== '') {
+            $paymentData['zipcode'] = $data['zipcode'];
+        }
+        if (isset($data['enforced_payment']) && $data['enforced_payment'] !== '') {
+            $paymentData['enforced_payment'] = $data['enforced_payment'];
+        }
+        if (isset($data['drop_category']) && $data['drop_category'] !== '') {
+            $paymentData['drop_category'] = $data['drop_category'];
+        }
+        if (isset($data['custom_note']) && $data['custom_note'] !== '') {
+            $paymentData['custom_note'] = $data['custom_note'];
+        }
+        if (isset($data['note_category']) && $data['note_category'] !== '') {
+            $paymentData['note_category'] = $data['note_category'];
+        }
+
+        // UDF fields (user-defined fields)
+        $paymentData['udf1'] = $data['udf1'] ?? '';
+        $paymentData['udf2'] = $data['udf2'] ?? '';
+        $paymentData['udf3'] = $data['udf3'] ?? '';
+        $paymentData['udf4'] = $data['udf4'] ?? '';
+        $paymentData['udf5'] = $data['udf5'] ?? '';
+
+        // Service provider (if configured)
+        if ($this->serviceProvider) {
+            $paymentData['service_provider'] = $this->serviceProvider;
+        }
+
+        // Generate hash using the payment data (hash must be calculated before adding to form)
         $paymentData['hash'] = $this->generateHash($paymentData);
 
         // Log payment data preparation for debugging (without sensitive data)
@@ -170,6 +218,7 @@ class PayuService
             'surl' => $paymentData['surl'],
             'furl' => $paymentData['furl'],
             'hash_length' => strlen($paymentData['hash']),
+            'has_optional_params' => isset($data['lastname']) || isset($data['address1']) || isset($data['city']),
         ]);
 
         return $paymentData;
