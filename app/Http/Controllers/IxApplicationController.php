@@ -1073,10 +1073,62 @@ class IxApplicationController extends Controller
                     }
                 }
 
+                // If no session, try to find the most recent successful transaction (updated by webhook)
+                // Look for transactions updated within the last 10 minutes
+                $recentSuccessTransaction = PaymentTransaction::where('payment_status', 'success')
+                    ->where('updated_at', '>=', now()->subMinutes(10))
+                    ->orderBy('updated_at', 'desc')
+                    ->first();
+                
+                if ($recentSuccessTransaction) {
+                    Log::info('PayU Success - Found recent successful transaction (webhook updated)', [
+                        'transaction_id' => $recentSuccessTransaction->transaction_id,
+                        'payment_transaction_id' => $recentSuccessTransaction->id,
+                        'updated_at' => $recentSuccessTransaction->updated_at,
+                    ]);
+                    
+                    // Ensure application status is updated if it exists
+                    $application = null;
+                    if ($recentSuccessTransaction->application_id) {
+                        $application = Application::find($recentSuccessTransaction->application_id);
+                        if ($application && $application->status === 'draft') {
+                            // Update application status if still draft
+                            $newStatus = $application->application_type === 'IX' ? 'submitted' : 'pending';
+                            $application->update([
+                                'status' => $newStatus,
+                                'submitted_at' => $application->submitted_at ?? now('Asia/Kolkata'),
+                            ]);
+                            
+                            ApplicationStatusHistory::log(
+                                $application->id,
+                                null,
+                                $newStatus,
+                                'system',
+                                null,
+                                'IX application submitted - payment confirmed via webhook'
+                            );
+                        }
+                    }
+                    
+                    $isLoggedIn = !empty(session('user_id'));
+                    
+                    // Show success page without requiring login
+                    return view('user.applications.ix.payment-confirmation', [
+                        'paymentTransaction' => $recentSuccessTransaction,
+                        'application' => $application,
+                        'showLoginLink' => !$isLoggedIn,
+                    ]);
+                }
+                
                 // If we can't find a transaction, show a helpful message
                 // The S2S webhook will handle the actual status update
-                return redirect()->route('user.applications.index')
-                    ->with('info', 'Payment is being processed. Please check your applications in a few moments. If payment was deducted, the status will update automatically via webhook.');
+                // Show a standalone page that doesn't require login
+                return view('user.applications.ix.payment-confirmation', [
+                    'paymentTransaction' => null,
+                    'application' => null,
+                    'showLoginLink' => true,
+                    'infoMessage' => 'Payment is being processed. Please login to check your application status. If payment was deducted, the status will update automatically via webhook.',
+                ]);
             }
 
             // Verify hash
@@ -1240,15 +1292,19 @@ class IxApplicationController extends Controller
                 $application = Application::find($paymentTransaction->application_id);
             }
             
+            $isLoggedIn = !empty(session('user_id'));
+            
             Log::info('Rendering payment confirmation view', [
                 'payment_transaction_id' => $paymentTransaction->id,
                 'application_id' => $paymentTransaction->application_id,
                 'has_application' => $application !== null,
+                'is_logged_in' => $isLoggedIn,
             ]);
             
             return view('user.applications.ix.payment-confirmation', [
                 'paymentTransaction' => $paymentTransaction,
                 'application' => $application,
+                'showLoginLink' => !$isLoggedIn,
             ]);
         } catch (\Exception $e) {
             Log::error('Error rendering payment confirmation view', [
