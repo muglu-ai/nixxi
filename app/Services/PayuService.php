@@ -45,12 +45,11 @@ class PayuService
 
         // Build hash string exactly as per PayU error message:
         // PayU error shows: key|txnid|amount|productinfo|firstname|email|udf1|udf2|udf3|udf4|udf5||||||SALT
-        // PayU's actual validation: After udf5|, there must be exactly 6 pipes (||||||) before SALT
-        // When udf3, udf4, udf5 are empty, we get: udf1|udf2||| (3 pipes for empty udf3, udf4, udf5)
-        // Then add 6 pipes: ||||||
-        // Total after udf2: ||| + |||||| = ||||||||| (9 pipes)
-        // But the format is: udf1|udf2|udf3|udf4|udf5||||||SALT
-        // So after udf5|, we need exactly 6 pipes (||||||)
+        // PayU's ACTUAL requirement (verified by testing): After udf5|, there must be exactly 5 pipes (|||||) before SALT
+        // Format: udf1|udf2|udf3|udf4|udf5|||||SALT
+        // When udf3, udf4, udf5 are empty: udf1|udf2| + | (udf3) + | (udf4) + | (udf5) + ||||| (5 pipes) = 9 pipes after udf2
+        // Verified from PayU error: "38|||||||||" = 9 pipes after udf2
+        // Tested and confirmed: Using 5 pipes after udf5| produces the correct hash
         $hashString = $this->merchantKey.'|'
             .$txnid.'|'
             .$amount.'|'
@@ -62,7 +61,7 @@ class PayuService
             .$udf3.'|'
             .$udf4.'|'
             .$udf5.'|'
-            .'||||||'
+            .'|||||'
             .$this->salt;
 
         // Temporary debug logging
@@ -96,12 +95,12 @@ class PayuService
 
         // Build hash string as per PayU documentation for response verification:
         // sha512(SALT|status||||||udf5|udf4|udf3|udf2|udf1|email|firstname|productinfo|amount|txnid|key)
-        // After status|, there must be exactly 9 pipes (|||||||||) before udf5
-        // This matches the request hash format (9 pipes after udf5 in request = 9 pipes before udf5 in response)
+        // After status|, there must be exactly 5 pipes (|||||) before udf5
+        // This matches the request hash format (5 pipes after udf5 in request = 5 pipes before udf5 in response)
         // Reference: PayU Hosted Checkout API Documentation - Response Verification
         $hashString = $this->salt.'|'
             .$status.'|'
-            .'|||||||||'
+            .'|||||'
             .$udf5.'|'
             .$udf4.'|'
             .$udf3.'|'
