@@ -1406,30 +1406,82 @@ function openApplicationModal() {
     }
 }
 
+// Function to remove all modal backdrops and restore body
+function cleanupModalBackdrop() {
+    // Remove all modal backdrops (Bootstrap creates them without IDs sometimes)
+    const allBackdrops = document.querySelectorAll('.modal-backdrop');
+    allBackdrops.forEach(backdrop => {
+        backdrop.remove();
+    });
+    
+    // Remove specific backdrop IDs if they exist
+    const modalBackdrop = document.getElementById('modalBackdrop');
+    if (modalBackdrop) {
+        modalBackdrop.remove();
+    }
+    
+    const ixModalBackdrop = document.getElementById('ixModalBackdrop');
+    if (ixModalBackdrop) {
+        ixModalBackdrop.remove();
+    }
+    
+    // Remove modal-open class from body
+    document.body.classList.remove('modal-open');
+    
+    // Remove padding-right that Bootstrap adds
+    document.body.style.paddingRight = '';
+    document.body.style.overflow = '';
+}
+
 // Close modal handler for fallback
 function closeApplicationModal() {
     const modalElement = document.getElementById('applicationDetailsModal');
     if (modalElement) {
         modalElement.style.display = 'none';
         modalElement.classList.remove('show');
-        document.body.classList.remove('modal-open');
-        const backdrop = document.getElementById('modalBackdrop');
-        if (backdrop) {
-            backdrop.remove();
-        }
+        cleanupModalBackdrop();
+    }
+}
+
+// Close IX modal handler for fallback
+function closeIxApplicationModal() {
+    const modalElement = document.getElementById('ixApplicationDetailsModal');
+    if (modalElement) {
+        modalElement.style.display = 'none';
+        modalElement.classList.remove('show');
+        cleanupModalBackdrop();
     }
 }
 
 // Close modal handler
 document.addEventListener('DOMContentLoaded', function() {
+    // Handle applicationDetailsModal
     const modal = document.getElementById('applicationDetailsModal');
     if (modal) {
+        // Cleanup when Bootstrap modal is hidden
         modal.addEventListener('hidden.bs.modal', function() {
-            const backdrop = document.getElementById('modalBackdrop');
-            if (backdrop) {
-                backdrop.remove();
-            }
-            document.body.classList.remove('modal-open');
+            cleanupModalBackdrop();
+        });
+        
+        // Also cleanup on hide event (before hidden)
+        modal.addEventListener('hide.bs.modal', function() {
+            // Ensure cleanup happens
+            setTimeout(cleanupModalBackdrop, 100);
+        });
+    }
+    
+    // Handle ixApplicationDetailsModal
+    const ixModal = document.getElementById('ixApplicationDetailsModal');
+    if (ixModal) {
+        // Cleanup when Bootstrap modal is hidden
+        ixModal.addEventListener('hidden.bs.modal', function() {
+            cleanupModalBackdrop();
+        });
+        
+        // Also cleanup on hide event (before hidden)
+        ixModal.addEventListener('hide.bs.modal', function() {
+            // Ensure cleanup happens
+            setTimeout(cleanupModalBackdrop, 100);
         });
     }
     
@@ -1444,17 +1496,33 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
     
-    // Handle close button clicks
+    // Handle close button clicks for applicationDetailsModal
     const closeButtons = document.querySelectorAll('#applicationDetailsModal [data-bs-dismiss="modal"], #applicationDetailsModal .btn-close');
     closeButtons.forEach(btn => {
         btn.addEventListener('click', function() {
             if (typeof bootstrap === 'undefined') {
                 closeApplicationModal();
+            } else {
+                // Even with Bootstrap, ensure cleanup
+                setTimeout(cleanupModalBackdrop, 200);
             }
         });
     });
     
-    // Close on backdrop click
+    // Handle close button clicks for ixApplicationDetailsModal
+    const ixCloseButtons = document.querySelectorAll('#ixApplicationDetailsModal [data-bs-dismiss="modal"], #ixApplicationDetailsModal .btn-close');
+    ixCloseButtons.forEach(btn => {
+        btn.addEventListener('click', function() {
+            if (typeof bootstrap === 'undefined') {
+                closeIxApplicationModal();
+            } else {
+                // Even with Bootstrap, ensure cleanup
+                setTimeout(cleanupModalBackdrop, 200);
+            }
+        });
+    });
+    
+    // Close on backdrop click for applicationDetailsModal
     if (modal) {
         modal.addEventListener('click', function(e) {
             if (e.target === modal && typeof bootstrap === 'undefined') {
@@ -1462,6 +1530,18 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     }
+    
+    // Close on backdrop click for ixApplicationDetailsModal
+    if (ixModal) {
+        ixModal.addEventListener('click', function(e) {
+            if (e.target === ixModal && typeof bootstrap === 'undefined') {
+                closeIxApplicationModal();
+            }
+        });
+    }
+    
+    // Global cleanup - remove any leftover backdrops on page load
+    cleanupModalBackdrop();
 });
 </script>
 @endpush
