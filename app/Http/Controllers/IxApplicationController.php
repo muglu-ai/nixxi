@@ -1002,14 +1002,17 @@ class IxApplicationController extends Controller
                             $payuService = new PayuService;
                             $statusResponse = $payuService->checkTransactionStatus($recentTransaction->transaction_id);
                             
-                            if ($statusResponse && isset($statusResponse['status'])) {
-                                $payuStatus = strtolower($statusResponse['status']);
+                            // PayU Verify Payment API returns: {status: 1, msg: "...", transaction_details: {txnid: {...}}}
+                            if ($statusResponse && isset($statusResponse['status']) && $statusResponse['status'] == 1) {
+                                // API call succeeded, check transaction status
+                                $txnStatus = strtolower($statusResponse['transaction_status'] ?? '');
                                 
-                                if ($payuStatus === 'success' || $payuStatus === 'captured') {
+                                if ($txnStatus === 'success' || $txnStatus === 'captured') {
                                     // Payment is successful according to PayU
                                     $recentTransaction->update([
                                         'payment_status' => 'success',
-                                        'response_message' => $statusResponse['message'] ?? 'Payment successful (verified via API)',
+                                        'payment_id' => $statusResponse['mihpayid'] ?? null,
+                                        'response_message' => $statusResponse['field9'] ?? $statusResponse['msg'] ?? 'Payment successful (verified via PayU API)',
                                         'payu_response' => $statusResponse,
                                     ]);
                                     
@@ -1036,12 +1039,30 @@ class IxApplicationController extends Controller
                                     
                                     return redirect()->route('user.applications.index')
                                         ->with('success', 'Payment successful! Your application has been submitted. Transaction ID: ' . $recentTransaction->transaction_id);
+                                } elseif ($txnStatus === 'failure' || $txnStatus === 'dropped' || $txnStatus === 'cancelled') {
+                                    // Payment failed according to PayU
+                                    $recentTransaction->update([
+                                        'payment_status' => 'failed',
+                                        'payment_id' => $statusResponse['mihpayid'] ?? null,
+                                        'response_message' => $statusResponse['error_message'] ?? $statusResponse['field9'] ?? 'Payment failed (verified via PayU API)',
+                                        'payu_response' => $statusResponse,
+                                    ]);
+                                    
+                                    return redirect()->route('user.applications.index')
+                                        ->with('error', 'Payment failed. Please try again. Transaction ID: ' . $recentTransaction->transaction_id);
                                 }
+                            } elseif ($statusResponse && isset($statusResponse['status']) && $statusResponse['status'] == 0) {
+                                // Transaction not found or API call failed
+                                Log::warning('PayU Verify Payment API - Transaction not found', [
+                                    'transaction_id' => $recentTransaction->transaction_id,
+                                    'response' => $statusResponse,
+                                ]);
                             }
                         } catch (\Exception $e) {
                             Log::error('Error checking PayU transaction status', [
                                 'error' => $e->getMessage(),
                                 'transaction_id' => $recentTransaction->transaction_id,
+                                'trace' => $e->getTraceAsString(),
                             ]);
                         }
                         

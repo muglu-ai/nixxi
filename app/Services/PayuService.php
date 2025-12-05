@@ -43,10 +43,10 @@ class PayuService
         $firstname = trim((string) $params['firstname']);
         $email = trim((string) $params['email']);
 
-        // Build hash string exactly as per PayU formula:
-        // key|txnid|amount|productinfo|firstname|email|udf1|udf2|udf3|udf4|udf5||||||SALT
-        // After udf5|, there must be exactly 5 pipes (|||||) before SALT
-        // Verified against PayU's error message which shows the correct format
+        // Build hash string exactly as per PayU documentation:
+        // sha512(key|txnid|amount|productinfo|firstname|email|udf1|udf2|udf3|udf4|udf5||||||SALT)
+        // After udf5|, there must be exactly 6 pipes (||||||) before SALT
+        // Reference: PayU Hosted Checkout API Documentation
         $hashString = $this->merchantKey.'|'
             .$txnid.'|'
             .$amount.'|'
@@ -58,7 +58,7 @@ class PayuService
             .$udf3.'|'
             .$udf4.'|'
             .$udf5.'|'
-            .'|||||'
+            .'||||||'
             .$this->salt;
 
         // Temporary debug logging
@@ -90,11 +90,13 @@ class PayuService
         $txnid = trim((string) ($response['txnid'] ?? ''));
         $receivedHash = strtolower(trim((string) ($response['hash'] ?? '')));
 
-        // Build hash string as per PayU formula for response verification:
-        // salt|status||||||||udf5|udf4|udf3|udf2|udf1|email|firstname|productinfo|amount|txnid|key
+        // Build hash string as per PayU documentation for response verification:
+        // sha512(SALT|status||||||udf5|udf4|udf3|udf2|udf1|email|firstname|productinfo|amount|txnid|key)
+        // After status|, there must be exactly 6 pipes (||||||) before udf5
+        // Reference: PayU Hosted Checkout API Documentation - Response Verification
         $hashString = $this->salt.'|'
             .$status.'|'
-            .'||||||||'
+            .'||||||'
             .$udf5.'|'
             .$udf4.'|'
             .$udf3.'|'
@@ -190,10 +192,11 @@ class PayuService
         $hashString = $this->merchantKey.'|'.$command.'|'.$transactionId.'|'.$this->salt;
         $hash = strtolower(hash('sha512', $hashString));
         
-        // PayU status check endpoint
+        // PayU status check endpoint (Verify Payment API)
+        // Reference: PayU Hosted Checkout API Documentation - Step 1.6
         $statusUrl = $mode === 'test' 
-            ? 'https://test.payu.in/merchant/postservice?form=2'
-            : 'https://info.payu.in/merchant/postservice?form=2';
+            ? 'https://test.payu.in/merchant/postservice.php?form=2'
+            : 'https://info.payu.in/merchant/postservice.php?form=2';
         
         $postData = [
             'key' => $this->merchantKey,
@@ -224,23 +227,49 @@ class PayuService
                 return null;
             }
             
-            // Parse response (PayU returns pipe-separated values or JSON)
+            // Parse response according to PayU documentation
+            // PayU Verify Payment API returns JSON format
+            // Reference: PayU Hosted Checkout API Documentation - Step 1.6
             $result = [];
-            if (strpos($response, '|') !== false) {
-                // Pipe-separated format
-                $parts = explode('|', $response);
-                $result = [
-                    'status' => $parts[0] ?? '',
-                    'message' => $parts[1] ?? '',
-                    'transaction_id' => $transactionId,
-                ];
+            $json = json_decode($response, true);
+            
+            if ($json && isset($json['status'])) {
+                // Valid JSON response from PayU
+                $result = $json;
+                
+                // Extract transaction details if available
+                if (isset($json['transaction_details']) && is_array($json['transaction_details'])) {
+                    // Get the first (and usually only) transaction detail
+                    $txnDetails = reset($json['transaction_details']);
+                    if ($txnDetails && is_array($txnDetails)) {
+                        // Map PayU response fields to our format
+                        $result['transaction_status'] = $txnDetails['status'] ?? null;
+                        $result['mihpayid'] = $txnDetails['mihpayid'] ?? null;
+                        $result['bank_ref_num'] = $txnDetails['bank_ref_num'] ?? null;
+                        $result['amount'] = $txnDetails['amt'] ?? $txnDetails['transaction_amount'] ?? null;
+                        $result['error_code'] = $txnDetails['error_code'] ?? null;
+                        $result['error_message'] = $txnDetails['error_Message'] ?? $txnDetails['error_message'] ?? null;
+                        $result['field9'] = $txnDetails['field9'] ?? null;
+                        $result['mode'] = $txnDetails['mode'] ?? null;
+                        $result['unmappedstatus'] = $txnDetails['unmappedstatus'] ?? null;
+                    }
+                }
             } else {
-                // Try JSON
-                $json = json_decode($response, true);
-                if ($json) {
-                    $result = $json;
+                // Fallback: try to parse as pipe-separated (legacy format)
+                if (strpos($response, '|') !== false) {
+                    $parts = explode('|', $response);
+                    $result = [
+                        'status' => $parts[0] ?? '',
+                        'message' => $parts[1] ?? '',
+                        'transaction_id' => $transactionId,
+                        'raw_response' => $response,
+                    ];
                 } else {
-                    $result = ['raw_response' => $response];
+                    $result = [
+                        'status' => 0,
+                        'msg' => 'Invalid response format',
+                        'raw_response' => $response,
+                    ];
                 }
             }
             
