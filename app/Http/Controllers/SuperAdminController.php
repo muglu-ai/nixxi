@@ -849,12 +849,37 @@ class SuperAdminController extends Controller
 
             DB::beginTransaction();
 
+            // Get amount from application_data or use current active pricing
+            $amount = 0;
+            $applicationData = $application->application_data ?? [];
+            
+            // Try to get amount from application_data payment info
+            if (isset($applicationData['payment']['total_amount'])) {
+                $amount = (float) $applicationData['payment']['total_amount'];
+            } elseif (isset($applicationData['payment']['amount'])) {
+                $amount = (float) $applicationData['payment']['amount'];
+            } else {
+                // Fallback: Get current active pricing from database
+                $applicationPricing = \App\Models\IxApplicationPricing::getActive();
+                if ($applicationPricing) {
+                    $amount = (float) $applicationPricing->total_amount;
+                } else {
+                    // Final fallback: Default amount
+                    $amount = 1000.00;
+                }
+            }
+            
+            // Generate a unique transaction ID for manual approval
+            $transactionId = 'MANUAL-'.time().'-'.rand(1000, 9999);
+            $paymentId = 'approved-by-superadmin-'.$superAdminId.'-'.time();
+            
             // Update or create payment transaction
             if ($paymentTransaction) {
                 $paymentTransaction->update([
                     'payment_status' => 'success',
-                    'payment_id' => 'approved by superadmin',
-                    'transaction_id' => 'approved by superadmin',
+                    'payment_id' => $paymentId,
+                    'transaction_id' => $transactionId,
+                    'amount' => $amount, // Update amount in case it changed
                     'response_message' => 'Payment accepted by Super Admin',
                 ]);
             } else {
@@ -862,11 +887,11 @@ class SuperAdminController extends Controller
                 $paymentTransaction = PaymentTransaction::create([
                     'user_id' => $application->user_id,
                     'application_id' => $applicationId,
+                    'transaction_id' => $transactionId,
                     'payment_status' => 'success',
-                    'payment_id' => 'approved by superadmin',
-                    'transaction_id' => 'approved by superadmin',
+                    'payment_id' => $paymentId,
                     'payment_mode' => 'manual',
-                    'amount' => $application->application_data['pricing']['total_amount'] ?? 0,
+                    'amount' => $amount,
                     'currency' => 'INR',
                     'product_info' => 'IX Application Fee',
                     'response_message' => 'Payment accepted by Super Admin',
@@ -899,8 +924,8 @@ class SuperAdminController extends Controller
                 [
                     'application_id' => $application->application_id,
                     'user_id' => $application->user_id,
-                    'payment_id' => 'approved by superadmin',
-                    'transaction_id' => 'approved by superadmin',
+                    'payment_id' => $paymentId ?? 'approved-by-superadmin',
+                    'transaction_id' => $transactionId ?? 'MANUAL-'.time(),
                 ]
             );
 
