@@ -277,6 +277,9 @@ Route::prefix('user')->name('user.')->middleware(['user.auth'])->group(function 
 Route::any('/user/applications/ix/payment-success', [IxApplicationController::class, 'paymentSuccess'])->name('user.applications.ix.payment-success');
 Route::any('/user/applications/ix/payment-failure', [IxApplicationController::class, 'paymentFailure'])->name('user.applications.ix.payment-failure');
 
+// Payment transaction status check (for polling - no auth required)
+Route::get('/user/applications/ix/payment-status/{transactionId}', [IxApplicationController::class, 'checkPaymentStatus'])->name('user.applications.ix.payment-status');
+
 // PayU S2S Webhook (must be outside auth middleware - PayU server calls this directly)
 Route::post('/payu/webhook', [IxApplicationController::class, 'handleWebhook'])->name('payu.webhook');
 
