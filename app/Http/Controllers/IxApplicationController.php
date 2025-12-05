@@ -915,11 +915,13 @@ class IxApplicationController extends Controller
             'firstname' => $user->fullname,
             'email' => $user->email,
             'phone' => $user->mobile,
-            'success_url' => 'https://interlinxpartnering.com/nixi/public/user/applications/ix/payment-success',
-            'failure_url' => 'https://interlinxpartnering.com/nixi/public/user/applications/ix/payment-failure',
+            'success_url' => url(route('user.applications.ix.payment-success', [], false)),
+            'failure_url' => url(route('user.applications.ix.payment-failure', [], false)),
             'udf1' => $application->application_id,
             'udf2' => (string) $paymentTransaction->id,
         ]);
+
+        // dd($paymentData);
 
         return view('user.applications.ix.payu-redirect', [
             'paymentUrl' => $payuService->getPaymentUrl(),
@@ -932,6 +934,8 @@ class IxApplicationController extends Controller
      */
     public function paymentSuccess(Request $request): RedirectResponse|View
     {
+
+
         // PayU may send data via POST or GET (query string)
         // Get all parameters from both POST and GET
         $response = array_merge($request->query(), $request->post());
