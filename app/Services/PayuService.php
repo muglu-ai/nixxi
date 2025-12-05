@@ -203,10 +203,7 @@ class PayuService
         $paymentData['udf4'] = $data['udf4'] ?? '';
         $paymentData['udf5'] = $data['udf5'] ?? '';
 
-        // Service provider (if configured)
-        if ($this->serviceProvider) {
-            $paymentData['service_provider'] = $this->serviceProvider;
-        }
+        // Note: service_provider parameter removed as per PayU requirements
 
         // Generate hash using the payment data (hash must be calculated before adding to form)
         $paymentData['hash'] = $this->generateHash($paymentData);
