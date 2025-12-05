@@ -1033,12 +1033,12 @@ class IxApplicationController extends Controller
                                 ->with('success', 'Payment successful! Your application has been submitted. Transaction ID: ' . $recentTransaction->transaction_id);
                         }
                         
-                        // If no session, show success page with login link
-                        return view('user.applications.ix.payment-confirmation', [
-                            'paymentTransaction' => $recentTransaction,
-                            'application' => $application,
-                            'showLoginLink' => true,
-                        ]);
+                                // If no session, show standalone success page with login link
+                                return view('user.applications.ix.payment-confirmation-standalone', [
+                                    'paymentTransaction' => $recentTransaction,
+                                    'application' => $application,
+                                    'showLoginLink' => true,
+                                ]);
                     }
                     
                     // Transaction is still pending, try to query PayU API
@@ -1093,9 +1093,9 @@ class IxApplicationController extends Controller
                                         ->with('success', 'Payment successful! Your application has been submitted. Transaction ID: ' . $recentTransaction->transaction_id);
                                 }
                                 
-                                // If no session, show success page with login link
+                                // If no session, show standalone success page with login link
                                 $application = $recentTransaction->application_id ? Application::find($recentTransaction->application_id) : null;
-                                return view('user.applications.ix.payment-confirmation', [
+                                return view('user.applications.ix.payment-confirmation-standalone', [
                                     'paymentTransaction' => $recentTransaction,
                                     'application' => $application,
                                     'showLoginLink' => true,
@@ -1319,11 +1319,17 @@ class IxApplicationController extends Controller
                 'payment_transaction_id' => $paymentTransaction->id,
                 'application_id' => $paymentTransaction->application_id,
                 'has_application' => $application !== null,
+                'has_user_session' => !empty(session('user_id')),
             ]);
             
-            return view('user.applications.ix.payment-confirmation', [
+            // Use standalone view if user session is not available
+            $hasUserSession = !empty(session('user_id'));
+            $viewName = $hasUserSession ? 'user.applications.ix.payment-confirmation' : 'user.applications.ix.payment-confirmation-standalone';
+            
+            return view($viewName, [
                 'paymentTransaction' => $paymentTransaction,
                 'application' => $application,
+                'showLoginLink' => !$hasUserSession,
             ]);
         } catch (\Exception $e) {
             Log::error('Error rendering payment confirmation view', [
