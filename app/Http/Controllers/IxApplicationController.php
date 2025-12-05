@@ -921,7 +921,7 @@ class IxApplicationController extends Controller
             'udf2' => (string) $paymentTransaction->id,
         ]);
 
-        dd($paymentData);
+        // dd($paymentData);
 
         return view('user.applications.ix.payu-redirect', [
             'paymentUrl' => $payuService->getPaymentUrl(),
@@ -934,6 +934,8 @@ class IxApplicationController extends Controller
      */
     public function paymentSuccess(Request $request): RedirectResponse|View
     {
+
+
         // PayU may send data via POST or GET (query string)
         // Get all parameters from both POST and GET
         $response = array_merge($request->query(), $request->post());
