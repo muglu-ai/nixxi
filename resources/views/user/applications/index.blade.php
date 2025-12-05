@@ -99,12 +99,9 @@
                                         </a>
 
                                         @if($isIxDraftAwaitingPayment)
-                                            <form method="POST" action="{{ route('user.applications.ix.pay-now', $application->id) }}">
-                                                @csrf
-                                                <button type="submit" class="btn btn-sm btn-success">
-                                                    Pay Now
-                                                </button>
-                                            </form>
+                                            <a href="{{ route('user.applications.ix.pay-now', $application->id) }}" class="btn btn-sm btn-success">
+                                                Pay Now
+                                            </a>
                                         @endif
                                     </td>
                                 </tr>

@@ -251,7 +251,7 @@ Route::prefix('user')->name('user.')->middleware(['user.auth'])->group(function 
             Route::get('/create', [IxApplicationController::class, 'create'])->name('create');
             Route::post('/submit', [IxApplicationController::class, 'store'])->name('store');
             Route::post('/initiate-payment', [IxApplicationController::class, 'initiatePayment'])->name('initiate-payment');
-            Route::post('/{id}/pay-now', [IxApplicationController::class, 'payNow'])->name('pay-now');
+            Route::get('/{id}/pay-now', [IxApplicationController::class, 'payNow'])->name('pay-now');
             Route::get('/preview', [IxApplicationController::class, 'preview'])->name('preview');
             Route::post('/{applicationId}/submit', [IxApplicationController::class, 'finalSubmit'])->name('final-submit');
             Route::get('/agreement', [IxApplicationController::class, 'downloadAgreement'])->name('agreement');
