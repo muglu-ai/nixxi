@@ -1114,8 +1114,15 @@ class IxApplicationController extends Controller
                                         ->with('error', 'Payment failed. Please try again. Transaction ID: ' . $recentTransaction->transaction_id);
                                 }
                                 
-                                return redirect()->route('login.index')
-                                    ->with('error', 'Payment failed. Please login to try again. Transaction ID: ' . $recentTransaction->transaction_id);
+                                // Show failure message on standalone page
+                                $application = $recentTransaction->application_id ? Application::find($recentTransaction->application_id) : null;
+                                return view('user.applications.ix.payment-confirmation-standalone', [
+                                    'paymentTransaction' => $recentTransaction,
+                                    'application' => $application,
+                                    'showLoginLink' => true,
+                                    'isFailure' => true,
+                                    'failureMessage' => 'Payment failed. Please login to try again.',
+                                ]);
                             }
                         } elseif ($statusResponse && isset($statusResponse['status']) && $statusResponse['status'] == 0) {
                             // Transaction not found or API call failed
@@ -1134,24 +1141,56 @@ class IxApplicationController extends Controller
                     
                     // If API check didn't work, show processing message
                     // The webhook will update the status when PayU confirms
+                    $application = $recentTransaction->application_id ? Application::find($recentTransaction->application_id) : null;
                     if ($userId) {
                         return redirect()->route('user.applications.index')
                             ->with('info', 'Your payment is being processed. Please check back in a few moments. Transaction ID: ' . $recentTransaction->transaction_id);
                     }
                     
-                    return redirect()->route('login.index')
-                        ->with('info', 'Your payment is being processed. Please login to check your application status. Transaction ID: ' . $recentTransaction->transaction_id);
+                    // Show standalone page with processing message
+                    return view('user.applications.ix.payment-confirmation-standalone', [
+                        'paymentTransaction' => $recentTransaction,
+                        'application' => $application,
+                        'showLoginLink' => true,
+                        'infoMessage' => 'Your payment is being processed. Please login to check your application status. Transaction ID: ' . $recentTransaction->transaction_id,
+                    ]);
                 }
 
                 // If we can't find a transaction, show a helpful message
                 // The S2S webhook will handle the actual status update
+                // Look for the most recent successful transaction (updated by webhook) within last 10 minutes
+                $recentSuccessTransaction = PaymentTransaction::where('payment_status', 'success')
+                    ->where('updated_at', '>=', now()->subMinutes(10))
+                    ->orderBy('updated_at', 'desc')
+                    ->first();
+                
+                if ($recentSuccessTransaction) {
+                    Log::info('PayU Success - Found recent successful transaction (webhook updated)', [
+                        'transaction_id' => $recentSuccessTransaction->transaction_id,
+                        'payment_transaction_id' => $recentSuccessTransaction->id,
+                    ]);
+                    
+                    $application = $recentSuccessTransaction->application_id ? Application::find($recentSuccessTransaction->application_id) : null;
+                    return view('user.applications.ix.payment-confirmation-standalone', [
+                        'paymentTransaction' => $recentSuccessTransaction,
+                        'application' => $application,
+                        'showLoginLink' => !$userId,
+                    ]);
+                }
+                
+                // No transaction found - show generic message
                 if ($userId) {
                     return redirect()->route('user.applications.index')
                         ->with('info', 'Payment is being processed. Please check your applications in a few moments. If payment was deducted, the status will update automatically via webhook.');
                 }
                 
-                return redirect()->route('login.index')
-                    ->with('info', 'Payment is being processed. Please login to check your application status. If payment was deducted, the status will update automatically.');
+                // Show standalone page with info message
+                return view('user.applications.ix.payment-confirmation-standalone', [
+                    'paymentTransaction' => null,
+                    'application' => null,
+                    'showLoginLink' => true,
+                    'infoMessage' => 'Payment is being processed. Please login to check your application status. If payment was deducted, the status will update automatically.',
+                ]);
             }
 
             // Verify hash
@@ -1339,9 +1378,20 @@ class IxApplicationController extends Controller
                 'payment_transaction' => $paymentTransaction->toArray(),
             ]);
 
-            // Still show success message even if view fails
-            return redirect()->route('user.applications.index')
-                ->with('success', 'Payment was successful! Transaction ID: ' . $paymentTransaction->transaction_id);
+            // Still show success message even if view fails - use standalone view
+            $hasUserSession = !empty(session('user_id'));
+            if ($hasUserSession) {
+                return redirect()->route('user.applications.index')
+                    ->with('success', 'Payment was successful! Transaction ID: ' . $paymentTransaction->transaction_id);
+            }
+            
+            // No session - show standalone view
+            $application = $paymentTransaction->application_id ? Application::find($paymentTransaction->application_id) : null;
+            return view('user.applications.ix.payment-confirmation-standalone', [
+                'paymentTransaction' => $paymentTransaction,
+                'application' => $application,
+                'showLoginLink' => true,
+            ]);
         }
     }
 
