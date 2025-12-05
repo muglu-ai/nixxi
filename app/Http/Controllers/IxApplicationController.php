@@ -921,6 +921,8 @@ class IxApplicationController extends Controller
             'udf2' => (string) $paymentTransaction->id,
         ]);
 
+        dd($paymentData);
+
         return view('user.applications.ix.payu-redirect', [
             'paymentUrl' => $payuService->getPaymentUrl(),
             'paymentForm' => $paymentData,
