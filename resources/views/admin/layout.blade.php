@@ -264,6 +264,42 @@
     <!-- Bootstrap JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     
+    <!-- Animation Scripts -->
+    <script>
+        // Add animation classes on scroll
+        document.addEventListener('DOMContentLoaded', function() {
+            const observerOptions = {
+                threshold: 0.1,
+                rootMargin: '0px 0px -50px 0px'
+            };
+            
+            const observer = new IntersectionObserver(function(entries) {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        entry.target.style.animation = 'slideInUp 0.6s ease-out';
+                        entry.target.style.opacity = '1';
+                    }
+                });
+            }, observerOptions);
+            
+            // Observe all cards and alerts
+            document.querySelectorAll('.card, .alert').forEach(el => {
+                el.style.opacity = '0';
+                observer.observe(el);
+            });
+            
+            // Add hover effects to buttons
+            document.querySelectorAll('.btn').forEach(btn => {
+                btn.addEventListener('mouseenter', function() {
+                    this.style.transform = 'translateY(-3px) scale(1.05)';
+                });
+                btn.addEventListener('mouseleave', function() {
+                    this.style.transform = 'translateY(0) scale(1)';
+                });
+            });
+        });
+    </script>
+    
     <!-- Role Dropdown Script -->
     <script>
         document.addEventListener('DOMContentLoaded', function() {
