@@ -10,8 +10,8 @@
         </div>
     </div>
 
-    <div class="card shadow mb-3">
-        <div class="card-header bg-primary text-white">
+    <div class="card mb-3">
+        <div class="card-header bg-primary">
             <div class="d-flex justify-content-between align-items-center">
                 <h5 class="mb-0">Ticket: {{ $ticket->ticket_id }}</h5>
                 <span class="badge bg-{{ $ticket->status === 'closed' ? 'secondary' : ($ticket->status === 'resolved' ? 'success' : ($ticket->status === 'in_progress' ? 'warning' : 'primary')) }}">
@@ -46,8 +46,8 @@
     </div>
 
     <!-- Conversation Thread -->
-    <div class="card shadow mb-3">
-        <div class="card-header bg-light">
+    <div class="card mb-3">
+        <div class="card-header bg-primary">
             <h5 class="mb-0">Conversation</h5>
         </div>
         <div class="card-body">

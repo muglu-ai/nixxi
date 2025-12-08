@@ -6,16 +6,17 @@
 <div class="container-fluid py-4">
     <!-- Page Header -->
     <div class="mb-4">
-        <h2 class="mb-1" style="color: #2c3e50; font-weight: 600;">Super Admin Dashboard</h2>
-        <p class="text-muted mb-0">Welcome back!</p>
+        <h2 class="mb-1">Super Admin Dashboard</h2>
+        <p class="mb-0">Welcome back!</p>
+        <div class="accent-line"></div>
     </div>
 
     <div class="row g-4">
         <!-- SuperAdmin Details -->
         <div class="col-md-12">
-            <div class="card border-0 shadow-sm" style="border-radius: 16px;">
-                <div class="card-header bg-primary text-white" style="border-radius: 16px 16px 0 0;">
-                    <h5 class="mb-0" style="font-weight: 600;">SuperAdmin Details</h5>
+            <div class="card">
+                <div class="card-header bg-primary">
+                    <h5 class="mb-0">SuperAdmin Details</h5>
                 </div>
                 <div class="card-body p-4">
                     <div class="row">
@@ -44,9 +45,9 @@
 
         <!-- Admin and Roles Chart -->
         <div class="col-md-12">
-            <div class="card border-0 shadow-sm" style="border-radius: 16px;">
-                <div class="card-header bg-primary text-white" style="border-radius: 16px 16px 0 0;">
-                    <h5 class="mb-0" style="font-weight: 600;">Admin and Roles</h5>
+            <div class="card">
+                <div class="card-header bg-primary">
+                    <h5 class="mb-0">Admin and Roles</h5>
                 </div>
                 <div class="card-body p-4">
                     @if($adminsWithRoles->count() > 0)

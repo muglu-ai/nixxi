@@ -5,8 +5,8 @@
 @section('content')
 <div class="row">
     <div class="col-12">
-        <div class="card shadow">
-            <div class="card-header bg-primary text-white">
+        <div class="card">
+            <div class="card-header bg-primary">
                 <h4 class="mb-0">My Applications</h4>
             </div>
             <div class="card-body">
@@ -51,7 +51,7 @@
                                     <td><strong>{{ $application->application_id }}</strong></td>
                                     <td>
                                         @if($isIxDraftAwaitingPayment)
-                                            <span class="badge bg-warning text-dark">Draft - Payment Pending</span>
+                                            <span class="badge bg-warning">Draft - Payment Pending</span>
                                         @elseif($application->status === 'approved' || $application->status === 'payment_verified')
                                             <span class="badge bg-success">Approved</span>
                                         @elseif($application->status === 'rejected' || $application->status === 'ceo_rejected')

@@ -5,8 +5,11 @@
 @section('content')
 <div class="row">
     <div class="col-12">
-        <div class="d-flex justify-content-between align-items-center mb-3">
-            <h4>My Grievances / Tickets</h4>
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <div>
+                <h2>My Grievances</h2>
+                <div class="accent-line"></div>
+            </div>
             <a href="{{ route('user.grievance.create') }}" class="btn btn-primary">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16" class="me-1">
                     <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z"/>
@@ -16,7 +19,10 @@
             </a>
         </div>
 
-        <div class="card shadow">
+        <div class="card">
+            <div class="card-header bg-primary">
+                <h5 class="mb-0">My Grievances / Tickets</h5>
+            </div>
             <div class="card-body">
                 @if($tickets->count() > 0)
                     <div class="table-responsive">

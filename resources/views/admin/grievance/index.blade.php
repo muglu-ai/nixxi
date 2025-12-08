@@ -4,13 +4,17 @@
 
 @section('content')
 <div class="container-fluid">
-    <div class="row mb-3">
+    <div class="row mb-4">
         <div class="col-12">
-            <h4>Assigned Grievance Tickets</h4>
+            <h2>Assigned Grievance Tickets</h2>
+            <div class="accent-line"></div>
         </div>
     </div>
 
-    <div class="card shadow">
+    <div class="card">
+        <div class="card-header bg-primary">
+            <h5 class="mb-0">Tickets List</h5>
+        </div>
         <div class="card-body">
             @if($tickets->count() > 0)
                 <div class="table-responsive">

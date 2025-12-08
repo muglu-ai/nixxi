@@ -4,14 +4,18 @@
 
 @section('content')
 <div class="container-fluid py-4">
-    <div class="row mb-3">
+    <div class="row mb-4">
         <div class="col-12">
-            <h4>All Grievance Tickets</h4>
+            <h2>All Grievance Tickets</h2>
+            <div class="accent-line"></div>
         </div>
     </div>
 
     <!-- Filters -->
-    <div class="card shadow mb-3">
+    <div class="card mb-3">
+        <div class="card-header bg-primary">
+            <h5 class="mb-0">Filters</h5>
+        </div>
         <div class="card-body">
             <form method="GET" action="{{ route('superadmin.grievance.index') }}" class="row g-3">
                 <div class="col-md-3">
@@ -54,7 +58,10 @@
         </div>
     </div>
 
-    <div class="card shadow">
+    <div class="card">
+        <div class="card-header bg-primary">
+            <h5 class="mb-0">Tickets List</h5>
+        </div>
         <div class="card-body">
             @if($tickets->count() > 0)
                 <div class="table-responsive">

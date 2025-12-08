@@ -19,15 +19,19 @@
 
     <!-- Page Header -->
     <div class="mb-4">
-        <h2 class="mb-1" style="color: #2c3e50; font-weight: 600;">Applicant Dashboard</h2>
-        <p class="text-muted mb-0">Welcome back, <strong>{{ $user->fullname }}</strong>!</p>
+        <h2 class="mb-1">Applicant Dashboard</h2>
+        <p class="mb-0">Welcome back, <strong>{{ $user->fullname }}</strong>!</p>
+        <div class="accent-line"></div>
     </div>
 
     <!-- User Details Card -->
     <div class="row mb-4">
         <div class="col-12">
-            <div class="card shadow-sm border-0" style="border-radius: 16px; overflow: hidden;">
-                <div class="card-body p-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">User Profile</h5>
+                </div>
+                <div class="card-body">
                     <div class="row align-items-center">
                         <div class="col-md-8">
                             <div class="d-flex align-items-center mb-3">
@@ -53,9 +57,9 @@
                                 <div class="col-sm-6">
                                     <div class="d-flex align-items-center">
                                         <span class="text-muted small me-2">Status:</span>
-                                        <span class="badge rounded-pill px-3 py-1 
+                                        <span class="badge 
                                             @if($user->status === 'approved' || $user->status === 'active') bg-success
-                                            @elseif($user->status === 'pending') bg-warning text-dark
+                                            @elseif($user->status === 'pending') bg-warning
                                             @else bg-secondary @endif"
                                             @if($user->status === 'pending')
                                                 data-bs-toggle="tooltip" 
@@ -84,11 +88,7 @@
                             </div>
                         </div>
                         <div class="col-md-4 text-md-end mt-3 mt-md-0">
-                            <a href="{{ route('user.profile') }}" class="btn btn-primary px-4 py-2" style="border-radius: 10px; font-weight: 500;">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" class="me-2" viewBox="0 0 16 16">
-                                    <path d="M12.5 16a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Zm.5-5v1h1a.5.5 0 0 1 0 1h-1v1a.5.5 0 0 1-1 0v-1h-1a.5.5 0 0 1 0-1h1v-1a.5.5 0 0 1 1 0Zm-2-6a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"/>
-                                    <path d="M2 13c0 1 1 1 1 1h5.256A4.493 4.493 0 0 1 8 12.5a4.49 4.49 0 0 1 1.544-3.393C9.077 9.038 8.564 9 8 9c-5 0-6 3-6 4Z"/>
-                                </svg>
+                            <a href="{{ route('user.profile') }}" class="btn btn-primary">
                                 View Full Profile
                             </a>
                         </div>
