@@ -5,67 +5,32 @@
 @source '../**/*.blade.php';
 @source '../**/*.js';
 
-/* Varela Round Font Face */
-@font-face {
-    font-family: 'Varela Round';
-    src: url('/fonts/VarelaRound-Regular.ttf') format('truetype');
-    font-weight: normal;
-    font-style: normal;
-    font-display: swap;
-}
+/* Modern Futuristic Industrial Theme - NIXI Application */
+/* Black, Yellow, White Color Scheme */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
 
 @theme {
-    --font-sans: 'Varela Round', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
     
-    /* International Color Palette - Vibrant & Modern */
-    --color-primary-50: #e0f2fe;
-    --color-primary-100: #bae6fd;
-    --color-primary-200: #7dd3fc;
-    --color-primary-300: #38bdf8;
-    --color-primary-400: #0ea5e9;
-    --color-primary-500: #0284c7;
-    --color-primary-600: #0369a1;
-    --color-primary-700: #075985;
-    --color-primary-800: #0c4a6e;
-    --color-primary-900: #082f49;
-    
-    /* Accent Colors */
-    --color-accent-teal: #14b8a6;
-    --color-accent-purple: #a855f7;
-    --color-accent-pink: #ec4899;
-    --color-accent-orange: #f97316;
-    --color-accent-cyan: #06b6d4;
-    --color-accent-indigo: #6366f1;
-    
-    /* Semantic Colors */
-    --color-success: #10b981;
-    --color-success-light: #d1fae5;
-    --color-danger: #ef4444;
-    --color-danger-light: #fee2e2;
-    --color-warning: #f59e0b;
-    --color-warning-light: #fef3c7;
-    --color-info: #3b82f6;
-    --color-info-light: #dbeafe;
-    
-    /* Neutral Colors */
-    --color-gray-50: #f8fafc;
-    --color-gray-100: #f1f5f9;
-    --color-gray-200: #e2e8f0;
-    --color-gray-300: #cbd5e1;
-    --color-gray-400: #94a3b8;
-    --color-gray-500: #64748b;
-    --color-gray-600: #475569;
-    --color-gray-700: #334155;
-    --color-gray-800: #1e293b;
-    --color-gray-900: #0f172a;
-    
-    /* Legacy Support */
-    --color-primary-red: #dc2626;
-    --color-red: #dc2626;
-    --color-white: #ffffff;
+    /* Industrial Color Palette */
     --color-black: #000000;
+    --color-yellow-cat: #FFCD00;
+    --color-yellow-bright: #FFD700;
+    --color-yellow-dark: #E6B800;
+    --color-white: #FFFFFF;
+    --color-gray-50: #FAFAFA;
+    --color-gray-100: #F5F5F5;
+    --color-gray-200: #EEEEEE;
+    --color-gray-300: #E0E0E0;
+    --color-gray-400: #BDBDBD;
+    --color-gray-500: #9E9E9E;
+    --color-gray-600: #757575;
+    --color-gray-700: #616161;
+    --color-gray-800: #424242;
+    --color-gray-900: #212121;
     
-    /* Optimized Typography */
+    /* Typography */
     --text-xs: 0.75rem;
     --text-sm: 0.8125rem;
     --text-base: 0.875rem;
@@ -73,78 +38,78 @@
     --text-xl: 1.125rem;
     --text-2xl: 1.25rem;
     --text-3xl: 1.5rem;
-    --text-4xl: 2.25rem;
+    --text-4xl: 1.875rem;
+    --text-5xl: 2.25rem;
 }
 
-/* Base styles with colorful background */
+/* Base styles */
 body {
-    font-family: 'Varela Round', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
     font-size: var(--text-base);
-    background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 50%, #cbd5e1 100%);
-    background-attachment: fixed;
-    color: var(--color-gray-900);
+    background-color: var(--color-white);
+    color: var(--color-black);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    line-height: 1.5;
 }
 
-/* Links - Modern Design */
+/* Links */
 a {
-    color: var(--color-primary-600);
-    transition: color 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    color: var(--color-yellow-cat);
+    transition: color 0.15s ease;
     font-weight: 500;
 }
 
 a:hover {
-    color: var(--color-primary-700);
+    color: var(--color-yellow-dark);
     text-decoration: underline;
 }
 
-/* Buttons - Modern Gradient Design */
+/* Buttons */
 .btn-primary,
 button[type="submit"],
 input[type="submit"] {
-    background: linear-gradient(135deg, var(--color-primary-600) 0%, var(--color-primary-700) 100%);
-    color: white;
-    border: none;
+    background-color: var(--color-yellow-cat);
+    color: var(--color-black);
+    border: 2px solid var(--color-yellow-cat);
     font-size: var(--text-sm);
-    font-weight: 500;
-    padding: 0.5rem 1rem;
-    border-radius: 0.5rem;
-    box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    font-weight: 700;
+    padding: 0.5rem 1.5rem;
+    border-radius: 2px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    transition: all 0.2s ease;
 }
 
 .btn-primary:hover,
 button[type="submit"]:hover,
 input[type="submit"]:hover {
-    background: linear-gradient(135deg, var(--color-primary-700) 0%, var(--color-primary-800) 100%);
-    color: white;
+    background-color: var(--color-yellow-dark);
+    border-color: var(--color-yellow-dark);
+    color: var(--color-black);
     transform: translateY(-1px);
-    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.19), 0 6px 6px rgba(0, 0, 0, 0.23);
 }
 
-/* Form elements - Modern Compact Design */
+/* Form elements */
 input,
 select,
 textarea {
     font-size: var(--text-base);
-    border: 1.5px solid var(--color-gray-300);
+    border: 2px solid var(--color-gray-300);
     padding: 0.5rem 0.75rem;
-    border-radius: 0.5rem;
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-    line-height: 1.5;
+    border-radius: 2px;
+    transition: all 0.2s ease;
 }
 
 input:focus,
 select:focus,
 textarea:focus {
-    border-color: var(--color-primary-500);
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    border-color: var(--color-yellow-cat);
+    box-shadow: 0 0 0 3px rgba(255, 205, 0, 0.1);
     outline: none;
 }
 
-/* Borders - Modern Design */
+/* Borders */
 .border {
-    border-color: var(--color-gray-200);
+    border-color: var(--color-gray-300);
 }
