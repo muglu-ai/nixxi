@@ -23,7 +23,7 @@
     <!-- Additional Styles -->
     @stack('styles')
 </head>
-<body>
+<body class="superadmin-panel">
     <nav class="navbar navbar-expand-lg navbar-dark bg-dark sticky-top" style="box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);">
         <div class="container-fluid">
             <a class="navbar-brand fw-bold" href="{{ route('superadmin.dashboard') }}" style="font-size: 1.25rem; letter-spacing: 0.5px;">
@@ -106,7 +106,7 @@
         </div>
     </nav>
     
-    <div class="container-fluid" style="min-height: calc(100vh - 80px); padding-top: 2rem; padding-bottom: 2rem;">
+    <div class="container-fluid" style="min-height: calc(100vh - 80px); padding-top: 1.5rem; padding-bottom: 1.5rem;">
         @if (session('success'))
             <div class="alert alert-success alert-dismissible fade show shadow-md border-0" role="alert" style="border-radius: 0.75rem; margin-bottom: 1.5rem; border-left: 4px solid #10b981;">
                 <div class="d-flex align-items-center">

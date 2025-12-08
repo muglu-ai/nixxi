@@ -17,35 +17,25 @@
 @theme {
     --font-sans: 'Varela Round', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
     
-    /* Modern Professional Color Palette */
-    --color-primary-50: #eff6ff;
-    --color-primary-100: #dbeafe;
-    --color-primary-200: #bfdbfe;
-    --color-primary-300: #93c5fd;
-    --color-primary-400: #60a5fa;
-    --color-primary-500: #3b82f6;
-    --color-primary-600: #2563eb;
-    --color-primary-700: #1d4ed8;
-    --color-primary-800: #1e40af;
-    --color-primary-900: #1e3a8a;
+    /* International Color Palette - Vibrant & Modern */
+    --color-primary-50: #e0f2fe;
+    --color-primary-100: #bae6fd;
+    --color-primary-200: #7dd3fc;
+    --color-primary-300: #38bdf8;
+    --color-primary-400: #0ea5e9;
+    --color-primary-500: #0284c7;
+    --color-primary-600: #0369a1;
+    --color-primary-700: #075985;
+    --color-primary-800: #0c4a6e;
+    --color-primary-900: #082f49;
     
     /* Accent Colors */
-    --color-accent-red: #dc2626;
-    --color-accent-green: #10b981;
-    --color-accent-amber: #f59e0b;
-    --color-accent-purple: #8b5cf6;
-    
-    /* Neutral Colors */
-    --color-gray-50: #f9fafb;
-    --color-gray-100: #f3f4f6;
-    --color-gray-200: #e5e7eb;
-    --color-gray-300: #d1d5db;
-    --color-gray-400: #9ca3af;
-    --color-gray-500: #6b7280;
-    --color-gray-600: #4b5563;
-    --color-gray-700: #374151;
-    --color-gray-800: #1f2937;
-    --color-gray-900: #111827;
+    --color-accent-teal: #14b8a6;
+    --color-accent-purple: #a855f7;
+    --color-accent-pink: #ec4899;
+    --color-accent-orange: #f97316;
+    --color-accent-cyan: #06b6d4;
+    --color-accent-indigo: #6366f1;
     
     /* Semantic Colors */
     --color-success: #10b981;
@@ -57,37 +47,51 @@
     --color-info: #3b82f6;
     --color-info-light: #dbeafe;
     
+    /* Neutral Colors */
+    --color-gray-50: #f8fafc;
+    --color-gray-100: #f1f5f9;
+    --color-gray-200: #e2e8f0;
+    --color-gray-300: #cbd5e1;
+    --color-gray-400: #94a3b8;
+    --color-gray-500: #64748b;
+    --color-gray-600: #475569;
+    --color-gray-700: #334155;
+    --color-gray-800: #1e293b;
+    --color-gray-900: #0f172a;
+    
     /* Legacy Support */
     --color-primary-red: #dc2626;
     --color-red: #dc2626;
     --color-white: #ffffff;
     --color-black: #000000;
     
-    /* Typography */
+    /* Optimized Typography */
     --text-xs: 0.75rem;
-    --text-sm: 0.875rem;
-    --text-base: 1rem;
-    --text-lg: 1.125rem;
-    --text-xl: 1.25rem;
-    --text-2xl: 1.5rem;
-    --text-3xl: 1.875rem;
+    --text-sm: 0.8125rem;
+    --text-base: 0.875rem;
+    --text-lg: 1rem;
+    --text-xl: 1.125rem;
+    --text-2xl: 1.25rem;
+    --text-3xl: 1.5rem;
     --text-4xl: 2.25rem;
 }
 
-/* Base styles with modern theme */
+/* Base styles with colorful background */
 body {
     font-family: 'Varela Round', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
     font-size: var(--text-base);
-    background-color: var(--color-gray-50);
+    background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 50%, #cbd5e1 100%);
+    background-attachment: fixed;
     color: var(--color-gray-900);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    line-height: 1.5;
 }
 
 /* Links - Modern Design */
 a {
     color: var(--color-primary-600);
-    transition: color 0.2s ease;
+    transition: color 0.2s cubic-bezier(0.4, 0, 0.2, 1);
     font-weight: 500;
 }
 
@@ -105,10 +109,10 @@ input[type="submit"] {
     border: none;
     font-size: var(--text-sm);
     font-weight: 500;
-    padding: 0.625rem 1.25rem;
+    padding: 0.5rem 1rem;
     border-radius: 0.5rem;
     box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
-    transition: all 0.2s ease;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .btn-primary:hover,
@@ -120,15 +124,16 @@ input[type="submit"]:hover {
     box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
 }
 
-/* Form elements - Modern Design */
+/* Form elements - Modern Compact Design */
 input,
 select,
 textarea {
     font-size: var(--text-base);
     border: 1.5px solid var(--color-gray-300);
-    padding: 0.625rem 0.875rem;
+    padding: 0.5rem 0.75rem;
     border-radius: 0.5rem;
-    transition: all 0.2s ease;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    line-height: 1.5;
 }
 
 input:focus,
