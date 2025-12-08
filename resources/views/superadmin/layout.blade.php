@@ -24,9 +24,9 @@
     @stack('styles')
 </head>
 <body class="superadmin-panel">
-    <nav class="navbar navbar-expand-lg navbar-dark bg-dark sticky-top" style="box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);">
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark sticky-top">
         <div class="container-fluid">
-            <a class="navbar-brand fw-bold" href="{{ route('superadmin.dashboard') }}" style="font-size: 1.25rem; letter-spacing: 0.5px;">
+            <a class="navbar-brand" href="{{ route('superadmin.dashboard') }}">
                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" viewBox="0 0 16 16" class="me-2">
                     <path d="M9.405 1.05c-.413-1.4-2.397-1.4-2.81 0l-.094.319a.873.873 0 0 1-1.255.52l-.292-.16c-1.64-.892-3.433.902-2.54 2.541l.159.292a.873.873 0 0 1-.52 1.255l-.319.094c-1.4.413-1.4 2.397 0 2.81l.319.094a.873.873 0 0 1 .52 1.255l-.16.292c-.892 1.64.901 3.434 2.541 2.54l.292-.159a.873.873 0 0 1 1.255.52l.094.319c.413 1.4 2.397 1.4 2.81 0l.094-.319a.873.873 0 0 1 1.255-.52l.292.16c1.64.893 3.434-.902 2.54-2.541l-.159-.292a.873.873 0 0 1 .52-1.255l.319-.094c1.4-.413 1.4-2.397 0-2.81l-.319-.094a.873.873 0 0 1-.52-1.255l.16-.292c.893-1.64-.902-3.433-2.541-2.54l-.292.159a.873.873 0 0 1-1.255-.52l-.094-.319zM8 10.93a2.929 2.929 0 1 1 0-5.86 2.929 2.929 0 0 1 0 5.858z"/>
                 </svg>
@@ -149,41 +149,6 @@
     <!-- Bootstrap JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     
-    <!-- Animation Scripts -->
-    <script>
-        // Add animation classes on scroll
-        document.addEventListener('DOMContentLoaded', function() {
-            const observerOptions = {
-                threshold: 0.1,
-                rootMargin: '0px 0px -50px 0px'
-            };
-            
-            const observer = new IntersectionObserver(function(entries) {
-                entries.forEach(entry => {
-                    if (entry.isIntersecting) {
-                        entry.target.style.animation = 'slideInUp 0.6s ease-out';
-                        entry.target.style.opacity = '1';
-                    }
-                });
-            }, observerOptions);
-            
-            // Observe all cards and alerts
-            document.querySelectorAll('.card, .alert').forEach(el => {
-                el.style.opacity = '0';
-                observer.observe(el);
-            });
-            
-            // Add hover effects to buttons
-            document.querySelectorAll('.btn').forEach(btn => {
-                btn.addEventListener('mouseenter', function() {
-                    this.style.transform = 'translateY(-3px) scale(1.05)';
-                });
-                btn.addEventListener('mouseleave', function() {
-                    this.style.transform = 'translateY(0) scale(1)';
-                });
-            });
-        });
-    </script>
     
     <!-- Additional Scripts -->
     @stack('scripts')

@@ -24,9 +24,9 @@
     @stack('styles')
 </head>
 <body class="user-panel">
-    <nav class="navbar navbar-expand-lg navbar-dark bg-success sticky-top" style="box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);">
+    <nav class="navbar navbar-expand-lg navbar-dark bg-success sticky-top">
         <div class="container-fluid">
-            <a class="navbar-brand fw-bold" href="{{ route('user.dashboard') }}" style="font-size: 1.25rem; letter-spacing: 0.5px;">
+            <a class="navbar-brand" href="{{ route('user.dashboard') }}">
                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" viewBox="0 0 16 16" class="me-2">
                     <path d="M8 0a8 8 0 1 0 0 16A8 8 0 0 0 8 0ZM7 2a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1A.5.5 0 0 1 7 3V2Zm0 3a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v4a.5.5 0 0 1-.5.5h-1A.5.5 0 0 1 7 9V5Zm-4 4a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1A.5.5 0 0 1 3 10V9Zm11-1a.5.5 0 0 0-.5-.5h-1a.5.5 0 0 0-.5.5v1a.5.5 0 0 0 .5.5h1a.5.5 0 0 0 .5-.5V8ZM8 13a.5.5 0 0 0 .5-.5v-1a.5.5 0 0 0-.5-.5h-1a.5.5 0 0 0-.5.5v1a.5.5 0 0 0 .5.5h1Z"/>
                 </svg>
@@ -145,41 +145,6 @@
     <!-- Bootstrap JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     
-    <!-- Animation Scripts -->
-    <script>
-        // Add animation classes on scroll
-        document.addEventListener('DOMContentLoaded', function() {
-            const observerOptions = {
-                threshold: 0.1,
-                rootMargin: '0px 0px -50px 0px'
-            };
-            
-            const observer = new IntersectionObserver(function(entries) {
-                entries.forEach(entry => {
-                    if (entry.isIntersecting) {
-                        entry.target.style.animation = 'slideInUp 0.6s ease-out';
-                        entry.target.style.opacity = '1';
-                    }
-                });
-            }, observerOptions);
-            
-            // Observe all cards and alerts
-            document.querySelectorAll('.card, .alert').forEach(el => {
-                el.style.opacity = '0';
-                observer.observe(el);
-            });
-            
-            // Add hover effects to buttons
-            document.querySelectorAll('.btn').forEach(btn => {
-                btn.addEventListener('mouseenter', function() {
-                    this.style.transform = 'translateY(-3px) scale(1.05)';
-                });
-                btn.addEventListener('mouseleave', function() {
-                    this.style.transform = 'translateY(0) scale(1)';
-                });
-            });
-        });
-    </script>
     
     <!-- Update unread message count periodically -->
     <script>

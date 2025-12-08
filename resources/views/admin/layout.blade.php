@@ -24,9 +24,9 @@
     @stack('styles')
 </head>
 <body class="admin-panel">
-    <nav class="navbar navbar-expand-lg navbar-dark bg-primary sticky-top" style="box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);">
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary sticky-top">
         <div class="container-fluid">
-            <a class="navbar-brand fw-bold" href="{{ route('admin.dashboard') }}" style="font-size: 1.25rem; letter-spacing: 0.5px;">
+            <a class="navbar-brand" href="{{ route('admin.dashboard') }}">
                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" viewBox="0 0 16 16" class="me-2">
                     <path d="M8 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm2-3a2 2 0 1 1-4 0 2 2 0 0 1 4 0Zm4 8c0 1-1 1-1 1H3s-1 0-1-1 1-4 6-4 6 3 6 4zm-1-.004c-.001-.246-.154-.986-.832-1.664C11.516 10.68 10.289 10 8 10c-2.29 0-3.516.68-4.168 1.332-.678.678-.83 1.418-.832 1.664h10z"/>
                 </svg>
@@ -264,41 +264,6 @@
     <!-- Bootstrap JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     
-    <!-- Animation Scripts -->
-    <script>
-        // Add animation classes on scroll
-        document.addEventListener('DOMContentLoaded', function() {
-            const observerOptions = {
-                threshold: 0.1,
-                rootMargin: '0px 0px -50px 0px'
-            };
-            
-            const observer = new IntersectionObserver(function(entries) {
-                entries.forEach(entry => {
-                    if (entry.isIntersecting) {
-                        entry.target.style.animation = 'slideInUp 0.6s ease-out';
-                        entry.target.style.opacity = '1';
-                    }
-                });
-            }, observerOptions);
-            
-            // Observe all cards and alerts
-            document.querySelectorAll('.card, .alert').forEach(el => {
-                el.style.opacity = '0';
-                observer.observe(el);
-            });
-            
-            // Add hover effects to buttons
-            document.querySelectorAll('.btn').forEach(btn => {
-                btn.addEventListener('mouseenter', function() {
-                    this.style.transform = 'translateY(-3px) scale(1.05)';
-                });
-                btn.addEventListener('mouseleave', function() {
-                    this.style.transform = 'translateY(0) scale(1)';
-                });
-            });
-        });
-    </script>
     
     <!-- Role Dropdown Script -->
     <script>
