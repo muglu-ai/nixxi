@@ -38,7 +38,7 @@ class AdminGrievanceController extends Controller
     /**
      * Display ticket details.
      */
-    public function show(int $id): View|RedirectResponse
+    public function show(string $id): View|RedirectResponse
     {
         $adminId = session('admin_id');
         $admin = Admin::find($adminId);
@@ -48,7 +48,7 @@ class AdminGrievanceController extends Controller
                 ->with('error', 'Admin session expired. Please login again.');
         }
 
-        $ticket = Ticket::where('id', $id)
+        $ticket = Ticket::where('id', (int) $id)
             ->where('assigned_to', $adminId)
             ->with(['user', 'messages.attachments', 'attachments', 'assignedBy'])
             ->firstOrFail();
@@ -59,7 +59,7 @@ class AdminGrievanceController extends Controller
     /**
      * Reply to a ticket.
      */
-    public function reply(Request $request, int $id): RedirectResponse
+    public function reply(Request $request, string $id): RedirectResponse
     {
         $adminId = session('admin_id');
         $admin = Admin::find($adminId);
@@ -69,7 +69,7 @@ class AdminGrievanceController extends Controller
                 ->with('error', 'Admin session expired. Please login again.');
         }
 
-        $ticket = Ticket::where('id', $id)
+        $ticket = Ticket::where('id', (int) $id)
             ->where('assigned_to', $adminId)
             ->firstOrFail();
 
@@ -131,7 +131,7 @@ class AdminGrievanceController extends Controller
     /**
      * Resolve a ticket.
      */
-    public function resolve(Request $request, int $id): RedirectResponse
+    public function resolve(Request $request, string $id): RedirectResponse
     {
         $adminId = session('admin_id');
         $admin = Admin::find($adminId);
@@ -141,7 +141,7 @@ class AdminGrievanceController extends Controller
                 ->with('error', 'Admin session expired. Please login again.');
         }
 
-        $ticket = Ticket::where('id', $id)
+        $ticket = Ticket::where('id', (int) $id)
             ->where('assigned_to', $adminId)
             ->firstOrFail();
 
@@ -175,7 +175,7 @@ class AdminGrievanceController extends Controller
     /**
      * Close a ticket.
      */
-    public function close(Request $request, int $id): RedirectResponse
+    public function close(Request $request, string $id): RedirectResponse
     {
         $adminId = session('admin_id');
         $admin = Admin::find($adminId);
@@ -185,7 +185,7 @@ class AdminGrievanceController extends Controller
                 ->with('error', 'Admin session expired. Please login again.');
         }
 
-        $ticket = Ticket::where('id', $id)
+        $ticket = Ticket::where('id', (int) $id)
             ->where('assigned_to', $adminId)
             ->firstOrFail();
 

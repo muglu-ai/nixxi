@@ -62,7 +62,7 @@ class SuperAdminGrievanceController extends Controller
     /**
      * Display ticket details.
      */
-    public function show(int $id): View|RedirectResponse
+    public function show(string $id): View|RedirectResponse
     {
         $superAdminId = session('superadmin_id');
         $superAdmin = SuperAdmin::find($superAdminId);
@@ -73,7 +73,7 @@ class SuperAdminGrievanceController extends Controller
         }
 
         $ticket = Ticket::with(['user', 'messages.attachments', 'attachments', 'assignedAdmin', 'assignedBy', 'closedByAdmin'])
-            ->findOrFail($id);
+            ->findOrFail((int) $id);
 
         // Get admins grouped by role for assignment
         $admins = Admin::with('roles')->get();
@@ -85,7 +85,7 @@ class SuperAdminGrievanceController extends Controller
     /**
      * Assign ticket to an admin.
      */
-    public function assign(Request $request, int $id): RedirectResponse
+    public function assign(Request $request, string $id): RedirectResponse
     {
         $superAdminId = session('superadmin_id');
         $superAdmin = SuperAdmin::find($superAdminId);
@@ -95,7 +95,7 @@ class SuperAdminGrievanceController extends Controller
                 ->with('error', 'SuperAdmin session expired. Please login again.');
         }
 
-        $ticket = Ticket::findOrFail($id);
+        $ticket = Ticket::findOrFail((int) $id);
 
         $validated = $request->validate([
             'assigned_to' => 'required|exists:admins,id',
@@ -140,7 +140,7 @@ class SuperAdminGrievanceController extends Controller
     /**
      * Unassign ticket from admin.
      */
-    public function unassign(int $id): RedirectResponse
+    public function unassign(string $id): RedirectResponse
     {
         $superAdminId = session('superadmin_id');
         $superAdmin = SuperAdmin::find($superAdminId);
@@ -150,7 +150,7 @@ class SuperAdminGrievanceController extends Controller
                 ->with('error', 'SuperAdmin session expired. Please login again.');
         }
 
-        $ticket = Ticket::findOrFail($id);
+        $ticket = Ticket::findOrFail((int) $id);
 
         try {
             $ticket->update([

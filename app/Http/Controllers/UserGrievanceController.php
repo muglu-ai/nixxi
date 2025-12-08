@@ -137,7 +137,7 @@ class UserGrievanceController extends Controller
     /**
      * Display ticket details and conversation.
      */
-    public function show(int $id): View|RedirectResponse
+    public function show(string $id): View|RedirectResponse
     {
         $userId = session('user_id');
         $user = Registration::find($userId);
@@ -147,7 +147,7 @@ class UserGrievanceController extends Controller
                 ->with('error', 'User session expired. Please login again.');
         }
 
-        $ticket = Ticket::where('id', $id)
+        $ticket = Ticket::where('id', (int) $id)
             ->where('user_id', $userId)
             ->with(['messages.attachments', 'attachments', 'assignedAdmin'])
             ->firstOrFail();
@@ -158,7 +158,7 @@ class UserGrievanceController extends Controller
     /**
      * Reply to a ticket.
      */
-    public function reply(Request $request, int $id): RedirectResponse
+    public function reply(Request $request, string $id): RedirectResponse
     {
         $userId = session('user_id');
         $user = Registration::find($userId);
@@ -168,7 +168,7 @@ class UserGrievanceController extends Controller
                 ->with('error', 'User session expired. Please login again.');
         }
 
-        $ticket = Ticket::where('id', $id)
+        $ticket = Ticket::where('id', (int) $id)
             ->where('user_id', $userId)
             ->firstOrFail();
 
