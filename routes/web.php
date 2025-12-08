@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AdminController;
+use App\Http\Controllers\AdminGrievanceController;
 use App\Http\Controllers\AdminLoginController;
 use App\Http\Controllers\ApplicationController;
 use App\Http\Controllers\IxApplicationController;
@@ -11,8 +12,10 @@ use App\Http\Controllers\RegisterController;
 use App\Http\Controllers\SuperAdmin\IxLocationController as SuperAdminIxLocationController;
 use App\Http\Controllers\SuperAdmin\IxPortPricingController as SuperAdminIxPortPricingController;
 use App\Http\Controllers\SuperAdminController;
+use App\Http\Controllers\SuperAdminGrievanceController;
 use App\Http\Controllers\SuperAdminLoginController;
 use App\Http\Controllers\UserController;
+use App\Http\Controllers\UserGrievanceController;
 use App\Http\Controllers\UserKycController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -86,6 +89,15 @@ Route::prefix('superadmin')->name('superadmin.')->middleware(['superadmin'])->gr
     Route::put('/ix-application-pricing/{ixApplicationPricing}', [\App\Http\Controllers\SuperAdmin\IxApplicationPricingController::class, 'update'])->name('ix-application-pricing.update');
     Route::patch('/ix-application-pricing/{ixApplicationPricing}/toggle', [\App\Http\Controllers\SuperAdmin\IxApplicationPricingController::class, 'toggleStatus'])->name('ix-application-pricing.toggle');
     Route::delete('/ix-application-pricing/{ixApplicationPricing}', [\App\Http\Controllers\SuperAdmin\IxApplicationPricingController::class, 'destroy'])->name('ix-application-pricing.destroy');
+
+    // Grievance routes
+    Route::prefix('grievance')->name('grievance.')->group(function () {
+        Route::get('/', [SuperAdminGrievanceController::class, 'index'])->name('index');
+        Route::get('/{id}', [SuperAdminGrievanceController::class, 'show'])->name('show');
+        Route::post('/{id}/assign', [SuperAdminGrievanceController::class, 'assign'])->name('assign');
+        Route::post('/{id}/unassign', [SuperAdminGrievanceController::class, 'unassign'])->name('unassign');
+        Route::get('/admins-by-role', [SuperAdminGrievanceController::class, 'getAdminsByRole'])->name('admins-by-role');
+    });
 });
 
 // Admin Login Routes (Public - no authentication required)
@@ -166,6 +178,15 @@ Route::prefix('admin')->name('admin.')->middleware(['admin'])->group(function ()
     // IX Account routes
     Route::post('/applications/{id}/ix-account/generate-invoice', [AdminController::class, 'ixAccountGenerateInvoice'])->name('applications.ix-account.generate-invoice');
     Route::post('/applications/{id}/ix-account/verify-payment', [AdminController::class, 'ixAccountVerifyPayment'])->name('applications.ix-account.verify-payment');
+
+    // Grievance routes
+    Route::prefix('grievance')->name('grievance.')->group(function () {
+        Route::get('/', [AdminGrievanceController::class, 'index'])->name('index');
+        Route::get('/{id}', [AdminGrievanceController::class, 'show'])->name('show');
+        Route::post('/{id}/reply', [AdminGrievanceController::class, 'reply'])->name('reply');
+        Route::post('/{id}/resolve', [AdminGrievanceController::class, 'resolve'])->name('resolve');
+        Route::post('/{id}/close', [AdminGrievanceController::class, 'close'])->name('close');
+    });
 });
 
 // Register Routes (Public - no authentication required)
@@ -267,6 +288,15 @@ Route::prefix('user')->name('user.')->middleware(['user.auth'])->group(function 
 
         // Show application (must be last)
         Route::get('/{id}', [ApplicationController::class, 'show'])->name('show');
+    });
+
+    // Grievance routes
+    Route::prefix('grievance')->name('grievance.')->group(function () {
+        Route::get('/', [UserGrievanceController::class, 'index'])->name('index');
+        Route::get('/create', [UserGrievanceController::class, 'create'])->name('create');
+        Route::post('/store', [UserGrievanceController::class, 'store'])->name('store');
+        Route::get('/{id}', [UserGrievanceController::class, 'show'])->name('show');
+        Route::post('/{id}/reply', [UserGrievanceController::class, 'reply'])->name('reply');
     });
 
     // Add more User routes here

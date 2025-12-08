@@ -1,0 +1,139 @@
+@extends('superadmin.layout')
+
+@section('title', 'Ticket Details')
+
+@section('content')
+<div class="container-fluid py-4">
+    <div class="row mb-3">
+        <div class="col-12">
+            <a href="{{ route('superadmin.grievance.index') }}" class="btn btn-outline-secondary">← Back to Tickets</a>
+        </div>
+    </div>
+
+    <div class="card shadow mb-3">
+        <div class="card-header bg-primary text-white">
+            <div class="d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">Ticket: {{ $ticket->ticket_id }}</h5>
+                <span class="badge bg-{{ $ticket->status === 'closed' ? 'secondary' : ($ticket->status === 'resolved' ? 'success' : ($ticket->status === 'in_progress' ? 'warning' : 'primary')) }}">
+                    {{ $ticket->status_display }}
+                </span>
+            </div>
+        </div>
+        <div class="card-body">
+            <div class="row mb-3">
+                <div class="col-md-6">
+                    <p><strong>User:</strong> {{ $ticket->user->fullname ?? 'N/A' }}</p>
+                    <p><strong>Email:</strong> {{ $ticket->user->email ?? 'N/A' }}</p>
+                    <p><strong>Type:</strong> <span class="badge bg-info">{{ $ticket->type_display }}</span></p>
+                    <p><strong>Priority:</strong> <span class="badge bg-{{ $ticket->priority_badge_color }}">{{ ucfirst($ticket->priority) }}</span></p>
+                </div>
+                <div class="col-md-6">
+                    <p><strong>Created:</strong> {{ $ticket->created_at->format('d M Y, h:i A') }}</p>
+                    <p><strong>Assigned To:</strong> {{ $ticket->assignedAdmin ? $ticket->assignedAdmin->name : 'Not Assigned' }}</p>
+                    <p><strong>Assigned By:</strong> {{ $ticket->assignedBy ? $ticket->assignedBy->name : 'N/A' }}</p>
+                    @if($ticket->subject)
+                    <p><strong>Subject:</strong> {{ $ticket->subject }}</p>
+                    @endif
+                </div>
+            </div>
+            <div class="mb-3">
+                <strong>Initial Description:</strong>
+                <p class="mt-2">{{ nl2br(e($ticket->description)) }}</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Assignment Form -->
+    @if($ticket->status !== 'closed')
+    <div class="card shadow mb-3">
+        <div class="card-header bg-light">
+            <h5 class="mb-0">Assign Ticket</h5>
+        </div>
+        <div class="card-body">
+            <form method="POST" action="{{ route('superadmin.grievance.assign', $ticket->id) }}">
+                @csrf
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label for="assigned_to" class="form-label">Assign To Admin <span class="text-danger">*</span></label>
+                        <select name="assigned_to" id="assigned_to" class="form-select @error('assigned_to') is-invalid @enderror" required>
+                            <option value="">Select Admin</option>
+                            @foreach($admins as $admin)
+                                <option value="{{ $admin->id }}" {{ $ticket->assigned_to == $admin->id ? 'selected' : '' }}>
+                                    {{ $admin->name }} 
+                                    @if($admin->roles->count() > 0)
+                                        ({{ $admin->roles->pluck('name')->join(', ') }})
+                                    @endif
+                                </option>
+                            @endforeach
+                        </select>
+                        @error('assigned_to')
+                            <div class="invalid-feedback">{{ $message }}</div>
+                        @enderror
+                    </div>
+                    <div class="col-md-4">
+                        <label for="priority" class="form-label">Priority</label>
+                        <select name="priority" id="priority" class="form-select">
+                            <option value="low" {{ $ticket->priority === 'low' ? 'selected' : '' }}>Low</option>
+                            <option value="medium" {{ $ticket->priority === 'medium' ? 'selected' : '' }}>Medium</option>
+                            <option value="high" {{ $ticket->priority === 'high' ? 'selected' : '' }}>High</option>
+                            <option value="urgent" {{ $ticket->priority === 'urgent' ? 'selected' : '' }}>Urgent</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2 d-flex align-items-end">
+                        <button type="submit" class="btn btn-primary w-100">Assign</button>
+                    </div>
+                </div>
+            </form>
+            @if($ticket->assigned_to)
+            <form method="POST" action="{{ route('superadmin.grievance.unassign', $ticket->id) }}" class="mt-2">
+                @csrf
+                <button type="submit" class="btn btn-outline-danger" onclick="return confirm('Unassign this ticket?')">Unassign</button>
+            </form>
+            @endif
+        </div>
+    </div>
+    @endif
+
+    <!-- Conversation Thread -->
+    <div class="card shadow mb-3">
+        <div class="card-header bg-light">
+            <h5 class="mb-0">Conversation</h5>
+        </div>
+        <div class="card-body">
+            <div class="conversation-thread">
+                @foreach($ticket->messages as $message)
+                <div class="message-item mb-4 p-3 rounded {{ $message->sender_type === 'user' ? 'bg-light' : ($message->is_internal ? 'bg-warning bg-opacity-10' : 'bg-primary bg-opacity-10') }}">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <div>
+                            <strong>{{ $message->sender_name }}</strong>
+                            <span class="badge bg-secondary ms-2">{{ ucfirst($message->sender_type) }}</span>
+                            @if($message->is_internal)
+                            <span class="badge bg-warning ms-1">Internal Note</span>
+                            @endif
+                        </div>
+                        <small class="text-muted">{{ $message->created_at->format('d M Y, h:i A') }}</small>
+                    </div>
+                    <div class="message-content">
+                        <p class="mb-2">{{ nl2br(e($message->message)) }}</p>
+                        
+                        @if($message->attachments->count() > 0)
+                        <div class="attachments mt-2">
+                            <strong>Attachments:</strong>
+                            <div class="d-flex flex-wrap gap-2 mt-1">
+                                @foreach($message->attachments as $attachment)
+                                <a href="{{ \Illuminate\Support\Facades\Storage::url($attachment->file_path) }}" target="_blank" class="btn btn-sm btn-outline-primary">
+                                    {{ $attachment->file_name }}
+                                </a>
+                                @endforeach
+                            </div>
+                        </div>
+                        @endif
+                    </div>
+                </div>
+                @endforeach
+            </div>
+        </div>
+    </div>
+</div>
+@endsection
+
