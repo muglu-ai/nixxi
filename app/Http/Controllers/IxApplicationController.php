@@ -1108,16 +1108,44 @@ class IxApplicationController extends Controller
      */
     public function paymentSuccess(Request $request): RedirectResponse|Response
     {
+        // Self-redirect mechanism: First visit sets session and redirects to itself
+        // Second visit processes payment and redirects to final destination
+        $redirectCount = session('payment_redirect_count', 0);
+        
+        if ($redirectCount === 0) {
+            // First visit: Set redirect count to 1 and redirect to self
+            // This establishes the session before processing payment
+            session(['payment_redirect_count' => 1]);
+            session()->save();
+            
+            Log::info('PayU Success - First visit, redirecting to self to establish session', [
+                'current_url' => $request->fullUrl(),
+            ]);
+            
+            // Show "fetching payment details" message while redirecting
+            return response()->view('user.applications.ix.payment-processing', [
+                'message' => 'Fetching payment details...',
+                'submessage' => 'Please do not refresh or go back. You will be redirected to your application automatically.',
+                'redirectUrl' => $request->fullUrl(), // Redirect to same URL
+            ]);
+        }
+        
+        // Second visit (redirect_count = 1): Process payment and redirect to final destination
+        // Clear the redirect count so it doesn't interfere with future requests
+        session()->forget('payment_redirect_count');
+        session()->save();
+        
         // PayU may send data via POST or GET (query string)
         $response = array_merge($request->query(), $request->post());
         
-        Log::info('=== PayU Success Callback Method Called ===', [
+        Log::info('=== PayU Success Callback Method Called (Second Visit) ===', [
             'method' => $request->method(),
             'url' => $request->fullUrl(),
             'has_query' => !empty($request->query()),
             'has_post' => !empty($request->post()),
             'has_cookie' => $request->hasCookie('pending_payment_data'),
             'has_user_session_cookie' => $request->hasCookie('user_session_data'),
+            'redirect_count' => $redirectCount,
         ]);
         
         try {
@@ -1395,7 +1423,7 @@ class IxApplicationController extends Controller
                 }
             }
             
-            // NO SESSION USED - Direct redirect to login-from-cookie route which will set session and redirect
+            // After processing payment, redirect to login-from-cookie route which will set session and redirect
             // Pass success message and transaction ID as query parameters
             $successMessage = 'Payment successful! Your application has been submitted. Transaction ID: ' . $paymentTransaction->transaction_id;
             $loginUrl = route('user.login-from-cookie', [
@@ -1403,7 +1431,11 @@ class IxApplicationController extends Controller
                 'success' => urlencode($successMessage),
             ]);
             
-            // Direct redirect to login-from-cookie (no view, no delay)
+            // Clear redirect count before final redirect
+            session()->forget('payment_redirect_count');
+            session()->save();
+            
+            // Direct redirect to login-from-cookie
             // This route will set session from cookie and redirect to final destination
             return redirect($loginUrl)
                 ->cookie('pending_payment_data', '', -1, '/', null, true, false, false, 'lax'); // Delete payment cookie, keep user_session_data for login
@@ -1414,7 +1446,11 @@ class IxApplicationController extends Controller
                 'trace' => $e->getTraceAsString(),
             ]);
             
-            // NO SESSION USED - Direct redirect to login-from-cookie route on error
+            // Clear redirect count on error
+            session()->forget('payment_redirect_count');
+            session()->save();
+            
+            // Direct redirect to login-from-cookie route on error
             $errorMessage = 'An error occurred while processing payment. Please contact support.';
             $loginUrl = route('user.login-from-cookie', [
                 'redirect' => route('user.applications.index'),
