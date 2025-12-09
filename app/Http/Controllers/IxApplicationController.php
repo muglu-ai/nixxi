@@ -959,8 +959,29 @@ class IxApplicationController extends Controller
         ]);
 
         // Set cookies with payment details and user session (expires in 1 hour)
-        $response->cookie('pending_payment_data', json_encode($cookieData), 60);
-        $response->cookie('user_session_data', json_encode($userSessionData), 60);
+        // Use cookie() helper with proper path and sameSite settings so cookies persist when form is submitted to PayU
+        $response->cookie(
+            'pending_payment_data',
+            json_encode($cookieData),
+            60, // minutes
+            '/', // path
+            null, // domain (null = current domain)
+            true, // secure (HTTPS only)
+            false, // httpOnly (false so JS can access if needed)
+            false, // raw
+            'lax' // sameSite
+        );
+        $response->cookie(
+            'user_session_data',
+            json_encode($userSessionData),
+            60,
+            '/',
+            null,
+            true,
+            false,
+            false,
+            'lax'
+        );
 
         return $response;
     }
@@ -1050,13 +1071,34 @@ class IxApplicationController extends Controller
         ]);
 
         // Set cookies with payment details and user session (expires in 1 hour)
+        // Use cookie() helper with proper path and sameSite settings so cookies persist when form is submitted to PayU
         $response = response()->view('user.applications.ix.payu-redirect', [
             'paymentUrl' => $payuService->getPaymentUrl(),
             'paymentForm' => $paymentData,
         ]);
 
-        $response->cookie('pending_payment_data', json_encode($cookieData), 60);
-        $response->cookie('user_session_data', json_encode($userSessionData), 60);
+        $response->cookie(
+            'pending_payment_data',
+            json_encode($cookieData),
+            60,
+            '/',
+            null,
+            true,
+            false,
+            false,
+            'lax'
+        );
+        $response->cookie(
+            'user_session_data',
+            json_encode($userSessionData),
+            60,
+            '/',
+            null,
+            true,
+            false,
+            false,
+            'lax'
+        );
 
         return $response;
     }
@@ -1159,10 +1201,47 @@ class IxApplicationController extends Controller
             
             // Extract all PayU response fields
             $payuResponseFields = $this->extractPayuResponseFields($request);
+            $payuService = new PayuService;
+            
+            // If PayU didn't send parameters, use Verify Payment API to get transaction status
+            if (empty($payuResponseFields) || !isset($payuResponseFields['status'])) {
+                Log::info('PayU Success - No parameters received, checking transaction status via API', [
+                    'transaction_id' => $paymentTransaction->transaction_id,
+                ]);
+                
+                $verifyResponse = $payuService->checkTransactionStatus($paymentTransaction->transaction_id);
+                
+                if ($verifyResponse && isset($verifyResponse['transaction_status'])) {
+                    // Map Verify API response to our format
+                    $payuResponseFields = [
+                        'mihpayid' => $verifyResponse['mihpayid'] ?? null,
+                        'txnid' => $paymentTransaction->transaction_id,
+                        'status' => $verifyResponse['transaction_status'] ?? 'success',
+                        'unmappedstatus' => $verifyResponse['unmappedstatus'] ?? null,
+                        'bank_ref_num' => $verifyResponse['bank_ref_num'] ?? null,
+                        'mode' => $verifyResponse['mode'] ?? null,
+                        'amount' => $verifyResponse['amount'] ?? $paymentTransaction->amount,
+                        'error_code' => $verifyResponse['error_code'] ?? null,
+                        'error_Message' => $verifyResponse['error_message'] ?? null,
+                        'field9' => $verifyResponse['field9'] ?? null,
+                        'raw_response' => $verifyResponse,
+                        'source' => 'verify_api',
+                    ];
+                    
+                    Log::info('PayU Success - Transaction status retrieved from Verify API', [
+                        'transaction_id' => $paymentTransaction->transaction_id,
+                        'status' => $payuResponseFields['status'],
+                    ]);
+                } else {
+                    Log::warning('PayU Success - Verify API did not return transaction status', [
+                        'transaction_id' => $paymentTransaction->transaction_id,
+                        'verify_response' => $verifyResponse,
+                    ]);
+                }
+            }
             
             // Verify hash if PayU sent parameters
             if (! empty($payuResponseFields) && isset($payuResponseFields['hash'])) {
-                $payuService = new PayuService;
                 $isValid = $payuService->verifyHash($payuResponseFields);
                 
                 if (! $isValid) {
@@ -1292,8 +1371,8 @@ class IxApplicationController extends Controller
             // Delete cookies and redirect to applications page
             return redirect()->route('user.applications.index')
                 ->with('success', 'Payment successful! Your application has been submitted. Transaction ID: ' . $paymentTransaction->transaction_id)
-                ->cookie('pending_payment_data', '', -1) // Delete cookie
-                ->cookie('user_session_data', '', -1); // Delete user session cookie
+                ->cookie('pending_payment_data', '', -1, '/', null, true, false, false, 'lax') // Delete cookie
+                ->cookie('user_session_data', '', -1, '/', null, true, false, false, 'lax'); // Delete user session cookie
             
         } catch (\Exception $e) {
             Log::error('PayU Success Callback Exception', [
@@ -1304,8 +1383,8 @@ class IxApplicationController extends Controller
             // Delete cookies on error too
             return redirect()->route('user.applications.index')
                 ->with('error', 'An error occurred while processing payment. Please contact support.')
-                ->cookie('pending_payment_data', '', -1) // Delete cookie
-                ->cookie('user_session_data', '', -1); // Delete user session cookie
+                ->cookie('pending_payment_data', '', -1, '/', null, true, false, false, 'lax') // Delete cookie
+                ->cookie('user_session_data', '', -1, '/', null, true, false, false, 'lax'); // Delete user session cookie
         }
     }
 
@@ -1338,7 +1417,7 @@ class IxApplicationController extends Controller
         $response = array_merge($request->query(), $request->post());
         
         try {
-            // Restore user session from cookie (session gets cleared when PayU page opens)
+            // Restore user session from cookie FIRST (session gets cleared when PayU page opens)
             if ($request->hasCookie('user_session_data')) {
                 $userSessionData = json_decode($request->cookie('user_session_data'), true);
                 if ($userSessionData && isset($userSessionData['user_id'])) {
@@ -1426,6 +1505,44 @@ class IxApplicationController extends Controller
             if ($paymentTransaction) {
                 // Extract all PayU response fields
                 $payuResponseFields = $this->extractPayuResponseFields($request);
+                $payuService = new PayuService;
+                
+                // If PayU didn't send parameters, use Verify Payment API to get transaction status
+                if (empty($payuResponseFields) || !isset($payuResponseFields['status'])) {
+                    Log::info('PayU Failure - No parameters received, checking transaction status via API', [
+                        'transaction_id' => $paymentTransaction->transaction_id,
+                    ]);
+                    
+                    $verifyResponse = $payuService->checkTransactionStatus($paymentTransaction->transaction_id);
+                    
+                    if ($verifyResponse && isset($verifyResponse['transaction_status'])) {
+                        // Map Verify API response to our format
+                        $payuResponseFields = [
+                            'mihpayid' => $verifyResponse['mihpayid'] ?? null,
+                            'txnid' => $paymentTransaction->transaction_id,
+                            'status' => $verifyResponse['transaction_status'] ?? 'failure',
+                            'unmappedstatus' => $verifyResponse['unmappedstatus'] ?? null,
+                            'bank_ref_num' => $verifyResponse['bank_ref_num'] ?? null,
+                            'mode' => $verifyResponse['mode'] ?? null,
+                            'amount' => $verifyResponse['amount'] ?? $paymentTransaction->amount,
+                            'error_code' => $verifyResponse['error_code'] ?? null,
+                            'error_Message' => $verifyResponse['error_message'] ?? null,
+                            'field9' => $verifyResponse['field9'] ?? null,
+                            'raw_response' => $verifyResponse,
+                            'source' => 'verify_api',
+                        ];
+                        
+                        Log::info('PayU Failure - Transaction status retrieved from Verify API', [
+                            'transaction_id' => $paymentTransaction->transaction_id,
+                            'status' => $payuResponseFields['status'],
+                        ]);
+                    } else {
+                        Log::warning('PayU Failure - Verify API did not return transaction status', [
+                            'transaction_id' => $paymentTransaction->transaction_id,
+                            'verify_response' => $verifyResponse,
+                        ]);
+                    }
+                }
                 
                 // Extract key fields for easier access
                 $payuPaymentId = $payuResponseFields['mihpayid'] ?? null;
@@ -1505,8 +1622,8 @@ class IxApplicationController extends Controller
         // Delete cookies and redirect
         return redirect()->route('user.applications.ix.create')
             ->with('error', 'Payment failed. Please try again or contact support if the amount was deducted.')
-            ->cookie('pending_payment_data', '', -1) // Delete cookie
-            ->cookie('user_session_data', '', -1); // Delete user session cookie
+            ->cookie('pending_payment_data', '', -1, '/', null, true, false, false, 'lax') // Delete cookie
+            ->cookie('user_session_data', '', -1, '/', null, true, false, false, 'lax'); // Delete user session cookie
     }
 
     /**

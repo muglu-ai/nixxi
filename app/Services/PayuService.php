@@ -289,6 +289,8 @@ class PayuService
                 
                 // Extract transaction details if available
                 if (isset($json['transaction_details']) && is_array($json['transaction_details'])) {
+                    // PayU returns transaction_details as an object with transaction ID as key
+                    // Example: {"transaction_details": {"TXN123": {...}}}
                     // Get the first (and usually only) transaction detail
                     $txnDetails = reset($json['transaction_details']);
                     if ($txnDetails && is_array($txnDetails)) {
@@ -302,6 +304,14 @@ class PayuService
                         $result['field9'] = $txnDetails['field9'] ?? null;
                         $result['mode'] = $txnDetails['mode'] ?? null;
                         $result['unmappedstatus'] = $txnDetails['unmappedstatus'] ?? null;
+                        $result['card_type'] = $txnDetails['card_type'] ?? null;
+                        $result['pg_type'] = $txnDetails['PG_TYPE'] ?? $txnDetails['pg_type'] ?? null;
+                        $result['productinfo'] = $txnDetails['productinfo'] ?? null;
+                        $result['firstname'] = $txnDetails['firstname'] ?? null;
+                        $result['net_amount_debit'] = $txnDetails['net_amount_debit'] ?? null;
+                        $result['discount'] = $txnDetails['disc'] ?? $txnDetails['discount'] ?? null;
+                        $result['addedon'] = $txnDetails['addedon'] ?? null;
+                        $result['payment_source'] = $txnDetails['payment_source'] ?? null;
                     }
                 }
             } else {
