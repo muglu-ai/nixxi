@@ -1121,31 +1121,41 @@ class IxApplicationController extends Controller
         ]);
         
         try {
-            // Restore user session from cookie (session gets cleared when PayU page opens)
-            if ($request->hasCookie('user_session_data')) {
-                $userSessionData = json_decode($request->cookie('user_session_data'), true);
-                if ($userSessionData && isset($userSessionData['user_id'])) {
-                    $user = Registration::find($userSessionData['user_id']);
-                    if ($user) {
-                        // Restore session
-                        session(['user_id' => $userSessionData['user_id']]);
-                        session(['user_email' => $userSessionData['user_email'] ?? $user->email]);
-                        session(['user_name' => $userSessionData['user_name'] ?? $user->fullname]);
-                        session(['user_registration_id' => $userSessionData['user_registration_id'] ?? $user->registrationid]);
-                        Log::info('PayU Success - User session restored from cookie', [
-                            'user_id' => $userSessionData['user_id'],
-                        ]);
-                    }
-                }
-            }
-
-            // First, try to get payment details from cookie
+            // Get all data from cookies FIRST (session is cleared when PayU redirects)
+            // Cookies are the source of truth for payment callbacks
             $cookieData = null;
+            $userSessionData = null;
+            
+            // Get payment transaction data from cookie
             if ($request->hasCookie('pending_payment_data')) {
                 $cookieData = json_decode($request->cookie('pending_payment_data'), true);
                 Log::info('PayU Success - Found payment data in cookie', [
                     'cookie_data' => $cookieData,
                 ]);
+            }
+            
+            // Get user session data from cookie
+            if ($request->hasCookie('user_session_data')) {
+                $userSessionData = json_decode($request->cookie('user_session_data'), true);
+                Log::info('PayU Success - Found user session data in cookie', [
+                    'has_user_id' => isset($userSessionData['user_id']),
+                ]);
+            }
+            
+            // Restore user session from cookie (for authentication/redirect purposes only)
+            // All data lookups should use cookies, not session
+            if ($userSessionData && isset($userSessionData['user_id'])) {
+                $user = Registration::find($userSessionData['user_id']);
+                if ($user) {
+                    // Restore session only for authentication (so user can access protected routes)
+                    session(['user_id' => $userSessionData['user_id']]);
+                    session(['user_email' => $userSessionData['user_email'] ?? $user->email]);
+                    session(['user_name' => $userSessionData['user_name'] ?? $user->fullname]);
+                    session(['user_registration_id' => $userSessionData['user_registration_id'] ?? $user->registrationid]);
+                    Log::info('PayU Success - User session restored from cookie for authentication', [
+                        'user_id' => $userSessionData['user_id'],
+                    ]);
+                }
             }
             
             // If no cookie data, try to get from PayU response
@@ -1322,19 +1332,23 @@ class IxApplicationController extends Controller
                         'submitted_at' => now('Asia/Kolkata'),
                     ]);
                     
+                    // Use user_id from cookie data (session is cleared when PayU redirects)
+                    $userId = $cookieData['user_id'] ?? $paymentTransaction->user_id;
                     ApplicationStatusHistory::log(
                         $application->id,
                         null,
                         $newStatus,
                         'user',
-                        $cookieData['user_id'],
+                        $userId,
                         'IX application submitted with payment'
                     );
                     
                     // Generate application PDF
                     try {
+                        // Use user_id from cookie data (session is cleared when PayU redirects)
+                        $userId = $cookieData['user_id'] ?? $paymentTransaction->user_id;
                         $applicationPdf = $this->generateApplicationPdf($application);
-                        $pdfPath = 'applications/'.$cookieData['user_id'].'/ix/'.$application->application_id.'_application.pdf';
+                        $pdfPath = 'applications/'.$userId.'/ix/'.$application->application_id.'_application.pdf';
                         Storage::disk('public')->put($pdfPath, $applicationPdf->output());
                         $applicationData = $application->application_data;
                         $applicationData['pdfs'] = ['application_pdf' => $pdfPath];
@@ -1354,11 +1368,14 @@ class IxApplicationController extends Controller
                         ]);
                         $application->update(['application_data' => $applicationData]);
                         
-                        // Send email
+                        // Send email - use user from application relationship or cookie data
                         try {
-                            Mail::to($application->user->email)->send(
-                                new \App\Mail\IxApplicationSubmittedMail($application)
-                            );
+                            $userEmail = $application->user->email ?? ($userSessionData['user_email'] ?? null);
+                            if ($userEmail) {
+                                Mail::to($userEmail)->send(
+                                    new \App\Mail\IxApplicationSubmittedMail($application)
+                                );
+                            }
                         } catch (Exception $e) {
                             Log::error('Error sending IX application submitted email: '.$e->getMessage());
                         }
@@ -1417,31 +1434,41 @@ class IxApplicationController extends Controller
         $response = array_merge($request->query(), $request->post());
         
         try {
-            // Restore user session from cookie FIRST (session gets cleared when PayU page opens)
-            if ($request->hasCookie('user_session_data')) {
-                $userSessionData = json_decode($request->cookie('user_session_data'), true);
-                if ($userSessionData && isset($userSessionData['user_id'])) {
-                    $user = Registration::find($userSessionData['user_id']);
-                    if ($user) {
-                        // Restore session
-                        session(['user_id' => $userSessionData['user_id']]);
-                        session(['user_email' => $userSessionData['user_email'] ?? $user->email]);
-                        session(['user_name' => $userSessionData['user_name'] ?? $user->fullname]);
-                        session(['user_registration_id' => $userSessionData['user_registration_id'] ?? $user->registrationid]);
-                        Log::info('PayU Failure - User session restored from cookie', [
-                            'user_id' => $userSessionData['user_id'],
-                        ]);
-                    }
-                }
-            }
-
-            // Try to get payment details from cookie
+            // Get all data from cookies FIRST (session is cleared when PayU redirects)
+            // Cookies are the source of truth for payment callbacks
             $cookieData = null;
+            $userSessionData = null;
+            
+            // Get payment transaction data from cookie
             if ($request->hasCookie('pending_payment_data')) {
                 $cookieData = json_decode($request->cookie('pending_payment_data'), true);
                 Log::info('PayU Failure - Found payment data in cookie', [
                     'cookie_data' => $cookieData,
                 ]);
+            }
+            
+            // Get user session data from cookie
+            if ($request->hasCookie('user_session_data')) {
+                $userSessionData = json_decode($request->cookie('user_session_data'), true);
+                Log::info('PayU Failure - Found user session data in cookie', [
+                    'has_user_id' => isset($userSessionData['user_id']),
+                ]);
+            }
+            
+            // Restore user session from cookie (for authentication/redirect purposes only)
+            // All data lookups should use cookies, not session
+            if ($userSessionData && isset($userSessionData['user_id'])) {
+                $user = Registration::find($userSessionData['user_id']);
+                if ($user) {
+                    // Restore session only for authentication (so user can access protected routes)
+                    session(['user_id' => $userSessionData['user_id']]);
+                    session(['user_email' => $userSessionData['user_email'] ?? $user->email]);
+                    session(['user_name' => $userSessionData['user_name'] ?? $user->fullname]);
+                    session(['user_registration_id' => $userSessionData['user_registration_id'] ?? $user->registrationid]);
+                    Log::info('PayU Failure - User session restored from cookie for authentication', [
+                        'user_id' => $userSessionData['user_id'],
+                    ]);
+                }
             }
             // Log the failure response for debugging
             Log::info('PayU Failure Callback Received', [
@@ -1483,9 +1510,10 @@ class IxApplicationController extends Controller
                 $paymentTransaction = PaymentTransaction::where('transaction_id', $transactionId)->first();
             }
             
-            // If no parameters and no transaction found, try to find recent pending transaction
+            // If no parameters and no transaction found, try to find recent pending transaction using cookie data
             if (! $paymentTransaction && empty($response)) {
-                $userId = session('user_id') ?? ($cookieData['user_id'] ?? null);
+                // Use cookie data first, not session (session is cleared when PayU redirects)
+                $userId = $cookieData['user_id'] ?? null;
                 if ($userId) {
                     $recentTransaction = PaymentTransaction::where('user_id', $userId)
                         ->where('payment_status', 'pending')
@@ -1496,9 +1524,14 @@ class IxApplicationController extends Controller
                         Log::info('PayU Failure - Found recent pending transaction without parameters', [
                             'transaction_id' => $recentTransaction->transaction_id,
                             'payment_transaction_id' => $recentTransaction->id,
+                            'user_id_from_cookie' => $userId,
                         ]);
                         $paymentTransaction = $recentTransaction;
                     }
+                } else {
+                    Log::warning('PayU Failure - No user_id found in cookie data to lookup recent transaction', [
+                        'cookie_data' => $cookieData,
+                    ]);
                 }
             }
 
