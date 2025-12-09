@@ -66,10 +66,16 @@
     </div>
     
     <script>
+        @if(isset($autoRefresh) && $autoRefresh)
+        // Auto-refresh like view-logs page - refresh immediately to establish session
+        // This will trigger the second visit where session count = 1
+        location.reload();
+        @else
         // Redirect to the same URL after a brief delay to establish session
         setTimeout(function() {
             window.location.href = '{{ $redirectUrl }}';
         }, 500); // Small delay to ensure session is set
+        @endif
     </script>
 </body>
 </html>

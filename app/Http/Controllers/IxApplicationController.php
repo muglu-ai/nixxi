@@ -1108,17 +1108,45 @@ class IxApplicationController extends Controller
      */
     public function paymentSuccess(Request $request): RedirectResponse|Response
     {
-        // NO SESSION CHECKS - Process payment directly using cookies only
+        // Auto-refresh mechanism: Check session count
+        // If session count doesn't exist or is 0, set it to 1 and refresh the page
+        // If session count = 1, skip refresh and process payment
+        $redirectCount = session('payment_redirect_count', 0);
+        
+        if ($redirectCount === 0) {
+            // First visit: Set redirect count to 1 and auto-refresh the page
+            session(['payment_redirect_count' => 1]);
+            session()->save();
+            
+            Log::info('PayU Success - First visit, setting session count and auto-refreshing', [
+                'current_url' => $request->fullUrl(),
+            ]);
+            
+            // Show "fetching payment details" message and auto-refresh like view-logs
+            return response()->view('user.applications.ix.payment-processing', [
+                'message' => 'Fetching payment details...',
+                'submessage' => 'Please do not refresh or go back. You will be redirected to your application automatically.',
+                'redirectUrl' => $request->fullUrl(), // Redirect to same URL
+                'autoRefresh' => true, // Enable auto-refresh
+            ]);
+        }
+        
+        // Second visit (redirect_count = 1): Process payment and redirect to final destination
+        // Clear the redirect count so it doesn't interfere with future requests
+        session()->forget('payment_redirect_count');
+        session()->save();
+        
         // PayU may send data via POST or GET (query string)
         $response = array_merge($request->query(), $request->post());
         
-        Log::info('=== PayU Success Callback Method Called ===', [
+        Log::info('=== PayU Success Callback Method Called (Second Visit) ===', [
             'method' => $request->method(),
             'url' => $request->fullUrl(),
             'has_query' => !empty($request->query()),
             'has_post' => !empty($request->post()),
             'has_cookie' => $request->hasCookie('pending_payment_data'),
             'has_user_session_cookie' => $request->hasCookie('user_session_data'),
+            'redirect_count' => $redirectCount,
         ]);
         
         try {
@@ -1419,7 +1447,11 @@ class IxApplicationController extends Controller
                 'trace' => $e->getTraceAsString(),
             ]);
             
-            // Direct redirect to login-from-cookie route on error (NO SESSION OPERATIONS)
+            // Clear redirect count on error
+            session()->forget('payment_redirect_count');
+            session()->save();
+            
+            // Direct redirect to login-from-cookie route on error
             $errorMessage = 'An error occurred while processing payment. Please contact support.';
             $loginUrl = route('user.login-from-cookie', [
                 'redirect' => route('user.applications.index'),
@@ -1438,9 +1470,37 @@ class IxApplicationController extends Controller
      */
     public function paymentFailure(Request $request): RedirectResponse|Response
     {
+        // Auto-refresh mechanism: Check session count
+        // If session count doesn't exist or is 0, set it to 1 and refresh the page
+        // If session count = 1, skip refresh and process payment
+        $redirectCount = session('payment_redirect_count', 0);
+        
+        if ($redirectCount === 0) {
+            // First visit: Set redirect count to 1 and auto-refresh the page
+            session(['payment_redirect_count' => 1]);
+            session()->save();
+            
+            Log::info('PayU Failure - First visit, setting session count and auto-refreshing', [
+                'current_url' => $request->fullUrl(),
+            ]);
+            
+            // Show "fetching payment details" message and auto-refresh like view-logs
+            return response()->view('user.applications.ix.payment-processing', [
+                'message' => 'Processing payment response...',
+                'submessage' => 'Please do not refresh or go back. You will be redirected automatically.',
+                'redirectUrl' => $request->fullUrl(), // Redirect to same URL
+                'autoRefresh' => true, // Enable auto-refresh
+            ]);
+        }
+        
+        // Second visit (redirect_count = 1): Process payment failure and redirect to final destination
+        // Clear the redirect count so it doesn't interfere with future requests
+        session()->forget('payment_redirect_count');
+        session()->save();
+        
         // Log immediately when this method is called - even if empty
         // This route is accessible without authentication since PayU redirects here
-        Log::info('=== PayU Failure Callback Method Called ===', [
+        Log::info('=== PayU Failure Callback Method Called (Second Visit) ===', [
             'method' => $request->method(),
             'url' => $request->fullUrl(),
             'has_query' => !empty($request->query()),
@@ -1454,6 +1514,7 @@ class IxApplicationController extends Controller
             'has_user_session' => !empty(session('user_id')),
             'has_cookie' => $request->hasCookie('pending_payment_data'),
             'has_user_session_cookie' => $request->hasCookie('user_session_data'),
+            'redirect_count' => $redirectCount,
         ]);
         
         // PayU may send data via POST or GET (query string)
@@ -1666,7 +1727,11 @@ class IxApplicationController extends Controller
             ]);
         }
 
-        // NO SESSION USED - Direct redirect to login-from-cookie route which will set session and redirect
+        // Clear redirect count before final redirect
+        session()->forget('payment_redirect_count');
+        session()->save();
+        
+        // Direct redirect to login-from-cookie route which will set session and redirect
         $errorMessage = 'Payment failed. Please try again or contact support if the amount was deducted.';
         $loginUrl = route('user.login-from-cookie', [
             'redirect' => route('user.applications.ix.create'),
