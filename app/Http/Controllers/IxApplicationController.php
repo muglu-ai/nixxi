@@ -1147,19 +1147,25 @@ class IxApplicationController extends Controller
             if ($userSessionData && isset($userSessionData['user_id'])) {
                 $user = Registration::find($userSessionData['user_id']);
                 if ($user) {
+                    // Start session if not already started
+                    if (!session()->isStarted()) {
+                        session()->start();
+                    }
+                    
                     // Restore session only for authentication (so user can access protected routes)
+                    // Don't regenerate - just restore and save to ensure cookie is set
                     session(['user_id' => $userSessionData['user_id']]);
                     session(['user_email' => $userSessionData['user_email'] ?? $user->email]);
                     session(['user_name' => $userSessionData['user_name'] ?? $user->fullname]);
                     session(['user_registration_id' => $userSessionData['user_registration_id'] ?? $user->registrationid]);
                     
-                    // Regenerate session ID for security and ensure it's saved
-                    session()->regenerate();
+                    // Save session immediately to ensure it's committed
                     session()->save();
                     
                     Log::info('PayU Success - User session restored from cookie for authentication', [
                         'user_id' => $userSessionData['user_id'],
                         'session_id' => session()->getId(),
+                        'session_started' => session()->isStarted(),
                     ]);
                 }
             }
@@ -1394,11 +1400,39 @@ class IxApplicationController extends Controller
             // Ensure session is saved before redirect
             session()->save();
             
+            // Get session cookie name and value to manually add to redirect response
+            $sessionName = config('session.cookie');
+            $sessionId = session()->getId();
+            $sessionLifetime = config('session.lifetime', 120);
+            $sessionPath = config('session.path', '/');
+            $sessionDomain = config('session.domain');
+            $sessionSecure = config('session.secure', false);
+            $sessionHttpOnly = config('session.http_only', true);
+            $sessionSameSite = config('session.same_site', 'lax');
+            
             // Delete cookies and redirect to applications page
-            return redirect()->route('user.applications.index')
+            // Manually add session cookie to ensure it's included in redirect response
+            $redirect = redirect()->route('user.applications.index')
                 ->with('success', 'Payment successful! Your application has been submitted. Transaction ID: ' . $paymentTransaction->transaction_id)
                 ->cookie('pending_payment_data', '', -1, '/', null, true, false, false, 'lax') // Delete cookie
                 ->cookie('user_session_data', '', -1, '/', null, true, false, false, 'lax'); // Delete user session cookie
+            
+            // Manually add session cookie to redirect response
+            if ($sessionId) {
+                $redirect->cookie(
+                    $sessionName,
+                    $sessionId,
+                    $sessionLifetime,
+                    $sessionPath,
+                    $sessionDomain,
+                    $sessionSecure,
+                    $sessionHttpOnly,
+                    false,
+                    $sessionSameSite
+                );
+            }
+            
+            return $redirect;
             
         } catch (\Exception $e) {
             Log::error('PayU Success Callback Exception', [
@@ -1474,19 +1508,25 @@ class IxApplicationController extends Controller
             if ($userSessionData && isset($userSessionData['user_id'])) {
                 $user = Registration::find($userSessionData['user_id']);
                 if ($user) {
+                    // Start session if not already started
+                    if (!session()->isStarted()) {
+                        session()->start();
+                    }
+                    
                     // Restore session only for authentication (so user can access protected routes)
+                    // Don't regenerate - just restore and save to ensure cookie is set
                     session(['user_id' => $userSessionData['user_id']]);
                     session(['user_email' => $userSessionData['user_email'] ?? $user->email]);
                     session(['user_name' => $userSessionData['user_name'] ?? $user->fullname]);
                     session(['user_registration_id' => $userSessionData['user_registration_id'] ?? $user->registrationid]);
                     
-                    // Regenerate session ID for security and ensure it's saved
-                    session()->regenerate();
+                    // Save session immediately to ensure it's committed
                     session()->save();
                     
                     Log::info('PayU Failure - User session restored from cookie for authentication', [
                         'user_id' => $userSessionData['user_id'],
                         'session_id' => session()->getId(),
+                        'session_started' => session()->isStarted(),
                     ]);
                 }
             }
