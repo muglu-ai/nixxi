@@ -1152,8 +1152,14 @@ class IxApplicationController extends Controller
                     session(['user_email' => $userSessionData['user_email'] ?? $user->email]);
                     session(['user_name' => $userSessionData['user_name'] ?? $user->fullname]);
                     session(['user_registration_id' => $userSessionData['user_registration_id'] ?? $user->registrationid]);
+                    
+                    // Regenerate session ID for security and ensure it's saved
+                    session()->regenerate();
+                    session()->save();
+                    
                     Log::info('PayU Success - User session restored from cookie for authentication', [
                         'user_id' => $userSessionData['user_id'],
+                        'session_id' => session()->getId(),
                     ]);
                 }
             }
@@ -1385,6 +1391,9 @@ class IxApplicationController extends Controller
                 }
             }
             
+            // Ensure session is saved before redirect
+            session()->save();
+            
             // Delete cookies and redirect to applications page
             return redirect()->route('user.applications.index')
                 ->with('success', 'Payment successful! Your application has been submitted. Transaction ID: ' . $paymentTransaction->transaction_id)
@@ -1396,6 +1405,11 @@ class IxApplicationController extends Controller
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
             ]);
+            
+            // Ensure session is saved before redirect (if it was restored)
+            if ($userSessionData && isset($userSessionData['user_id'])) {
+                session()->save();
+            }
             
             // Delete cookies on error too
             return redirect()->route('user.applications.index')
@@ -1465,8 +1479,14 @@ class IxApplicationController extends Controller
                     session(['user_email' => $userSessionData['user_email'] ?? $user->email]);
                     session(['user_name' => $userSessionData['user_name'] ?? $user->fullname]);
                     session(['user_registration_id' => $userSessionData['user_registration_id'] ?? $user->registrationid]);
+                    
+                    // Regenerate session ID for security and ensure it's saved
+                    session()->regenerate();
+                    session()->save();
+                    
                     Log::info('PayU Failure - User session restored from cookie for authentication', [
                         'user_id' => $userSessionData['user_id'],
+                        'session_id' => session()->getId(),
                     ]);
                 }
             }
@@ -1650,6 +1670,11 @@ class IxApplicationController extends Controller
                 'trace' => $e->getTraceAsString(),
                 'request_data' => $response,
             ]);
+        }
+
+        // Ensure session is saved before redirect (if it was restored)
+        if (isset($userSessionData) && isset($userSessionData['user_id'])) {
+            session()->save();
         }
 
         // Delete cookies and redirect
