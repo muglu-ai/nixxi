@@ -1142,33 +1142,8 @@ class IxApplicationController extends Controller
                 ]);
             }
             
-            // Restore user session from cookie (for authentication/redirect purposes only)
-            // All data lookups should use cookies, not session
-            if ($userSessionData && isset($userSessionData['user_id'])) {
-                $user = Registration::find($userSessionData['user_id']);
-                if ($user) {
-                    // Start session if not already started
-                    if (!session()->isStarted()) {
-                        session()->start();
-                    }
-                    
-                    // Restore session only for authentication (so user can access protected routes)
-                    // Don't regenerate - just restore and save to ensure cookie is set
-                    session(['user_id' => $userSessionData['user_id']]);
-                    session(['user_email' => $userSessionData['user_email'] ?? $user->email]);
-                    session(['user_name' => $userSessionData['user_name'] ?? $user->fullname]);
-                    session(['user_registration_id' => $userSessionData['user_registration_id'] ?? $user->registrationid]);
-                    
-                    // Save session immediately to ensure it's committed
-                    session()->save();
-                    
-                    Log::info('PayU Success - User session restored from cookie for authentication', [
-                        'user_id' => $userSessionData['user_id'],
-                        'session_id' => session()->getId(),
-                        'session_started' => session()->isStarted(),
-                    ]);
-                }
-            }
+            // NO SESSION RESTORATION HERE - We'll redirect to login-from-cookie route
+            // All processing uses cookies only, no session dependency
             
             // If no cookie data, try to get from PayU response
             if (! $cookieData) {
@@ -1397,22 +1372,21 @@ class IxApplicationController extends Controller
                 }
             }
             
-            // Set success message in session for display on redirected page
+            // NO SESSION USED - Redirect to login-from-cookie route which will set session and redirect
+            // Pass success message and transaction ID as query parameters
             $successMessage = 'Payment successful! Your application has been submitted. Transaction ID: ' . $paymentTransaction->transaction_id;
-            session()->flash('success', $successMessage);
+            $loginUrl = route('user.login-from-cookie', [
+                'redirect' => route('user.applications.index'),
+                'success' => urlencode($successMessage),
+            ]);
             
-            // Ensure session is saved and committed to storage
-            session()->save();
-            
-            // Use a view with JavaScript redirect to ensure session cookie is set before redirect
-            // This gives the browser time to receive and set the session cookie
+            // Use a view with JavaScript redirect to login-from-cookie route
             return response()->view('user.applications.ix.payment-redirect-success', [
-                'redirectUrl' => route('user.applications.index'),
+                'redirectUrl' => $loginUrl,
                 'message' => $successMessage,
                 'transactionId' => $paymentTransaction->transaction_id,
             ])
-                ->cookie('pending_payment_data', '', -1, '/', null, true, false, false, 'lax') // Delete cookie
-                ->cookie('user_session_data', '', -1, '/', null, true, false, false, 'lax'); // Delete user session cookie
+                ->cookie('pending_payment_data', '', -1, '/', null, true, false, false, 'lax'); // Delete payment cookie, keep user_session_data for login
             
         } catch (\Exception $e) {
             Log::error('PayU Success Callback Exception', [
@@ -1420,16 +1394,18 @@ class IxApplicationController extends Controller
                 'trace' => $e->getTraceAsString(),
             ]);
             
-            // Ensure session is saved before redirect (if it was restored)
-            if ($userSessionData && isset($userSessionData['user_id'])) {
-                session()->save();
-            }
+            // NO SESSION USED - Redirect to login-from-cookie route on error
+            $errorMessage = 'An error occurred while processing payment. Please contact support.';
+            $loginUrl = route('user.login-from-cookie', [
+                'redirect' => route('user.applications.index'),
+                'error' => urlencode($errorMessage),
+            ]);
             
-            // Delete cookies on error too
-            return redirect()->route('user.applications.index')
-                ->with('error', 'An error occurred while processing payment. Please contact support.')
-                ->cookie('pending_payment_data', '', -1, '/', null, true, false, false, 'lax') // Delete cookie
-                ->cookie('user_session_data', '', -1, '/', null, true, false, false, 'lax'); // Delete user session cookie
+            return response()->view('user.applications.ix.payment-redirect-failure', [
+                'redirectUrl' => $loginUrl,
+                'message' => $errorMessage,
+            ])
+                ->cookie('pending_payment_data', '', -1, '/', null, true, false, false, 'lax'); // Delete payment cookie, keep user_session_data for login
         }
     }
 
@@ -1483,33 +1459,8 @@ class IxApplicationController extends Controller
                 ]);
             }
             
-            // Restore user session from cookie (for authentication/redirect purposes only)
-            // All data lookups should use cookies, not session
-            if ($userSessionData && isset($userSessionData['user_id'])) {
-                $user = Registration::find($userSessionData['user_id']);
-                if ($user) {
-                    // Start session if not already started
-                    if (!session()->isStarted()) {
-                        session()->start();
-                    }
-                    
-                    // Restore session only for authentication (so user can access protected routes)
-                    // Don't regenerate - just restore and save to ensure cookie is set
-                    session(['user_id' => $userSessionData['user_id']]);
-                    session(['user_email' => $userSessionData['user_email'] ?? $user->email]);
-                    session(['user_name' => $userSessionData['user_name'] ?? $user->fullname]);
-                    session(['user_registration_id' => $userSessionData['user_registration_id'] ?? $user->registrationid]);
-                    
-                    // Save session immediately to ensure it's committed
-                    session()->save();
-                    
-                    Log::info('PayU Failure - User session restored from cookie for authentication', [
-                        'user_id' => $userSessionData['user_id'],
-                        'session_id' => session()->getId(),
-                        'session_started' => session()->isStarted(),
-                    ]);
-                }
-            }
+            // NO SESSION RESTORATION HERE - We'll redirect to login-from-cookie route
+            // All processing uses cookies only, no session dependency
             // Log the failure response for debugging
             Log::info('PayU Failure Callback Received', [
                 'all_params' => $response,
@@ -1692,24 +1643,19 @@ class IxApplicationController extends Controller
             ]);
         }
 
-        // Set error message in session for display on redirected page
+        // NO SESSION USED - Redirect to login-from-cookie route which will set session and redirect
         $errorMessage = 'Payment failed. Please try again or contact support if the amount was deducted.';
-        if (isset($userSessionData) && isset($userSessionData['user_id'])) {
-            session()->flash('error', $errorMessage);
-        }
-        
-        // Ensure session is saved and committed to storage
-        if (isset($userSessionData) && isset($userSessionData['user_id'])) {
-            session()->save();
-        }
+        $loginUrl = route('user.login-from-cookie', [
+            'redirect' => route('user.applications.ix.create'),
+            'error' => urlencode($errorMessage),
+        ]);
 
-        // Use a view with JavaScript redirect to ensure session cookie is set before redirect
+        // Use a view with JavaScript redirect to login-from-cookie route
         return response()->view('user.applications.ix.payment-redirect-failure', [
-            'redirectUrl' => route('user.applications.ix.create'),
+            'redirectUrl' => $loginUrl,
             'message' => $errorMessage,
         ])
-            ->cookie('pending_payment_data', '', -1, '/', null, true, false, false, 'lax') // Delete cookie
-            ->cookie('user_session_data', '', -1, '/', null, true, false, false, 'lax'); // Delete user session cookie
+            ->cookie('pending_payment_data', '', -1, '/', null, true, false, false, 'lax'); // Delete payment cookie, keep user_session_data for login
     }
 
     /**

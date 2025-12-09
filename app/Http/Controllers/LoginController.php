@@ -251,6 +251,77 @@ class LoginController extends Controller
     }
 
     /**
+     * Login user from cookie (for payment callbacks).
+     * This route is used after PayU redirects back - session is cleared, so we restore from cookie.
+     */
+    public function loginFromCookie(Request $request)
+    {
+        try {
+            // Get user session data from cookie
+            if (! $request->hasCookie('user_session_data')) {
+                Log::warning('Login from cookie - No user_session_data cookie found');
+                return redirect()->route('login.index')
+                    ->with('error', 'Session expired. Please login again.');
+            }
+
+            $userSessionData = json_decode($request->cookie('user_session_data'), true);
+            
+            if (! $userSessionData || ! isset($userSessionData['user_id'])) {
+                Log::warning('Login from cookie - Invalid user_session_data cookie');
+                return redirect()->route('login.index')
+                    ->with('error', 'Invalid session data. Please login again.');
+            }
+
+            $user = Registration::find($userSessionData['user_id']);
+            
+            if (! $user) {
+                Log::error('Login from cookie - User not found', [
+                    'user_id' => $userSessionData['user_id'],
+                ]);
+                return redirect()->route('login.index')
+                    ->with('error', 'User not found. Please login again.');
+            }
+
+            // Set user session
+            session(['user_id' => $user->id]);
+            session(['user_email' => $user->email]);
+            session(['user_name' => $user->fullname]);
+            session(['user_registration_id' => $user->registrationid]);
+
+            // Save session
+            session()->save();
+
+            Log::info('Login from cookie - User session restored', [
+                'user_id' => $user->id,
+                'session_id' => session()->getId(),
+            ]);
+
+            // Get redirect URL and messages from query parameters
+            $redirectUrl = $request->query('redirect', route('user.applications.index'));
+            $successMessage = $request->query('success');
+            $errorMessage = $request->query('error');
+            
+            // Build redirect with message if provided
+            $redirect = redirect($redirectUrl);
+            if ($successMessage) {
+                $redirect->with('success', urldecode($successMessage));
+            }
+            if ($errorMessage) {
+                $redirect->with('error', urldecode($errorMessage));
+            }
+            
+            // Delete the cookie after successful login
+            return $redirect->cookie('user_session_data', '', -1, '/', null, true, false, false, 'lax');
+                
+        } catch (Exception $e) {
+            Log::error('Error logging in from cookie: '.$e->getMessage());
+            
+            return redirect()->route('login.index')
+                ->with('error', 'An error occurred. Please login again.');
+        }
+    }
+
+    /**
      * Logout user.
      */
     public function logout()

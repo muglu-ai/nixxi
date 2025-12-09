@@ -302,6 +302,9 @@ Route::prefix('user')->name('user.')->middleware(['user.auth'])->group(function 
     // Add more User routes here
 });
 
+// Cookie-based login route (for payment callbacks - no auth required)
+Route::get('/user/login-from-cookie', [LoginController::class, 'loginFromCookie'])->name('user.login-from-cookie');
+
 // PayU Callback URLs (MUST be outside auth middleware - PayU redirects user here)
 // These routes are accessible without authentication since PayU redirects the user's browser
 Route::any('/user/applications/ix/payment-success', [IxApplicationController::class, 'paymentSuccess'])->name('user.applications.ix.payment-success');
