@@ -282,18 +282,23 @@ class LoginController extends Controller
                     ->with('error', 'User not found. Please login again.');
             }
 
-            // Set user session
-            session(['user_id' => $user->id]);
-            session(['user_email' => $user->email]);
-            session(['user_name' => $user->fullname]);
-            session(['user_registration_id' => $user->registrationid]);
+            // Set user session - use put() to ensure it's stored
+            $request->session()->put('user_id', $user->id);
+            $request->session()->put('user_email', $user->email);
+            $request->session()->put('user_name', $user->fullname);
+            $request->session()->put('user_registration_id', $user->registrationid);
 
-            // Save session
-            session()->save();
-
+            // Save and commit session immediately
+            $request->session()->save();
+            
+            // Verify session is set
+            $sessionUserId = $request->session()->get('user_id');
+            
             Log::info('Login from cookie - User session restored', [
                 'user_id' => $user->id,
-                'session_id' => session()->getId(),
+                'session_id' => $request->session()->getId(),
+                'session_user_id' => $sessionUserId,
+                'session_saved' => true,
             ]);
 
             // Get redirect URL and messages from query parameters
@@ -309,6 +314,9 @@ class LoginController extends Controller
             if ($errorMessage) {
                 $redirect->with('error', urldecode($errorMessage));
             }
+            
+            // Ensure session is saved in redirect response
+            $request->session()->save();
             
             // Delete the cookie after successful login
             return $redirect->cookie('user_session_data', '', -1, '/', null, true, false, false, 'lax');

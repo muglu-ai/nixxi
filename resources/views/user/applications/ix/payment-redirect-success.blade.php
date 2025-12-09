@@ -79,10 +79,9 @@
     </div>
     
     <script>
-        // Ensure session is set, then redirect after a short delay
-        setTimeout(function() {
-            window.location.href = '{{ $redirectUrl }}';
-        }, 1500);
+        // Redirect immediately to login-from-cookie route which will set session
+        // No delay needed - the login route will handle session setup
+        window.location.href = '{{ $redirectUrl }}';
     </script>
 </body>
 </html>

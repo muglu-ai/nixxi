@@ -1106,7 +1106,7 @@ class IxApplicationController extends Controller
     /**
      * Handle payment success callback from PayU.
      */
-    public function paymentSuccess(Request $request): RedirectResponse
+    public function paymentSuccess(Request $request): RedirectResponse|Response
     {
         // PayU may send data via POST or GET (query string)
         $response = array_merge($request->query(), $request->post());
@@ -1192,8 +1192,37 @@ class IxApplicationController extends Controller
                     'payment_transaction_id' => $cookieData['payment_transaction_id'],
                 ]);
                 
-                return redirect()->route('user.applications.index')
-                    ->with('error', 'Payment transaction not found. Please contact support.');
+                // Redirect to login-from-cookie route
+                $loginUrl = route('user.login-from-cookie', [
+                    'redirect' => route('user.applications.index'),
+                    'error' => urlencode('Payment transaction not found. Please contact support.'),
+                ]);
+                
+                return response()->view('user.applications.ix.payment-redirect-failure', [
+                    'redirectUrl' => $loginUrl,
+                    'message' => 'Payment transaction not found. Please contact support.',
+                ]);
+            }
+            
+            // If payment is already processed, redirect immediately
+            if ($paymentTransaction->payment_status === 'success') {
+                Log::info('PayU Success - Payment already processed, redirecting to login', [
+                    'transaction_id' => $paymentTransaction->transaction_id,
+                    'payment_status' => $paymentTransaction->payment_status,
+                ]);
+                
+                $successMessage = 'Payment was already processed. Transaction ID: ' . $paymentTransaction->transaction_id;
+                $loginUrl = route('user.login-from-cookie', [
+                    'redirect' => route('user.applications.index'),
+                    'success' => urlencode($successMessage),
+                ]);
+                
+                return response()->view('user.applications.ix.payment-redirect-success', [
+                    'redirectUrl' => $loginUrl,
+                    'message' => $successMessage,
+                    'transactionId' => $paymentTransaction->transaction_id,
+                ])
+                    ->cookie('pending_payment_data', '', -1, '/', null, true, false, false, 'lax');
             }
             
             // Extract all PayU response fields
@@ -1413,7 +1442,7 @@ class IxApplicationController extends Controller
     /**
      * Handle payment failure callback from PayU.
      */
-    public function paymentFailure(Request $request): RedirectResponse
+    public function paymentFailure(Request $request): RedirectResponse|Response
     {
         // Log immediately when this method is called - even if empty
         // This route is accessible without authentication since PayU redirects here
