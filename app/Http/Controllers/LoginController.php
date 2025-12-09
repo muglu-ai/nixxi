@@ -282,31 +282,47 @@ class LoginController extends Controller
                     ->with('error', 'User not found. Please login again.');
             }
 
-            // Set user session - use put() to ensure it's stored
+            // Ensure session is started
+            if (! $request->session()->isStarted()) {
+                $request->session()->start();
+            }
+
+            // Set user session data
             $request->session()->put('user_id', $user->id);
             $request->session()->put('user_email', $user->email);
             $request->session()->put('user_name', $user->fullname);
             $request->session()->put('user_registration_id', $user->registrationid);
 
-            // Save and commit session immediately
-            $request->session()->save();
-            
-            // Verify session is set
-            $sessionUserId = $request->session()->get('user_id');
-            
-            Log::info('Login from cookie - User session restored', [
-                'user_id' => $user->id,
-                'session_id' => $request->session()->getId(),
-                'session_user_id' => $sessionUserId,
-                'session_saved' => true,
-            ]);
-
-            // Get redirect URL and messages from query parameters
+            // Get redirect URL and messages from query parameters BEFORE saving session
             $redirectUrl = $request->query('redirect', route('user.applications.index'));
             $successMessage = $request->query('success');
             $errorMessage = $request->query('error');
             
-            // Build redirect with message if provided
+            // Save session to storage - this writes to database/file
+            $request->session()->save();
+            
+            // Get session ID and configuration after saving
+            $sessionId = $request->session()->getId();
+            $sessionName = config('session.cookie');
+            $sessionLifetime = config('session.lifetime', 120) * 60; // Convert to seconds
+            $sessionPath = config('session.path', '/');
+            $sessionDomain = config('session.domain');
+            $sessionSecure = config('session.secure', false);
+            $sessionHttpOnly = config('session.http_only', true);
+            $sessionSameSite = config('session.same_site', 'lax');
+            
+            Log::info('Login from cookie - Session saved before redirect', [
+                'user_id' => $user->id,
+                'session_id' => $sessionId,
+                'session_name' => $sessionName,
+                'redirect_url' => $redirectUrl,
+                'session_data' => [
+                    'user_id' => $request->session()->get('user_id'),
+                    'user_email' => $request->session()->get('user_email'),
+                ],
+            ]);
+            
+            // Build redirect response with flash messages
             $redirect = redirect($redirectUrl);
             if ($successMessage) {
                 $redirect->with('success', urldecode($successMessage));
@@ -315,10 +331,21 @@ class LoginController extends Controller
                 $redirect->with('error', urldecode($errorMessage));
             }
             
-            // Ensure session is saved in redirect response
-            $request->session()->save();
+            // Manually add session cookie to redirect response
+            // This ensures the session cookie is sent with the redirect
+            $redirect->cookie(
+                $sessionName,
+                $sessionId,
+                $sessionLifetime,
+                $sessionPath,
+                $sessionDomain,
+                $sessionSecure,
+                $sessionHttpOnly,
+                false, // raw
+                $sessionSameSite
+            );
             
-            // Delete the cookie after successful login
+            // Delete the user_session_data cookie after successful login
             return $redirect->cookie('user_session_data', '', -1, '/', null, true, false, false, 'lax');
                 
         } catch (Exception $e) {

@@ -1192,16 +1192,13 @@ class IxApplicationController extends Controller
                     'payment_transaction_id' => $cookieData['payment_transaction_id'],
                 ]);
                 
-                // Redirect to login-from-cookie route
+                // Direct redirect to login-from-cookie route
                 $loginUrl = route('user.login-from-cookie', [
                     'redirect' => route('user.applications.index'),
                     'error' => urlencode('Payment transaction not found. Please contact support.'),
                 ]);
                 
-                return response()->view('user.applications.ix.payment-redirect-failure', [
-                    'redirectUrl' => $loginUrl,
-                    'message' => 'Payment transaction not found. Please contact support.',
-                ]);
+                return redirect($loginUrl);
             }
             
             // If payment is already processed, redirect immediately
@@ -1217,11 +1214,8 @@ class IxApplicationController extends Controller
                     'success' => urlencode($successMessage),
                 ]);
                 
-                return response()->view('user.applications.ix.payment-redirect-success', [
-                    'redirectUrl' => $loginUrl,
-                    'message' => $successMessage,
-                    'transactionId' => $paymentTransaction->transaction_id,
-                ])
+                // Direct redirect to login-from-cookie (no view, no delay)
+                return redirect($loginUrl)
                     ->cookie('pending_payment_data', '', -1, '/', null, true, false, false, 'lax');
             }
             
@@ -1401,7 +1395,7 @@ class IxApplicationController extends Controller
                 }
             }
             
-            // NO SESSION USED - Redirect to login-from-cookie route which will set session and redirect
+            // NO SESSION USED - Direct redirect to login-from-cookie route which will set session and redirect
             // Pass success message and transaction ID as query parameters
             $successMessage = 'Payment successful! Your application has been submitted. Transaction ID: ' . $paymentTransaction->transaction_id;
             $loginUrl = route('user.login-from-cookie', [
@@ -1409,12 +1403,9 @@ class IxApplicationController extends Controller
                 'success' => urlencode($successMessage),
             ]);
             
-            // Use a view with JavaScript redirect to login-from-cookie route
-            return response()->view('user.applications.ix.payment-redirect-success', [
-                'redirectUrl' => $loginUrl,
-                'message' => $successMessage,
-                'transactionId' => $paymentTransaction->transaction_id,
-            ])
+            // Direct redirect to login-from-cookie (no view, no delay)
+            // This route will set session from cookie and redirect to final destination
+            return redirect($loginUrl)
                 ->cookie('pending_payment_data', '', -1, '/', null, true, false, false, 'lax'); // Delete payment cookie, keep user_session_data for login
             
         } catch (\Exception $e) {
@@ -1423,17 +1414,15 @@ class IxApplicationController extends Controller
                 'trace' => $e->getTraceAsString(),
             ]);
             
-            // NO SESSION USED - Redirect to login-from-cookie route on error
+            // NO SESSION USED - Direct redirect to login-from-cookie route on error
             $errorMessage = 'An error occurred while processing payment. Please contact support.';
             $loginUrl = route('user.login-from-cookie', [
                 'redirect' => route('user.applications.index'),
                 'error' => urlencode($errorMessage),
             ]);
             
-            return response()->view('user.applications.ix.payment-redirect-failure', [
-                'redirectUrl' => $loginUrl,
-                'message' => $errorMessage,
-            ])
+            // Direct redirect to login-from-cookie (no view, no delay)
+            return redirect($loginUrl)
                 ->cookie('pending_payment_data', '', -1, '/', null, true, false, false, 'lax'); // Delete payment cookie, keep user_session_data for login
         }
     }
@@ -1672,18 +1661,16 @@ class IxApplicationController extends Controller
             ]);
         }
 
-        // NO SESSION USED - Redirect to login-from-cookie route which will set session and redirect
+        // NO SESSION USED - Direct redirect to login-from-cookie route which will set session and redirect
         $errorMessage = 'Payment failed. Please try again or contact support if the amount was deducted.';
         $loginUrl = route('user.login-from-cookie', [
             'redirect' => route('user.applications.ix.create'),
             'error' => urlencode($errorMessage),
         ]);
 
-        // Use a view with JavaScript redirect to login-from-cookie route
-        return response()->view('user.applications.ix.payment-redirect-failure', [
-            'redirectUrl' => $loginUrl,
-            'message' => $errorMessage,
-        ])
+        // Direct redirect to login-from-cookie (no view, no delay)
+        // This route will set session from cookie and redirect to final destination
+        return redirect($loginUrl)
             ->cookie('pending_payment_data', '', -1, '/', null, true, false, false, 'lax'); // Delete payment cookie, keep user_session_data for login
     }
 
