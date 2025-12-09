@@ -1397,42 +1397,22 @@ class IxApplicationController extends Controller
                 }
             }
             
-            // Ensure session is saved before redirect
+            // Set success message in session for display on redirected page
+            $successMessage = 'Payment successful! Your application has been submitted. Transaction ID: ' . $paymentTransaction->transaction_id;
+            session()->flash('success', $successMessage);
+            
+            // Ensure session is saved and committed to storage
             session()->save();
             
-            // Get session cookie name and value to manually add to redirect response
-            $sessionName = config('session.cookie');
-            $sessionId = session()->getId();
-            $sessionLifetime = config('session.lifetime', 120);
-            $sessionPath = config('session.path', '/');
-            $sessionDomain = config('session.domain');
-            $sessionSecure = config('session.secure', false);
-            $sessionHttpOnly = config('session.http_only', true);
-            $sessionSameSite = config('session.same_site', 'lax');
-            
-            // Delete cookies and redirect to applications page
-            // Manually add session cookie to ensure it's included in redirect response
-            $redirect = redirect()->route('user.applications.index')
-                ->with('success', 'Payment successful! Your application has been submitted. Transaction ID: ' . $paymentTransaction->transaction_id)
+            // Use a view with JavaScript redirect to ensure session cookie is set before redirect
+            // This gives the browser time to receive and set the session cookie
+            return response()->view('user.applications.ix.payment-redirect-success', [
+                'redirectUrl' => route('user.applications.index'),
+                'message' => $successMessage,
+                'transactionId' => $paymentTransaction->transaction_id,
+            ])
                 ->cookie('pending_payment_data', '', -1, '/', null, true, false, false, 'lax') // Delete cookie
                 ->cookie('user_session_data', '', -1, '/', null, true, false, false, 'lax'); // Delete user session cookie
-            
-            // Manually add session cookie to redirect response
-            if ($sessionId) {
-                $redirect->cookie(
-                    $sessionName,
-                    $sessionId,
-                    $sessionLifetime,
-                    $sessionPath,
-                    $sessionDomain,
-                    $sessionSecure,
-                    $sessionHttpOnly,
-                    false,
-                    $sessionSameSite
-                );
-            }
-            
-            return $redirect;
             
         } catch (\Exception $e) {
             Log::error('PayU Success Callback Exception', [
@@ -1712,14 +1692,22 @@ class IxApplicationController extends Controller
             ]);
         }
 
-        // Ensure session is saved before redirect (if it was restored)
+        // Set error message in session for display on redirected page
+        $errorMessage = 'Payment failed. Please try again or contact support if the amount was deducted.';
+        if (isset($userSessionData) && isset($userSessionData['user_id'])) {
+            session()->flash('error', $errorMessage);
+        }
+        
+        // Ensure session is saved and committed to storage
         if (isset($userSessionData) && isset($userSessionData['user_id'])) {
             session()->save();
         }
 
-        // Delete cookies and redirect
-        return redirect()->route('user.applications.ix.create')
-            ->with('error', 'Payment failed. Please try again or contact support if the amount was deducted.')
+        // Use a view with JavaScript redirect to ensure session cookie is set before redirect
+        return response()->view('user.applications.ix.payment-redirect-failure', [
+            'redirectUrl' => route('user.applications.ix.create'),
+            'message' => $errorMessage,
+        ])
             ->cookie('pending_payment_data', '', -1, '/', null, true, false, false, 'lax') // Delete cookie
             ->cookie('user_session_data', '', -1, '/', null, true, false, false, 'lax'); // Delete user session cookie
     }
