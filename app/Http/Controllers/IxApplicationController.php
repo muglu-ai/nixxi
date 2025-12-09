@@ -18,6 +18,7 @@ use Exception;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
@@ -25,6 +26,91 @@ use Illuminate\View\View;
 
 class IxApplicationController extends Controller
 {
+    /**
+     * Extract all PayU response fields from request.
+     * This captures all parameters sent by PayU in their callback.
+     */
+    protected function extractPayuResponseFields(Request $request): array
+    {
+        // PayU may send data via POST or GET (query string)
+        $response = array_merge($request->query(), $request->post());
+        
+        // Extract all PayU response fields
+        $payuFields = [
+            // Payment identifiers
+            'mihpayid' => $request->input('mihpayid') ?? $request->input('payuMoneyId') ?? $request->input('payuid'),
+            'txnid' => $request->input('txnid'),
+            'key' => $request->input('key'),
+            
+            // Payment status
+            'status' => $request->input('status'),
+            'unmappedstatus' => $request->input('unmappedstatus'),
+            
+            // Payment details
+            'amount' => $request->input('amount'),
+            'productinfo' => $request->input('productinfo'),
+            'firstname' => $request->input('firstname'),
+            'lastname' => $request->input('lastname'),
+            'email' => $request->input('email'),
+            'phone' => $request->input('phone'),
+            
+            // Payment method details
+            'mode' => $request->input('mode'), // CC, DC, NB, UPI, etc.
+            'bankcode' => $request->input('bankcode'),
+            'bank_ref_num' => $request->input('bank_ref_num'),
+            'pg_type' => $request->input('pg_type'),
+            'cardnum' => $request->input('cardnum'), // Masked card number
+            'name_on_card' => $request->input('name_on_card'),
+            'card_type' => $request->input('card_type'),
+            'issuing_bank' => $request->input('issuing_bank'),
+            'card_category' => $request->input('card_category'),
+            
+            // Error details (for failed payments)
+            'error' => $request->input('error'),
+            'error_code' => $request->input('error_code'),
+            'error_Message' => $request->input('error_Message') ?? $request->input('error_message'),
+            
+            // Additional fields
+            'udf1' => $request->input('udf1'),
+            'udf2' => $request->input('udf2'),
+            'udf3' => $request->input('udf3'),
+            'udf4' => $request->input('udf4'),
+            'udf5' => $request->input('udf5'),
+            'hash' => $request->input('hash'),
+            'field1' => $request->input('field1'),
+            'field2' => $request->input('field2'),
+            'field3' => $request->input('field3'),
+            'field4' => $request->input('field4'),
+            'field5' => $request->input('field5'),
+            'field6' => $request->input('field6'),
+            'field7' => $request->input('field7'),
+            'field8' => $request->input('field8'),
+            'field9' => $request->input('field9'),
+            
+            // Additional payment gateway fields
+            'discount' => $request->input('discount'),
+            'net_amount_debit' => $request->input('net_amount_debit'),
+            'addedon' => $request->input('addedon'),
+            'payment_source' => $request->input('payment_source'),
+            'card_token' => $request->input('card_token'),
+            'offer_key' => $request->input('offer_key'),
+            'offer_type' => $request->input('offer_type'),
+            'offer_availed' => $request->input('offer_available'),
+            'failure_reason' => $request->input('failure_reason'),
+            'retry' => $request->input('retry'),
+        ];
+        
+        // Remove null values to keep response clean
+        $payuFields = array_filter($payuFields, function ($value) {
+            return $value !== null && $value !== '';
+        });
+        
+        // Also include the complete raw response for reference
+        $payuFields['raw_response'] = $response;
+        
+        return $payuFields;
+    }
+
     /**
      * Show IX application wizard.
      */
@@ -848,8 +934,8 @@ class IxApplicationController extends Controller
             'udf2' => (string) $paymentTransaction->id,
         ]);
 
-        // Store payment details in cookie for success callback
-        // Cookie will be read on success page and then deleted
+        // Store payment details and user session data in cookies for callback
+        // Session gets cleared when PayU page opens, so we save essential data in cookies
         $cookieData = [
             'payment_transaction_id' => $paymentTransaction->id,
             'transaction_id' => $transactionId,
@@ -858,14 +944,23 @@ class IxApplicationController extends Controller
             'amount' => $amount,
         ];
 
+        // Store user session data for login restoration after PayU redirect
+        $userSessionData = [
+            'user_id' => $userId,
+            'user_email' => $user->email,
+            'user_name' => $user->fullname,
+            'user_registration_id' => $user->registrationid,
+        ];
+
         $response = response()->json([
             'success' => true,
             'payment_url' => $payuService->getPaymentUrl(),
             'payment_form' => $paymentData,
         ]);
 
-        // Set cookie with payment details (expires in 1 hour)
+        // Set cookies with payment details and user session (expires in 1 hour)
         $response->cookie('pending_payment_data', json_encode($cookieData), 60);
+        $response->cookie('user_session_data', json_encode($userSessionData), 60);
 
         return $response;
     }
@@ -873,7 +968,7 @@ class IxApplicationController extends Controller
     /**
      * Retry payment for an existing IX application draft with pending payment.
      */
-    public function payNow(int $id): RedirectResponse|View
+    public function payNow(int $id): RedirectResponse|View|Response
     {
         $userId = session('user_id');
         $user = Registration::find($userId);
@@ -921,13 +1016,22 @@ class IxApplicationController extends Controller
             'product_info' => 'NIXI IX Application Fee',
         ]);
 
-        // Store payment details in cookie for success callback
+        // Store payment details and user session data in cookies for callback
+        // Session gets cleared when PayU page opens, so we save essential data in cookies
         $cookieData = [
             'payment_transaction_id' => $paymentTransaction->id,
             'transaction_id' => $transactionId,
             'application_id' => $application->id,
             'user_id' => $userId,
             'amount' => $amount,
+        ];
+
+        // Store user session data for login restoration after PayU redirect
+        $userSessionData = [
+            'user_id' => $userId,
+            'user_email' => $user->email,
+            'user_name' => $user->fullname,
+            'user_registration_id' => $user->registrationid,
         ];
 
         $payuService = new PayuService;
@@ -945,13 +1049,14 @@ class IxApplicationController extends Controller
             'udf2' => (string) $paymentTransaction->id,
         ]);
 
-        // Set cookie with payment details (expires in 1 hour)
+        // Set cookies with payment details and user session (expires in 1 hour)
         $response = response()->view('user.applications.ix.payu-redirect', [
             'paymentUrl' => $payuService->getPaymentUrl(),
             'paymentForm' => $paymentData,
         ]);
 
         $response->cookie('pending_payment_data', json_encode($cookieData), 60);
+        $response->cookie('user_session_data', json_encode($userSessionData), 60);
 
         return $response;
     }
@@ -970,9 +1075,28 @@ class IxApplicationController extends Controller
             'has_query' => !empty($request->query()),
             'has_post' => !empty($request->post()),
             'has_cookie' => $request->hasCookie('pending_payment_data'),
+            'has_user_session_cookie' => $request->hasCookie('user_session_data'),
         ]);
         
         try {
+            // Restore user session from cookie (session gets cleared when PayU page opens)
+            if ($request->hasCookie('user_session_data')) {
+                $userSessionData = json_decode($request->cookie('user_session_data'), true);
+                if ($userSessionData && isset($userSessionData['user_id'])) {
+                    $user = Registration::find($userSessionData['user_id']);
+                    if ($user) {
+                        // Restore session
+                        session(['user_id' => $userSessionData['user_id']]);
+                        session(['user_email' => $userSessionData['user_email'] ?? $user->email]);
+                        session(['user_name' => $userSessionData['user_name'] ?? $user->fullname]);
+                        session(['user_registration_id' => $userSessionData['user_registration_id'] ?? $user->registrationid]);
+                        Log::info('PayU Success - User session restored from cookie', [
+                            'user_id' => $userSessionData['user_id'],
+                        ]);
+                    }
+                }
+            }
+
             // First, try to get payment details from cookie
             $cookieData = null;
             if ($request->hasCookie('pending_payment_data')) {
@@ -1033,37 +1157,73 @@ class IxApplicationController extends Controller
                     ->with('error', 'Payment transaction not found. Please contact support.');
             }
             
+            // Extract all PayU response fields
+            $payuResponseFields = $this->extractPayuResponseFields($request);
+            
             // Verify hash if PayU sent parameters
-            if (! empty($response) && isset($response['hash'])) {
+            if (! empty($payuResponseFields) && isset($payuResponseFields['hash'])) {
                 $payuService = new PayuService;
-                $isValid = $payuService->verifyHash($response);
+                $isValid = $payuService->verifyHash($payuResponseFields);
                 
                 if (! $isValid) {
                     Log::warning('PayU hash verification failed', [
-                        'response' => $response,
+                        'response' => $payuResponseFields,
                         'transaction_id' => $paymentTransaction->transaction_id,
                     ]);
                     // Continue anyway - webhook will verify
                 }
             }
             
-            // Get PayU payment details from response
-            $payuPaymentId = $request->input('mihpayid') 
-                ?? $request->input('payuMoneyId') 
-                ?? $request->input('payuid')
-                ?? null;
+            // Extract key fields for easier access
+            $payuPaymentId = $payuResponseFields['mihpayid'] ?? null;
+            $status = $payuResponseFields['status'] ?? '';
+            $bankRefNum = $payuResponseFields['bank_ref_num'] ?? null;
+            $mode = $payuResponseFields['mode'] ?? null;
+            $unmappedStatus = $payuResponseFields['unmappedstatus'] ?? '';
+            $cardType = $payuResponseFields['card_type'] ?? null;
+            $cardnum = $payuResponseFields['cardnum'] ?? null;
+            $nameOnCard = $payuResponseFields['name_on_card'] ?? null;
+            $bankcode = $payuResponseFields['bankcode'] ?? null;
+            $pgType = $payuResponseFields['pg_type'] ?? null;
             
-            $status = $request->input('status', '');
-            $bankRefNum = $request->input('bank_ref_num');
-            $mode = $request->input('mode');
+            // Build comprehensive response message
+            $responseMessage = 'Payment successful';
+            if ($status) {
+                $responseMessage = ucfirst($status);
+            }
+            if ($unmappedStatus) {
+                $responseMessage .= ' ('.$unmappedStatus.')';
+            }
+            if ($bankRefNum) {
+                $responseMessage .= ' - Bank Ref: '.$bankRefNum;
+            }
+            if ($mode) {
+                $responseMessage .= ' - Mode: '.$mode;
+            }
+            if ($cardType) {
+                $responseMessage .= ' - Card: '.$cardType;
+            }
             
-            // Update payment transaction
+            // Log all PayU response fields for debugging
+            Log::info('PayU Success - All Response Fields Captured', [
+                'transaction_id' => $paymentTransaction->transaction_id,
+                'payu_fields_count' => count($payuResponseFields),
+                'key_fields' => [
+                    'mihpayid' => $payuPaymentId,
+                    'status' => $status,
+                    'mode' => $mode,
+                    'bank_ref_num' => $bankRefNum,
+                    'card_type' => $cardType,
+                ],
+            ]);
+            
+            // Update payment transaction with all PayU response details
             $paymentTransaction->update([
                 'payment_id' => $payuPaymentId ?? $paymentTransaction->payment_id,
                 'payment_status' => 'success',
-                'response_message' => $status ?: 'success',
-                'payu_response' => $response,
-                'hash' => $request->input('hash'),
+                'response_message' => $responseMessage,
+                'payu_response' => $payuResponseFields, // Store all PayU response fields
+                'hash' => $payuResponseFields['hash'] ?? null,
             ]);
             
             Log::info('PayU Payment Success - Transaction Updated', [
@@ -1106,6 +1266,12 @@ class IxApplicationController extends Controller
                             'paid_at' => now('Asia/Kolkata')->toDateTimeString(),
                             'bank_ref_num' => $bankRefNum,
                             'mode' => $mode,
+                            'unmappedstatus' => $unmappedStatus,
+                            'card_type' => $cardType,
+                            'cardnum' => $cardnum,
+                            'name_on_card' => $nameOnCard,
+                            'bankcode' => $bankcode,
+                            'pg_type' => $pgType,
                         ]);
                         $application->update(['application_data' => $applicationData]);
                         
@@ -1123,10 +1289,11 @@ class IxApplicationController extends Controller
                 }
             }
             
-            // Delete cookie and redirect to applications page
+            // Delete cookies and redirect to applications page
             return redirect()->route('user.applications.index')
                 ->with('success', 'Payment successful! Your application has been submitted. Transaction ID: ' . $paymentTransaction->transaction_id)
-                ->cookie('pending_payment_data', '', -1); // Delete cookie
+                ->cookie('pending_payment_data', '', -1) // Delete cookie
+                ->cookie('user_session_data', '', -1); // Delete user session cookie
             
         } catch (\Exception $e) {
             Log::error('PayU Success Callback Exception', [
@@ -1134,9 +1301,11 @@ class IxApplicationController extends Controller
                 'trace' => $e->getTraceAsString(),
             ]);
             
+            // Delete cookies on error too
             return redirect()->route('user.applications.index')
                 ->with('error', 'An error occurred while processing payment. Please contact support.')
-                ->cookie('pending_payment_data', '', -1); // Delete cookie on error too
+                ->cookie('pending_payment_data', '', -1) // Delete cookie
+                ->cookie('user_session_data', '', -1); // Delete user session cookie
         }
     }
 
@@ -1160,6 +1329,8 @@ class IxApplicationController extends Controller
             'user_agent' => $request->userAgent(),
             'session_id' => session()->getId(),
             'has_user_session' => !empty(session('user_id')),
+            'has_cookie' => $request->hasCookie('pending_payment_data'),
+            'has_user_session_cookie' => $request->hasCookie('user_session_data'),
         ]);
         
         // PayU may send data via POST or GET (query string)
@@ -1167,6 +1338,32 @@ class IxApplicationController extends Controller
         $response = array_merge($request->query(), $request->post());
         
         try {
+            // Restore user session from cookie (session gets cleared when PayU page opens)
+            if ($request->hasCookie('user_session_data')) {
+                $userSessionData = json_decode($request->cookie('user_session_data'), true);
+                if ($userSessionData && isset($userSessionData['user_id'])) {
+                    $user = Registration::find($userSessionData['user_id']);
+                    if ($user) {
+                        // Restore session
+                        session(['user_id' => $userSessionData['user_id']]);
+                        session(['user_email' => $userSessionData['user_email'] ?? $user->email]);
+                        session(['user_name' => $userSessionData['user_name'] ?? $user->fullname]);
+                        session(['user_registration_id' => $userSessionData['user_registration_id'] ?? $user->registrationid]);
+                        Log::info('PayU Failure - User session restored from cookie', [
+                            'user_id' => $userSessionData['user_id'],
+                        ]);
+                    }
+                }
+            }
+
+            // Try to get payment details from cookie
+            $cookieData = null;
+            if ($request->hasCookie('pending_payment_data')) {
+                $cookieData = json_decode($request->cookie('pending_payment_data'), true);
+                Log::info('PayU Failure - Found payment data in cookie', [
+                    'cookie_data' => $cookieData,
+                ]);
+            }
             // Log the failure response for debugging
             Log::info('PayU Failure Callback Received', [
                 'all_params' => $response,
@@ -1177,15 +1374,16 @@ class IxApplicationController extends Controller
                 'all_input' => $request->all(),
             ]);
 
-            // Get transaction ID and payment transaction ID from response (works with both GET and POST)
-            $transactionId = $response['txnid'] ?? $request->input('txnid');
-            $paymentTransactionId = $response['udf2'] ?? $request->input('udf2');
+            // Get transaction ID and payment transaction ID from response or cookie
+            $transactionId = $response['txnid'] ?? $request->input('txnid') ?? ($cookieData['transaction_id'] ?? null);
+            $paymentTransactionId = $response['udf2'] ?? $request->input('udf2') ?? ($cookieData['payment_transaction_id'] ?? null);
             
             Log::info('PayU Failure - Looking up transaction', [
                 'transaction_id' => $transactionId,
                 'payment_transaction_id' => $paymentTransactionId,
                 'has_txnid' => !empty($transactionId),
                 'has_udf2' => !empty($paymentTransactionId),
+                'has_cookie_data' => !empty($cookieData),
             ]);
             
             $paymentTransaction = null;
@@ -1208,7 +1406,7 @@ class IxApplicationController extends Controller
             
             // If no parameters and no transaction found, try to find recent pending transaction
             if (! $paymentTransaction && empty($response)) {
-                $userId = session('user_id');
+                $userId = session('user_id') ?? ($cookieData['user_id'] ?? null);
                 if ($userId) {
                     $recentTransaction = PaymentTransaction::where('user_id', $userId)
                         ->where('payment_status', 'pending')
@@ -1226,36 +1424,74 @@ class IxApplicationController extends Controller
             }
 
             if ($paymentTransaction) {
-                // Get PayU payment ID and error details
-                $payuPaymentId = $request->input('mihpayid') 
-                    ?? $request->input('payuMoneyId') 
-                    ?? $request->input('payuid')
-                    ?? null;
+                // Extract all PayU response fields
+                $payuResponseFields = $this->extractPayuResponseFields($request);
+                
+                // Extract key fields for easier access
+                $payuPaymentId = $payuResponseFields['mihpayid'] ?? null;
+                $status = $payuResponseFields['status'] ?? '';
+                $error = $payuResponseFields['error'] ?? null;
+                $errorMessage = $payuResponseFields['error_Message'] ?? null;
+                $errorCode = $payuResponseFields['error_code'] ?? null;
+                $unmappedStatus = $payuResponseFields['unmappedstatus'] ?? '';
+                $bankRefNum = $payuResponseFields['bank_ref_num'] ?? null;
+                $mode = $payuResponseFields['mode'] ?? null;
+                $failureReason = $payuResponseFields['failure_reason'] ?? null;
 
-                $status = $request->input('status', '');
-                $error = $request->input('error');
-                $errorMessage = $request->input('error_Message') ?? $request->input('error_message');
+                // Build comprehensive failure response message
+                $responseMessage = 'Payment failed';
+                if ($status) {
+                    $responseMessage = ucfirst($status);
+                }
+                if ($errorMessage) {
+                    $responseMessage .= ' - '.$errorMessage;
+                } elseif ($error) {
+                    $responseMessage .= ' - '.$error;
+                }
+                if ($failureReason) {
+                    $responseMessage .= ' - Reason: '.$failureReason;
+                }
+                if ($errorCode) {
+                    $responseMessage .= ' (Error Code: '.$errorCode.')';
+                }
+                if ($unmappedStatus) {
+                    $responseMessage .= ' - Status: '.$unmappedStatus;
+                }
+                if ($bankRefNum) {
+                    $responseMessage .= ' - Bank Ref: '.$bankRefNum;
+                }
+                if ($mode) {
+                    $responseMessage .= ' - Mode: '.$mode;
+                }
+
+                // Log all PayU response fields for debugging
+                Log::warning('PayU Payment Failed - All Response Fields Captured', [
+                    'transaction_id' => $transactionId,
+                    'payment_transaction_id' => $paymentTransaction->id,
+                    'payu_fields_count' => count($payuResponseFields),
+                    'key_fields' => [
+                        'mihpayid' => $payuPaymentId,
+                        'status' => $status,
+                        'error' => $error,
+                        'error_message' => $errorMessage,
+                        'error_code' => $errorCode,
+                        'failure_reason' => $failureReason,
+                        'mode' => $mode,
+                    ],
+                ]);
 
                 $paymentTransaction->update([
                     'payment_id' => $payuPaymentId,
                     'payment_status' => 'failed',
-                    'response_message' => $status ?: $error ?: $errorMessage ?: 'Payment failed',
-                    'payu_response' => $response,
-                    'hash' => $request->input('hash'),
-                ]);
-
-                // Log failed payment for debugging
-                Log::warning('PayU Payment Failed', [
-                    'transaction_id' => $transactionId,
-                    'payment_transaction_id' => $paymentTransaction->id,
-                    'status' => $status,
-                    'error' => $error,
-                    'error_message' => $errorMessage,
+                    'response_message' => $responseMessage,
+                    'payu_response' => $payuResponseFields, // Store all PayU response fields
+                    'hash' => $payuResponseFields['hash'] ?? null,
                 ]);
             } else {
                 Log::error('PayU Failure Callback - Payment transaction not found', [
                     'transaction_id' => $transactionId,
                     'payment_transaction_id' => $paymentTransactionId,
+                    'cookie_data' => $cookieData,
                 ]);
             }
         } catch (\Exception $e) {
@@ -1266,8 +1502,11 @@ class IxApplicationController extends Controller
             ]);
         }
 
+        // Delete cookies and redirect
         return redirect()->route('user.applications.ix.create')
-            ->with('error', 'Payment failed. Please try again or contact support if the amount was deducted.');
+            ->with('error', 'Payment failed. Please try again or contact support if the amount was deducted.')
+            ->cookie('pending_payment_data', '', -1) // Delete cookie
+            ->cookie('user_session_data', '', -1); // Delete user session cookie
     }
 
     /**
@@ -1305,22 +1544,25 @@ class IxApplicationController extends Controller
                 return response()->json(['status' => 'error', 'message' => 'Missing required fields'], 400);
             }
 
+            // Extract all PayU response fields
+            $payuResponseFields = $this->extractPayuResponseFields($request);
+            
             // Verify hash
-            $isValid = $payuService->verifyHash($response);
+            $isValid = $payuService->verifyHash($payuResponseFields);
 
             if (! $isValid) {
                 Log::warning('PayU S2S Webhook - Hash verification failed', [
-                    'response' => $response,
-                    'transaction_id' => $request->input('txnid'),
-                    'status' => $request->input('status'),
+                    'response' => $payuResponseFields,
+                    'transaction_id' => $payuResponseFields['txnid'] ?? null,
+                    'status' => $payuResponseFields['status'] ?? null,
                 ]);
 
                 return response()->json(['status' => 'error', 'message' => 'Hash verification failed'], 400);
             }
 
             // Find payment transaction
-            $transactionId = $request->input('txnid');
-            $paymentTransactionId = $request->input('udf2');
+            $transactionId = $payuResponseFields['txnid'] ?? null;
+            $paymentTransactionId = $payuResponseFields['udf2'] ?? null;
             
             $paymentTransaction = null;
             if ($paymentTransactionId) {
@@ -1332,7 +1574,7 @@ class IxApplicationController extends Controller
             }
             
             // Fallback: find by transaction ID only if udf2 lookup failed
-            if (! $paymentTransaction) {
+            if (! $paymentTransaction && $transactionId) {
                 $paymentTransaction = PaymentTransaction::where('transaction_id', $transactionId)->first();
             }
 
@@ -1345,17 +1587,16 @@ class IxApplicationController extends Controller
                 return response()->json(['status' => 'error', 'message' => 'Transaction not found'], 404);
             }
 
-            // Get PayU payment ID and status
-            $payuPaymentId = $request->input('mihpayid') 
-                ?? $request->input('payuMoneyId') 
-                ?? $request->input('payuid')
-                ?? null;
-
-            $status = $request->input('status', '');
-            $bankRefNum = $request->input('bank_ref_num');
-            $mode = $request->input('mode');
-            $error = $request->input('error');
-            $errorMessage = $request->input('error_Message') ?? $request->input('error_message');
+            // Extract key fields for easier access
+            $payuPaymentId = $payuResponseFields['mihpayid'] ?? null;
+            $status = $payuResponseFields['status'] ?? '';
+            $bankRefNum = $payuResponseFields['bank_ref_num'] ?? null;
+            $mode = $payuResponseFields['mode'] ?? null;
+            $error = $payuResponseFields['error'] ?? null;
+            $errorMessage = $payuResponseFields['error_Message'] ?? null;
+            $errorCode = $payuResponseFields['error_code'] ?? null;
+            $unmappedStatus = $payuResponseFields['unmappedstatus'] ?? '';
+            $failureReason = $payuResponseFields['failure_reason'] ?? null;
 
             // Determine payment status based on PayU status
             // PayU status values: success, failure, pending, cancelled, etc.
@@ -1366,17 +1607,50 @@ class IxApplicationController extends Controller
                 $paymentStatus = 'failed';
             }
 
-            // Update payment transaction - S2S webhook is the source of truth
+            // Build comprehensive response message
+            $responseMessage = $status ?: ($error ?: $errorMessage ?: 'Payment processed');
+            if ($unmappedStatus) {
+                $responseMessage .= ' ('.$unmappedStatus.')';
+            }
+            if ($errorCode) {
+                $responseMessage .= ' - Error Code: '.$errorCode;
+            }
+            if ($failureReason) {
+                $responseMessage .= ' - Reason: '.$failureReason;
+            }
+            if ($bankRefNum) {
+                $responseMessage .= ' - Bank Ref: '.$bankRefNum;
+            }
+            if ($mode) {
+                $responseMessage .= ' - Mode: '.$mode;
+            }
+
             // Add webhook timestamp to response data
-            $webhookResponse = $response;
-            $webhookResponse['webhook_received_at'] = now('Asia/Kolkata')->toDateTimeString();
+            $payuResponseFields['webhook_received_at'] = now('Asia/Kolkata')->toDateTimeString();
+            $payuResponseFields['webhook_source'] = 's2s';
             
+            // Log all PayU response fields for debugging
+            Log::info('PayU S2S Webhook - All Response Fields Captured', [
+                'transaction_id' => $transactionId,
+                'payment_transaction_id' => $paymentTransaction->id,
+                'payu_fields_count' => count($payuResponseFields),
+                'key_fields' => [
+                    'mihpayid' => $payuPaymentId,
+                    'status' => $status,
+                    'unmappedstatus' => $unmappedStatus,
+                    'mode' => $mode,
+                    'bank_ref_num' => $bankRefNum,
+                    'error_code' => $errorCode,
+                ],
+            ]);
+
+            // Update payment transaction - S2S webhook is the source of truth
             $paymentTransaction->update([
-                'payment_id' => $payuPaymentId,
+                'payment_id' => $payuPaymentId ?? $paymentTransaction->payment_id,
                 'payment_status' => $paymentStatus,
-                'response_message' => $status ?: ($error ?: $errorMessage ?: ''),
-                'payu_response' => $webhookResponse,
-                'hash' => $request->input('hash'),
+                'response_message' => $responseMessage,
+                'payu_response' => $payuResponseFields, // Store all PayU response fields
+                'hash' => $payuResponseFields['hash'] ?? null,
             ]);
 
             // If payment is successful, update application status
@@ -1408,7 +1682,11 @@ class IxApplicationController extends Controller
                         'paid_at' => now('Asia/Kolkata')->toDateTimeString(),
                         'bank_ref_num' => $bankRefNum,
                         'mode' => $mode,
+                        'unmappedstatus' => $unmappedStatus,
+                        'card_type' => $payuResponseFields['card_type'] ?? null,
+                        'pg_type' => $payuResponseFields['pg_type'] ?? null,
                         'webhook_confirmed' => true,
+                        'webhook_source' => 's2s',
                     ]);
                     $application->update(['application_data' => $applicationData]);
                 }
