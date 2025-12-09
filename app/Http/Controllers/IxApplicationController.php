@@ -1106,7 +1106,7 @@ class IxApplicationController extends Controller
     /**
      * Handle payment success callback from PayU.
      */
-    public function paymentSuccess(Request $request): RedirectResponse|View
+    public function paymentSuccess(Request $request): RedirectResponse
     {
         // PayU may send data via POST or GET (query string)
         $response = array_merge($request->query(), $request->post());
@@ -1118,35 +1118,26 @@ class IxApplicationController extends Controller
             'has_post' => !empty($request->post()),
             'has_cookie' => $request->hasCookie('pending_payment_data'),
             'has_user_session_cookie' => $request->hasCookie('user_session_data'),
-            'process_param' => $request->has('process'),
         ]);
         
-        // Restore user session from cookie FIRST (session gets cleared when PayU page opens)
-        if ($request->hasCookie('user_session_data')) {
-            $userSessionData = json_decode($request->cookie('user_session_data'), true);
-            if ($userSessionData && isset($userSessionData['user_id'])) {
-                $user = Registration::find($userSessionData['user_id']);
-                if ($user) {
-                    // Restore session
-                    session(['user_id' => $userSessionData['user_id']]);
-                    session(['user_email' => $userSessionData['user_email'] ?? $user->email]);
-                    session(['user_name' => $userSessionData['user_name'] ?? $user->fullname]);
-                    session(['user_registration_id' => $userSessionData['user_registration_id'] ?? $user->registrationid]);
-                    Log::info('PayU Success - User session restored from cookie', [
-                        'user_id' => $userSessionData['user_id'],
-                    ]);
+        try {
+            // Restore user session from cookie (session gets cleared when PayU page opens)
+            if ($request->hasCookie('user_session_data')) {
+                $userSessionData = json_decode($request->cookie('user_session_data'), true);
+                if ($userSessionData && isset($userSessionData['user_id'])) {
+                    $user = Registration::find($userSessionData['user_id']);
+                    if ($user) {
+                        // Restore session
+                        session(['user_id' => $userSessionData['user_id']]);
+                        session(['user_email' => $userSessionData['user_email'] ?? $user->email]);
+                        session(['user_name' => $userSessionData['user_name'] ?? $user->fullname]);
+                        session(['user_registration_id' => $userSessionData['user_registration_id'] ?? $user->registrationid]);
+                        Log::info('PayU Success - User session restored from cookie', [
+                            'user_id' => $userSessionData['user_id'],
+                        ]);
+                    }
                 }
             }
-        }
-        
-        // If process parameter is not set, show loading page that will auto-refresh
-        if (! $request->has('process')) {
-            return view('user.applications.ix.payment-processing', [
-                'type' => 'success',
-            ]);
-        }
-        
-        try {
 
             // First, try to get payment details from cookie
             $cookieData = null;
@@ -1401,7 +1392,7 @@ class IxApplicationController extends Controller
     /**
      * Handle payment failure callback from PayU.
      */
-    public function paymentFailure(Request $request): RedirectResponse|View
+    public function paymentFailure(Request $request): RedirectResponse
     {
         // Log immediately when this method is called - even if empty
         // This route is accessible without authentication since PayU redirects here
@@ -1419,39 +1410,30 @@ class IxApplicationController extends Controller
             'has_user_session' => !empty(session('user_id')),
             'has_cookie' => $request->hasCookie('pending_payment_data'),
             'has_user_session_cookie' => $request->hasCookie('user_session_data'),
-            'process_param' => $request->has('process'),
         ]);
         
         // PayU may send data via POST or GET (query string)
         // Get all parameters from both POST and GET
         $response = array_merge($request->query(), $request->post());
         
-        // Restore user session from cookie FIRST (session gets cleared when PayU page opens)
-        if ($request->hasCookie('user_session_data')) {
-            $userSessionData = json_decode($request->cookie('user_session_data'), true);
-            if ($userSessionData && isset($userSessionData['user_id'])) {
-                $user = Registration::find($userSessionData['user_id']);
-                if ($user) {
-                    // Restore session
-                    session(['user_id' => $userSessionData['user_id']]);
-                    session(['user_email' => $userSessionData['user_email'] ?? $user->email]);
-                    session(['user_name' => $userSessionData['user_name'] ?? $user->fullname]);
-                    session(['user_registration_id' => $userSessionData['user_registration_id'] ?? $user->registrationid]);
-                    Log::info('PayU Failure - User session restored from cookie', [
-                        'user_id' => $userSessionData['user_id'],
-                    ]);
+        try {
+            // Restore user session from cookie FIRST (session gets cleared when PayU page opens)
+            if ($request->hasCookie('user_session_data')) {
+                $userSessionData = json_decode($request->cookie('user_session_data'), true);
+                if ($userSessionData && isset($userSessionData['user_id'])) {
+                    $user = Registration::find($userSessionData['user_id']);
+                    if ($user) {
+                        // Restore session
+                        session(['user_id' => $userSessionData['user_id']]);
+                        session(['user_email' => $userSessionData['user_email'] ?? $user->email]);
+                        session(['user_name' => $userSessionData['user_name'] ?? $user->fullname]);
+                        session(['user_registration_id' => $userSessionData['user_registration_id'] ?? $user->registrationid]);
+                        Log::info('PayU Failure - User session restored from cookie', [
+                            'user_id' => $userSessionData['user_id'],
+                        ]);
+                    }
                 }
             }
-        }
-        
-        // If process parameter is not set, show loading page that will auto-refresh
-        if (! $request->has('process')) {
-            return view('user.applications.ix.payment-processing', [
-                'type' => 'failure',
-            ]);
-        }
-        
-        try {
 
             // Try to get payment details from cookie
             $cookieData = null;
