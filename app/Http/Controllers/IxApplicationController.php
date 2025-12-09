@@ -1106,7 +1106,7 @@ class IxApplicationController extends Controller
     /**
      * Handle payment success callback from PayU.
      */
-    public function paymentSuccess(Request $request): RedirectResponse|View
+    public function paymentSuccess(Request $request): RedirectResponse
     {
         // PayU may send data via POST or GET (query string)
         $response = array_merge($request->query(), $request->post());
@@ -1118,16 +1118,7 @@ class IxApplicationController extends Controller
             'has_post' => !empty($request->post()),
             'has_cookie' => $request->hasCookie('pending_payment_data'),
             'has_user_session_cookie' => $request->hasCookie('user_session_data'),
-            'verified' => $request->has('verified'),
         ]);
-        
-        // If this is the first call (no verified parameter), show verifying page
-        if (! $request->has('verified')) {
-            return view('user.applications.ix.payment-verifying', [
-                'type' => 'success',
-                'callback_url' => $request->fullUrl(),
-            ]);
-        }
         
         try {
             // Restore user session from cookie (session gets cleared when PayU page opens)
@@ -1401,7 +1392,7 @@ class IxApplicationController extends Controller
     /**
      * Handle payment failure callback from PayU.
      */
-    public function paymentFailure(Request $request): RedirectResponse|View
+    public function paymentFailure(Request $request): RedirectResponse
     {
         // Log immediately when this method is called - even if empty
         // This route is accessible without authentication since PayU redirects here
@@ -1419,16 +1410,7 @@ class IxApplicationController extends Controller
             'has_user_session' => !empty(session('user_id')),
             'has_cookie' => $request->hasCookie('pending_payment_data'),
             'has_user_session_cookie' => $request->hasCookie('user_session_data'),
-            'verified' => $request->has('verified'),
         ]);
-        
-        // If this is the first call (no verified parameter), show verifying page
-        if (! $request->has('verified')) {
-            return view('user.applications.ix.payment-verifying', [
-                'type' => 'failure',
-                'callback_url' => $request->fullUrl(),
-            ]);
-        }
         
         // PayU may send data via POST or GET (query string)
         // Get all parameters from both POST and GET
