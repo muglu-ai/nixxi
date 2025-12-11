@@ -10,56 +10,56 @@
         
         body {
             font-family: "Times New Roman", Times, serif;
-            font-size: 10pt;
-            line-height: 1.3;
+            font-size: 12pt;
+            line-height: 1.5;
             color: #000;
             margin: 0;
             padding: 0;
         }
         
         .header-note {
-            font-size: 9pt;
-            margin-bottom: 12px;
+            font-size: 11pt;
+            margin-bottom: 15px;
             font-weight: bold;
             text-decoration: underline;
         }
         
         h1 {
-            font-size: 14pt;
+            font-size: 16pt;
             text-align: center;
             text-decoration: underline;
-            margin: 12px 0;
+            margin: 15px 0;
             font-weight: bold;
         }
         
         h2 {
-            font-size: 11pt;
+            font-size: 13pt;
             font-weight: bold;
             text-decoration: underline;
-            margin-top: 12px;
-            margin-bottom: 6px;
+            margin-top: 15px;
+            margin-bottom: 8px;
         }
         
         p {
-            margin-bottom: 6px;
+            margin-bottom: 8px;
             text-align: justify;
         }
         
         .agreement-date {
-            margin-bottom: 10px;
+            margin-bottom: 12px;
         }
         
         .party-details {
-            margin: 10px 0;
+            margin: 12px 0;
         }
         
         .party-name {
             font-weight: bold;
-            margin-bottom: 3px;
+            margin-bottom: 5px;
         }
         
         .whereas {
-            margin: 10px 0;
+            margin: 12px 0;
             text-align: justify;
         }
         
@@ -69,33 +69,33 @@
         
         .definition-content {
             margin-left: 0;
-            margin-bottom: 8px;
+            margin-bottom: 10px;
         }
         
         ol, ul {
-            margin-left: 18px;
-            margin-bottom: 6px;
-            padding-left: 15px;
+            margin-left: 20px;
+            margin-bottom: 8px;
+            padding-left: 20px;
         }
         
         li {
-            margin-bottom: 5px;
+            margin-bottom: 6px;
             text-align: justify;
         }
         
         .quoted-text {
-            margin: 10px 0;
-            padding-left: 8px;
+            margin: 12px 0;
+            padding-left: 10px;
         }
         
         .signature-section {
-            margin-top: 25px;
+            margin-top: 30px;
             page-break-inside: avoid;
         }
         
         .signature-block {
             width: 100%;
-            margin-top: 20px;
+            margin-top: 25px;
         }
         
         .signature-left {
@@ -110,48 +110,20 @@
         
         .signature-label {
             font-weight: bold;
-            margin-bottom: 3px;
-            font-size: 9pt;
+            margin-bottom: 5px;
+            font-size: 11pt;
         }
         
         .signature-line {
             border-top: 1px solid #000;
-            margin-top: 35px;
-            padding-top: 3px;
+            margin-top: 40px;
+            padding-top: 5px;
         }
         
         .signature-field {
-            margin-top: 3px;
-            min-height: 15px;
-            font-size: 9pt;
-        }
-        
-        .footer-section {
-            margin-top: 20px;
-            border-top: 1px solid #000;
-            padding-top: 6px;
-            width: 100%;
-            font-size: 8pt;
-            clear: both;
-        }
-        
-        .footer-left {
-            width: 50%;
-            float: left;
-        }
-        
-        .footer-right {
-            width: 50%;
-            float: right;
-            text-align: right;
-        }
-        
-        .page-number {
-            font-size: 8pt;
-        }
-        
-        .page-break {
-            page-break-before: always;
+            margin-top: 5px;
+            min-height: 20px;
+            font-size: 11pt;
         }
         
         .no-break {
@@ -206,9 +178,6 @@
     <p class="definition-content"><span class="definition-term">"AS"</span> shall mean Autonomous System.</p>
     <p class="definition-content"><span class="definition-term">"BGP"</span> means Border Gateway Protocol which is a protocol for exchanging routing information between gateway hosts (each with its own router) in a network of autonomous systems. BGP is often the protocol used between gateway hosts on the Internet. The routing table contains a list of known routers, the addresses they can reach, and a cost metric associated with the path to each router so that the best available route is chosen.</p>
     
-    {{-- Page 2 --}}
-    <div class="page-break"></div>
-    
     <p class="definition-content"><span class="definition-term">"Connection for member"</span> means the physical connection of the peering router/cache of member to the NIXI shared medium (e.g. LAN switch), which is not allowed to go beyond the premises of the respective Housing site.</p>
     
     <p class="definition-content"><span class="definition-term">"Core Area"</span> means the Room, cage or otherwise dedicated and separated rack space at the Housing Site where the NIXI equipment (e.g. LAN switch) is located.</p>
@@ -251,9 +220,6 @@
         <li>Non-ISP Member shall be solely responsible for violation of any of the prevailing the laws.</li>
     </ol>
     
-    {{-- Page 3 --}}
-    <div class="page-break"></div>
-    
     <h2>4. Connecting Rules at NIXI to be adhered by Member:</h2>
     <ol type="a">
         <li>Members shall have an ASN (Autonomous System Number) and use BGP4(+) for peering.</li>
@@ -270,9 +236,6 @@
     
     <h2>6. NON COMPETE</h2>
     <p>NIXI is a neutral Internet Exchange facilitating the members to interconnect with each other for efficient routing of domestic traffic and shall not compete with the business of other members.</p>
-    
-    {{-- Page 4 --}}
-    <div class="page-break"></div>
     
     <h2>7. Membership Status</h2>
     <p>It is clarified that submission of this Agreement and Connection form does not guarantee membership of NIXI. Membership shall be granted only after the application and agreement is approved by the Board of NIXI. Upon approval, the Member shall have all rights as provided in the NIXI Bye-Laws/Articles of Association including the right to offer candidature for election to the NIXI Board when permissible.</p>
@@ -294,9 +257,6 @@
     <h2>12. Insurance and Liability</h2>
     <p>NIXI will take precautions to prevent damage to Member Equipment. However, NIXI will not be liable for any loss or damage, howsoever caused, to the Member Equipment. The Member shall be solely responsible for insuring its own equipment.</p>
     
-    {{-- Page 5 --}}
-    <div class="page-break"></div>
-    
     <h2>13. TERM and TERMINATION</h2>
     <p>This Agreement shall come into effect from the date of approval by the NIXI Board and shall remain in force until terminated by either party by giving 3 (three) calendar months' written notice to the other party. NIXI reserves the right to disconnect the Member and suspend the Services in case of violation of any terms and conditions of this Agreement.</p>
     
@@ -311,9 +271,6 @@
     
     <h2>17. Indemnity</h2>
     <p>The parties shall indemnify and hold each other harmless from and against any and all liabilities, demands, losses, costs and expenses (including reasonable attorney's fees) arising out of or relating to any breach of their respective obligations under this Agreement or violation of any existing laws. It is expressly agreed that the officers, employees and personnel of NIXI shall not be personally liable under any circumstances.</p>
-    
-    {{-- Page 6 --}}
-    <div class="page-break"></div>
     
     <h2>18. Dispute Resolution & Applicable Law</h2>
     <p>Any dispute or difference arising out of or in connection with this Agreement shall be resolved through arbitration in accordance with the Indian Arbitration and Conciliation Act 1996. The arbitration award shall be final and binding on both parties. The venue of arbitration shall be New Delhi and the Delhi Court shall have jurisdiction for any legal proceedings. The cost of arbitration shall be borne equally by both parties. This Agreement shall be governed by and construed in accordance with the laws of India.</p>
@@ -349,7 +306,7 @@
                     <div class="signature-field">Date:</div>
                     <div class="signature-field" style="min-height: 15px;"></div>
                 </div>
-            </div>
+        </div>
         </div>
     </div>
 </body>
