@@ -344,10 +344,13 @@ class LoginController extends Controller
                 false, // raw
                 $sessionSameSite
             );
-            
-            // Delete the user_session_data cookie after successful login
-            return $redirect->cookie('user_session_data', '', -1, '/', null, true, false, false, 'lax');
-                
+
+            // refresh the page
+            // After successful login from cookie, refresh the page with new session and delete user_session_data cookie
+            return redirect()->refresh()
+                ->with('success', $successMessage ? urldecode($successMessage) : null)
+                ->with('error', $errorMessage ? urldecode($errorMessage) : null)
+                ->cookie('user_session_data', '', -1, '/', null, true, false, false, 'lax');
         } catch (Exception $e) {
             Log::error('Error logging in from cookie: '.$e->getMessage());
             
