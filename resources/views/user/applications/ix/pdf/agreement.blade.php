@@ -206,18 +206,6 @@
     <p class="definition-content"><span class="definition-term">"AS"</span> shall mean Autonomous System.</p>
     <p class="definition-content"><span class="definition-term">"BGP"</span> means Border Gateway Protocol which is a protocol for exchanging routing information between gateway hosts (each with its own router) in a network of autonomous systems. BGP is often the protocol used between gateway hosts on the Internet. The routing table contains a list of known routers, the addresses they can reach, and a cost metric associated with the path to each router so that the best available route is chosen.</p>
     
-    <div class="footer-section clearfix">
-        <div class="footer-left">
-            <div>Initials</div>
-            <div>NIXISeal</div>
-        </div>
-        <div class="footer-right">
-            <div>InitialsMember</div>
-            <div>CompanySeal</div>
-            <div class="page-number">Page 1</div>
-        </div>
-    </div>
-    
     {{-- Page 2 --}}
     <div class="page-break"></div>
     
@@ -248,7 +236,7 @@
         <li>Facilitate network management related services.</li>
         <li>Provide any other services as decided by NIXI management.</li>
     </ol>
-    
+
     <h2>3. Responsibilities of Member:</h2>
     <p>Member shall:</p>
     <ol type="a">
@@ -262,18 +250,6 @@
         <li>Be solely responsible for the member's own violation of the conditions of ISP License(s) issued by the (DoT) Department of Telecom, Government of India under which he is authorized to provide Internet Services and connect to NIXI (Applicable for ISP members Only).</li>
         <li>Non-ISP Member shall be solely responsible for violation of any of the prevailing the laws.</li>
     </ol>
-
-    <div class="footer-section clearfix">
-        <div class="footer-left">
-            <div>Initials</div>
-            <div>NIXISeal</div>
-        </div>
-        <div class="footer-right">
-            <div>InitialsMember</div>
-            <div>CompanySeal</div>
-            <div class="page-number">Page 2</div>
-        </div>
-    </div>
     
     {{-- Page 3 --}}
     <div class="page-break"></div>
@@ -294,18 +270,6 @@
     
     <h2>6. NON COMPETE</h2>
     <p>NIXI is a neutral Internet Exchange facilitating the members to interconnect with each other for efficient routing of domestic traffic and shall not compete with the business of other members.</p>
-    
-    <div class="footer-section clearfix">
-        <div class="footer-left">
-            <div>Initials</div>
-            <div>NIXISeal</div>
-        </div>
-        <div class="footer-right">
-            <div>InitialsMember</div>
-            <div>CompanySeal</div>
-            <div class="page-number">Page 3</div>
-        </div>
-    </div>
     
     {{-- Page 4 --}}
     <div class="page-break"></div>
@@ -330,18 +294,6 @@
     <h2>12. Insurance and Liability</h2>
     <p>NIXI will take precautions to prevent damage to Member Equipment. However, NIXI will not be liable for any loss or damage, howsoever caused, to the Member Equipment. The Member shall be solely responsible for insuring its own equipment.</p>
     
-    <div class="footer-section clearfix">
-        <div class="footer-left">
-            <div>Initials</div>
-            <div>NIXISeal</div>
-        </div>
-        <div class="footer-right">
-            <div>InitialsMember</div>
-            <div>CompanySeal</div>
-            <div class="page-number">Page 4</div>
-        </div>
-    </div>
-    
     {{-- Page 5 --}}
     <div class="page-break"></div>
     
@@ -359,18 +311,6 @@
     
     <h2>17. Indemnity</h2>
     <p>The parties shall indemnify and hold each other harmless from and against any and all liabilities, demands, losses, costs and expenses (including reasonable attorney's fees) arising out of or relating to any breach of their respective obligations under this Agreement or violation of any existing laws. It is expressly agreed that the officers, employees and personnel of NIXI shall not be personally liable under any circumstances.</p>
-    
-    <div class="footer-section clearfix">
-        <div class="footer-left">
-            <div>Initials</div>
-            <div>NIXISeal</div>
-        </div>
-        <div class="footer-right">
-            <div>InitialsMember</div>
-            <div>CompanySeal</div>
-            <div class="page-number">Page 5</div>
-        </div>
-    </div>
     
     {{-- Page 6 --}}
     <div class="page-break"></div>
@@ -410,18 +350,6 @@
                     <div class="signature-field" style="min-height: 15px;"></div>
                 </div>
             </div>
-        </div>
-    </div>
-    
-    <div class="footer-section clearfix">
-        <div class="footer-left">
-            <div>Initials</div>
-            <div>NIXISeal</div>
-        </div>
-        <div class="footer-right">
-            <div>InitialsMember</div>
-            <div>CompanySeal</div>
-            <div class="page-number">Page 6</div>
         </div>
     </div>
 </body>
