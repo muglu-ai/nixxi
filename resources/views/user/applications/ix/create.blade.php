@@ -803,7 +803,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const prefixes = form.querySelector('input[name="ip_prefix_count"]')?.value || '—';
         const prefixSourceSelect = document.getElementById('ipPrefixSource');
         const prefixSource = prefixSourceSelect && prefixSourceSelect.options[prefixSourceSelect.selectedIndex] ? prefixSourceSelect.options[prefixSourceSelect.selectedIndex].text : '';
-        document.getElementById('summaryPrefixes').textContent = prefixes !== '—' ? `${prefixes}${prefixSource ? ' (' + prefixSource + ')' : ''}` : '—';
+        document.getElementById('summaryPrefixes').textContent = prefixes !== '—' ? prefixes : '—';
 
         const asnInput = form.querySelector('input[name="asn_number"]');
         document.getElementById('summaryAsn').textContent = asnInput?.value || '—';

@@ -768,7 +768,7 @@ if ($gstVerification) {
                     <dt class="col-sm-4">Estimated Amount</dt>
                     <dd class="col-sm-8">₹{{ number_format($portInfo['amount'] ?? 0, 2) }} {{ $portInfo['currency'] ?? 'INR' }}</dd>
                     <dt class="col-sm-4">IP Prefixes</dt>
-                    <dd class="col-sm-8">{{ $ipInfo['count'] ?? 'N/A' }} ({{ strtoupper($ipInfo['source'] ?? '-') }})</dd>
+                    <dd class="col-sm-8">{{ $ipInfo['count'] ?? 'N/A' }}</dd>
                     <dt class="col-sm-4">ASN Number</dt>
                     <dd class="col-sm-8">{{ $ixData['peering']['asn_number'] ?? 'N/A' }}</dd>
                     <dt class="col-sm-4">Pre-NIXI Connectivity</dt>
