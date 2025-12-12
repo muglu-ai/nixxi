@@ -97,7 +97,11 @@
     @stack('styles')
 </head>
 <body>
-    @include('partials.logo')
+    <nav class="navbar navbar-light bg-light border-bottom" style="min-height: 60px;">
+        <div class="container-fluid">
+            @include('partials.logo')
+        </div>
+    </nav>
     <div class="container mt-4">
         @yield('content')
     </div>

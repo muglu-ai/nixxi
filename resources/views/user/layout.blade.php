@@ -24,9 +24,9 @@
     @stack('styles')
 </head>
 <body class="user-panel">
-    @include('partials.logo')
     <nav class="navbar navbar-expand-lg navbar-dark bg-dark sticky-top">
         <div class="container-fluid">
+            @include('partials.logo')
             <a class="navbar-brand" href="{{ route('user.dashboard') }}">
                 NIXI PORTAL
             </a>

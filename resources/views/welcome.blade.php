@@ -173,7 +173,11 @@
   </style>
 </head>
 <body>
-  @include('partials.logo')
+  <nav class="navbar navbar-light" style="background: var(--bg); min-height: 60px; border-bottom: 1px solid rgba(0,0,0,0.1);">
+    <div class="container-fluid">
+      @include('partials.logo')
+    </div>
+  </nav>
   <div class="container">
     <div class="scene">
       <!-- Left Person -->

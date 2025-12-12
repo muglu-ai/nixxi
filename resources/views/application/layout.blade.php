@@ -20,9 +20,9 @@
     @stack('styles')
 </head>
 <body>
-    @include('partials.logo')
     <nav class="navbar navbar-expand-lg navbar-dark" style="background-color: #2ecc71;">
         <div class="container-fluid">
+            @include('partials.logo')
             <a class="navbar-brand" href="{{ route('application.dashboard') }}">Application</a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
                 <span class="navbar-toggler-icon"></span>

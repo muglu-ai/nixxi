@@ -17,7 +17,11 @@
     <link rel="stylesheet" href="{{ asset('css/custom.css') }}">
 </head>
 <body>
-    @include('partials.logo')
+    <nav class="navbar navbar-light bg-light border-bottom" style="min-height: 60px;">
+        <div class="container-fluid">
+            @include('partials.logo')
+        </div>
+    </nav>
     <div class="container mt-4">
         <div class="row justify-content-center">
             <div class="col-md-5">
