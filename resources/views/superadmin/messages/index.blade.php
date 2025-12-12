@@ -118,8 +118,8 @@
                                 Showing {{ $messages->firstItem() }} to {{ $messages->lastItem() }} of {{ $messages->total() }} messages
                             </small>
                         </div>
-                        <div>
-                            {{ $messages->links() }}
+                        <div class="d-flex justify-content-center">
+                            {{ $messages->links('vendor.pagination.bootstrap-5') }}
                         </div>
                     </div>
                 </div>

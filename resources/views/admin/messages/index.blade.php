@@ -65,8 +65,8 @@
                             </tbody>
                         </table>
                     </div>
-                    <div class="mt-3">
-                        {{ $messages->links() }}
+                    <div class="mt-3 d-flex justify-content-center">
+                        {{ $messages->links('vendor.pagination.bootstrap-5') }}
                     </div>
                 @else
                     <p class="text-muted">No messages sent yet.</p>

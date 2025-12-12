@@ -75,8 +75,8 @@
                             </tbody>
                         </table>
                     </div>
-                    <div class="mt-3">
-                        {{ $requests->links() }}
+                    <div class="mt-3 d-flex justify-content-center">
+                        {{ $requests->links('vendor.pagination.bootstrap-5') }}
                     </div>
                 @else
                     <p class="text-muted">No profile update requests found.</p>

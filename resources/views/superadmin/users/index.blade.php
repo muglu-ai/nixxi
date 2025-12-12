@@ -98,8 +98,8 @@
                                 </tbody>
                             </table>
                         </div>
-                        <div class="mt-4">
-                            {{ $users->links() }}
+                        <div class="mt-4 d-flex justify-content-center">
+                            {{ $users->links('vendor.pagination.bootstrap-5') }}
                         </div>
                     @else
                         <div class="text-center py-5">

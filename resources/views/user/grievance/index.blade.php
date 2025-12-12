@@ -72,8 +72,8 @@
                         </table>
                     </div>
                     
-                    <div class="mt-3">
-                        {{ $tickets->links() }}
+                    <div class="mt-3 d-flex justify-content-center">
+                        {{ $tickets->links('vendor.pagination.bootstrap-5') }}
                     </div>
                 @else
                     <div class="text-center py-5">
