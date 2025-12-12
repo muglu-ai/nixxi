@@ -366,6 +366,31 @@ class SuperAdminController extends Controller
     }
 
     /**
+     * Check if Employee ID already exists.
+     */
+    public function checkEmployeeId(Request $request)
+    {
+        try {
+            $request->validate([
+                'employee_id' => 'required|string',
+            ]);
+
+            $exists = Admin::where('admin_id', $request->input('employee_id'))->exists();
+
+            return response()->json([
+                'exists' => $exists,
+            ]);
+        } catch (Exception $e) {
+            Log::error('Error checking employee ID: '.$e->getMessage());
+
+            return response()->json([
+                'exists' => false,
+                'error' => 'Error checking employee ID',
+            ], 500);
+        }
+    }
+
+    /**
      * Store new admin.
      */
     public function storeAdmin(Request $request)
@@ -373,12 +398,15 @@ class SuperAdminController extends Controller
         try {
             $validated = $request->validate([
                 'name' => 'required|string|max:255',
+                'employee_id' => 'required|string|max:255|unique:admins,admin_id',
                 'email' => 'required|email|unique:admins,email',
                 'password' => 'required|string|min:8|confirmed',
                 'roles' => 'nullable|array',
                 'roles.*' => 'exists:roles,id',
             ], [
                 'name.required' => 'Name is required.',
+                'employee_id.required' => 'Employee ID is required.',
+                'employee_id.unique' => 'This Employee ID is already registered. Please use a different Employee ID.',
                 'email.required' => 'Email is required.',
                 'email.unique' => 'This email is already registered.',
                 'password.required' => 'Password is required.',
@@ -390,7 +418,7 @@ class SuperAdminController extends Controller
                 'name' => $validated['name'],
                 'email' => $validated['email'],
                 'password' => Hash::make($validated['password']),
-                'admin_id' => Admin::generateAdminId(),
+                'admin_id' => $validated['employee_id'],
                 'is_super_admin' => false,
                 'is_active' => true,
             ]);

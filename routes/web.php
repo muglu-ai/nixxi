@@ -47,6 +47,7 @@ Route::prefix('superadmin')->name('superadmin.')->middleware(['superadmin'])->gr
     // Admin management
     Route::get('/admins', [SuperAdminController::class, 'admins'])->name('admins');
     Route::get('/admins/create', [SuperAdminController::class, 'createAdmin'])->name('admins.create');
+    Route::post('/admins/check-employee-id', [SuperAdminController::class, 'checkEmployeeId'])->name('admins.check-employee-id');
     Route::post('/admins', [SuperAdminController::class, 'storeAdmin'])->name('admins.store');
     Route::get('/admins/{id}', [SuperAdminController::class, 'showAdmin'])->name('admins.show');
     Route::get('/admins/{id}/edit', [SuperAdminController::class, 'editAdmin'])->name('admins.edit');

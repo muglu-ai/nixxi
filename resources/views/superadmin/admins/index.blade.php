@@ -37,7 +37,7 @@
                     <input type="text" 
                            name="search" 
                            class="form-control form-control-lg" 
-                           placeholder="Search by name, email, admin ID, or role..."
+                           placeholder="Search by name, email, employee ID, or role..."
                            value="{{ request('search') }}">
                 </div>
                 <div class="col-md-2">
@@ -72,7 +72,7 @@
                             <table class="table table-hover mb-0">
                                 <thead>
                                     <tr>
-                                        <th style="color: #2c3e50; font-weight: 600;">Admin ID</th>
+                                        <th style="color: #2c3e50; font-weight: 600;">Employee ID</th>
                                         <th style="color: #2c3e50; font-weight: 600;">Name</th>
                                         <th style="color: #2c3e50; font-weight: 600;">Email</th>
                                         <th style="color: #2c3e50; font-weight: 600;">Roles</th>

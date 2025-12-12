@@ -54,6 +54,22 @@
                         </div>
 
                         <div class="mb-3">
+                            <label for="employee_id" class="form-label">Employee ID <span class="text-danger">*</span></label>
+                            <input type="text" 
+                                   class="form-control @error('employee_id') is-invalid @enderror" 
+                                   id="employee_id" 
+                                   name="employee_id" 
+                                   value="{{ old('employee_id') }}" 
+                                   required
+                                   placeholder="Enter Employee ID">
+                            <small class="form-text text-muted">This Employee ID will be used as the admin identifier</small>
+                            <div id="employeeIdError" class="text-danger small mt-1" style="display: none;"></div>
+                            @error('employee_id')
+                                <div class="invalid-feedback">{{ $message }}</div>
+                            @enderror
+                        </div>
+
+                        <div class="mb-3">
                             <label for="email" class="form-label">Email Address <span class="text-danger">*</span></label>
                             <input type="email" 
                                    class="form-control @error('email') is-invalid @enderror" 
@@ -115,7 +131,7 @@
                         </div>
 
                         <div class="mb-3">
-                            <button type="submit" class="btn btn-primary px-4 py-2" style="border-radius: 10px; font-weight: 500;">
+                            <button type="submit" class="btn btn-primary px-4 py-2" style="border-radius: 10px; font-weight: 500;" id="submitBtn">
                                 <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" class="me-2" viewBox="0 0 16 16">
                                     <path d="M12.5 16a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Zm.5-5v1h1a.5.5 0 0 1 0 1h-1v1a.5.5 0 0 1-1 0v-1h-1a.5.5 0 0 1 0-1h1v-1a.5.5 0 0 1 1 0Zm-2-6a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"/>
                                     <path d="M2 13c0 1 1 1 1 1h5.256A4.493 4.493 0 0 1 8 12.5a4.49 4.49 0 0 1 1.544-3.393C9.077 9.038 8.564 9 8 9c-5 0-6 3-6 4Z"/>
@@ -130,4 +146,96 @@
         </div>
     </div>
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const employeeIdInput = document.getElementById('employee_id');
+    const employeeIdError = document.getElementById('employeeIdError');
+    const submitBtn = document.getElementById('submitBtn');
+    const form = employeeIdInput.closest('form');
+    let checkTimeout;
+
+    function checkEmployeeId(employeeId) {
+        if (!employeeId || employeeId.trim() === '') {
+            employeeIdError.style.display = 'none';
+            employeeIdInput.classList.remove('is-invalid');
+            submitBtn.disabled = false;
+            return;
+        }
+
+        fetch('{{ route("superadmin.admins.check-employee-id") }}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': '{{ csrf_token() }}'
+            },
+            body: JSON.stringify({ employee_id: employeeId })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.exists) {
+                employeeIdError.textContent = 'This Employee ID is already registered. Please use a different Employee ID.';
+                employeeIdError.style.display = 'block';
+                employeeIdInput.classList.add('is-invalid');
+                submitBtn.disabled = true;
+            } else {
+                employeeIdError.style.display = 'none';
+                employeeIdInput.classList.remove('is-invalid');
+                submitBtn.disabled = false;
+            }
+        })
+        .catch(error => {
+            console.error('Error checking employee ID:', error);
+        });
+    }
+
+    employeeIdInput.addEventListener('input', function() {
+        clearTimeout(checkTimeout);
+        const employeeId = this.value.trim();
+        
+        checkTimeout = setTimeout(function() {
+            checkEmployeeId(employeeId);
+        }, 500);
+    });
+
+    form.addEventListener('submit', function(e) {
+        const employeeId = employeeIdInput.value.trim();
+        if (!employeeId) {
+            e.preventDefault();
+            alert('Please enter an Employee ID.');
+            employeeIdInput.focus();
+            return false;
+        }
+
+        // Final check before submit - synchronous check
+        e.preventDefault();
+        
+        fetch('{{ route("superadmin.admins.check-employee-id") }}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': '{{ csrf_token() }}'
+            },
+            body: JSON.stringify({ employee_id: employeeId })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.exists) {
+                alert('This Employee ID is already registered. Please use a different Employee ID.');
+                employeeIdError.textContent = 'This Employee ID is already registered. Please use a different Employee ID.';
+                employeeIdError.style.display = 'block';
+                employeeIdInput.classList.add('is-invalid');
+                employeeIdInput.focus();
+            } else {
+                // If employee ID is available, submit the form
+                form.submit();
+            }
+        })
+        .catch(error => {
+            console.error('Error checking employee ID:', error);
+            alert('Error checking Employee ID. Please try again.');
+        });
+    });
+});
+</script>
 @endsection

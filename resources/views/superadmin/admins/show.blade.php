@@ -33,7 +33,7 @@
                     <div class="row">
                         <div class="col-md-3">
                             <div class="mb-3">
-                                <label class="text-muted small mb-1">Admin ID</label>
+                                <label class="text-muted small mb-1">Employee ID</label>
                                 <p class="mb-0" style="color: #2c3e50; font-weight: 500; font-size: 1.1rem;">{{ $admin->admin_id }}</p>
                             </div>
                         </div>
