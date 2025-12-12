@@ -96,9 +96,9 @@
                                     </td>
                                     <td>
                                         
-                                            {{ $application->node_location }}
+                                            {{ $application->nixi_location }}
                                         <br>
-                                        <small class="text-muted">{{ $application->node_location_details }}</small>
+                                        <small class="text-muted">{{ $application->nixi_location_details }}</small>
                                     </td>
                                     <td>
                                         @if($application->application_type === 'IX')
