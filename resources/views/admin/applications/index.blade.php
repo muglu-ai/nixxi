@@ -42,7 +42,7 @@
                         <input type="text" 
                                name="search" 
                                class="form-control" 
-                               placeholder="Search by application ID, registration name, email, registration ID, or status..."
+                               placeholder="Search by application ID, applicant name, email, registration ID, or status..."
                                value="{{ request('search') }}">
                     </div>
                     <div class="col-md-2">
@@ -76,7 +76,7 @@
                             <thead>
                                 <tr>
                                     <th>Application ID</th>
-                                    <th>Registration</th>
+                                    <th>Applicant Name</th>
                                     <th>Status</th>
                                     <th>Submitted At</th>
                                     <th>Last Updated</th>
