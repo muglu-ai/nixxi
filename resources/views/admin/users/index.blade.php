@@ -1,11 +1,11 @@
 @extends('admin.layout')
 
-@section('title', 'All Users')
+@section('title', 'All Registration')
 
 @section('content')
 <div class="row mb-4">
     <div class="col-12">
-        <h1>All Users</h1>
+        <h1>All Registration</h1>
         <a href="{{ route('admin.dashboard') }}" class="btn btn-secondary">Back to Dashboard</a>
     </div>
 </div>
@@ -14,7 +14,7 @@
     <div class="col-12">
         <div class="card">
             <div class="card-header bg-primary text-white">
-                <h5 class="mb-0">Users List</h5>
+                <h5 class="mb-0">Registration List</h5>
             </div>
             <div class="card-body">
                 @if($users->count() > 0)
@@ -39,9 +39,19 @@
                                     <td>{{ $user->email }}</td>
                                     <td>{{ $user->mobile }}</td>
                                     <td>
-                                        <span class="badge bg-{{ $user->status === 'pending' ? 'warning' : ($user->status === 'approved' ? 'success' : 'secondary') }}">
-                                            {{ $user->status }}
-                                        </span>
+                                        @if($user->status === 'approved')
+                                            <span class="badge bg-success">
+                                                Registered
+                                            </span>
+                                        @elseif($user->status === 'pending')
+                                            <span class="badge bg-warning">
+                                                Pending
+                                            </span>
+                                        @else
+                                            <span class="badge bg-secondary">
+                                                Rejected
+                                            </span>
+                                        @endif
                                     </td>
                                     <td>{{ $user->created_at->format('M d, Y') }}</td>
                                     <td>
@@ -56,7 +66,7 @@
                         {{ $users->links('vendor.pagination.bootstrap-5') }}
                     </div>
                 @else
-                    <p class="text-muted">No users found.</p>
+                    <p class="text-muted">No registrations found.</p>
                 @endif
             </div>
         </div>
