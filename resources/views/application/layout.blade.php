@@ -19,8 +19,8 @@
     <!-- Additional Styles -->
     @stack('styles')
 </head>
-<body>
-    <nav class="navbar navbar-expand-lg navbar-dark" style="background-color: #2ecc71;">
+<body class="user-panel">
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
         <div class="container-fluid">
             @include('partials.logo')
             <a class="navbar-brand" href="{{ route('application.dashboard') }}">Application</a>

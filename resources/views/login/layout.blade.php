@@ -18,8 +18,9 @@
     
     <style>
         :root {
-            --brand-blue: #1f3ba0;
-            --brand-blue-dark: #152a78;
+            --theme-primary: #FFD700; /* Yellow for user theme */
+            --theme-primary-dark: #E6B800;
+            --black: #000000;
         }
 
         .text-danger,
@@ -29,31 +30,35 @@
         .alert-success,
         .alert-danger ul li,
         .alert-success ul li {
-            color: var(--brand-blue) !important;
+            color: var(--theme-primary) !important;
         }
 
         .form-control.is-invalid,
         .form-check-input.is-invalid {
-            border-color: var(--brand-blue) !important;
+            border-color: var(--black) !important;
+            border-bottom: 2px solid var(--theme-primary) !important;
         }
         
         .form-control:focus,
         .form-select:focus,
         textarea:focus {
-            border-color: var(--brand-blue) !important;
-            box-shadow: 0 0 0 0.2rem rgba(31, 59, 160, 0.2) !important;
+            border-color: var(--black) !important;
+            border-bottom: 2px solid var(--theme-primary) !important;
+            box-shadow: 0 0 0 0.2rem rgba(255, 215, 0, 0.2) !important;
         }
         
         .input-group-text {
-            border-color: var(--brand-blue) !important;
+            border-color: var(--black) !important;
+            border-bottom: 2px solid var(--theme-primary) !important;
         }
         
         .badge.bg-danger,
         .badge.bg-success,
         .badge.bg-warning,
         .badge.bg-primary {
-            background-color: var(--brand-blue) !important;
-            color: #fff !important;
+            background-color: var(--theme-primary) !important;
+            color: #000 !important;
+            border: 1px solid var(--black) !important;
         }
 
         .btn,
@@ -63,9 +68,10 @@
         .btn-success,
         .btn-outline-secondary,
         .btn-outline-primary {
-            background-color: var(--brand-blue) !important;
-            border-color: var(--brand-blue) !important;
-            color: #fff !important;
+            background-color: var(--theme-primary) !important;
+            border-color: var(--theme-primary) !important;
+            border-bottom: 2px solid var(--black) !important;
+            color: #000 !important;
         }
 
         .btn:hover,
@@ -77,19 +83,22 @@
         .btn-outline-secondary:hover,
         .btn-outline-primary:hover,
         .btn:focus-visible {
-            background-color: var(--brand-blue-dark) !important;
-            border-color: var(--brand-blue-dark) !important;
-            color: #fff !important;
+            background-color: var(--theme-primary-dark) !important;
+            border-color: var(--theme-primary-dark) !important;
+            border-bottom: 2px solid var(--black) !important;
+            color: #000 !important;
         }
 
         a,
         .btn-link {
-            color: var(--brand-blue) !important;
+            color: var(--theme-primary) !important;
         }
 
         a:hover,
         .btn-link:hover {
-            color: var(--brand-blue-dark) !important;
+            color: var(--theme-primary-dark) !important;
+            text-decoration: underline;
+            text-decoration-color: var(--black) !important;
         }
     </style>
     
