@@ -20,6 +20,7 @@
     @stack('styles')
 </head>
 <body>
+    @include('partials.logo')
     <div id="app">
         @yield('content')
     </div>

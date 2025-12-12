@@ -173,6 +173,7 @@
   </style>
 </head>
 <body>
+  @include('partials.logo')
   <div class="container">
     <div class="scene">
       <!-- Left Person -->

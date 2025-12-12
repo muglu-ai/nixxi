@@ -15,6 +15,28 @@
             color: #000;
             margin: 0;
             padding: 0;
+            position: relative;
+        }
+        
+        .logo-container {
+            position: absolute;
+            top: 0.3cm;
+            left: 0.3cm;
+            z-index: 1000;
+            width: 80px;
+            height: auto;
+        }
+        
+        .logo-container svg {
+            width: 100%;
+            height: auto;
+            max-width: 80px;
+            display: block;
+        }
+        
+        .content-wrapper {
+            position: relative;
+            padding-top: 0;
         }
         
         .header-note {
@@ -138,8 +160,35 @@
     </style>
 </head>
 <body>
-    {{-- Page 1 --}}
-    <div class="header-note">
+    <div class="content-wrapper">
+        <div class="logo-container">
+            <svg viewBox="0 0 180 50" xmlns="http://www.w3.org/2000/svg">
+                <!-- Letter 'n' -->
+                <text x="2" y="28" font-family="Arial, sans-serif" font-size="28" font-weight="bold" fill="#1f3ba0">n</text>
+                
+                <!-- Letter 'i' (first) -->
+                <text x="22" y="28" font-family="Arial, sans-serif" font-size="28" font-weight="bold" fill="#1f3ba0">i</text>
+                <rect x="24" y="5" width="5" height="5" fill="#1f3ba0" rx="0.5"/>
+                
+                <!-- Letter 'x' - Three overlapping diagonal bars -->
+                <!-- Orange bar (leftmost, upward) -->
+                <line x1="42" y1="35" x2="54" y2="12" stroke="#ff6b35" stroke-width="5.5" stroke-linecap="round"/>
+                <!-- Green bar (middle, upward) -->
+                <line x1="46" y1="35" x2="58" y2="12" stroke="#2ecc71" stroke-width="5.5" stroke-linecap="round"/>
+                <!-- Dark blue bar (rightmost, downward) -->
+                <line x1="42" y1="12" x2="58" y2="35" stroke="#1f3ba0" stroke-width="5.5" stroke-linecap="round"/>
+                
+                <!-- Letter 'i' (second) -->
+                <text x="64" y="28" font-family="Arial, sans-serif" font-size="28" font-weight="bold" fill="#1f3ba0">i</text>
+                <rect x="66" y="5" width="5" height="5" fill="#1f3ba0" rx="0.5"/>
+                
+                <!-- Tagline "Empowering Netizens" -->
+                <text x="2" y="42" font-family="Arial, sans-serif" font-size="9" fill="#9ca3af" letter-spacing="0.3">Empowering Netizens</text>
+            </svg>
+        </div>
+        
+        {{-- Page 1 --}}
+        <div class="header-note">
         *This form has NIXI connection agreements for both ISP and Non-ISP. Please fill whichever is applicable*
     </div>
     
@@ -306,6 +355,7 @@
                     <div class="signature-field">Date:</div>
                     <div class="signature-field" style="min-height: 15px;"></div>
                 </div>
+        </div>
         </div>
         </div>
     </div>

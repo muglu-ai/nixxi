@@ -24,6 +24,7 @@
     @stack('styles')
 </head>
 <body class="superadmin-panel">
+    @include('partials.logo')
     <nav class="navbar navbar-expand-lg navbar-dark bg-dark sticky-top">
         <div class="container-fluid">
             <a class="navbar-brand" href="{{ route('superadmin.dashboard') }}">

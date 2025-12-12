@@ -20,6 +20,7 @@
     @stack('styles')
 </head>
 <body>
+    @include('partials.logo')
     <nav class="navbar navbar-expand-lg navbar-dark" style="background-color: #2ecc71;">
         <div class="container-fluid">
             <a class="navbar-brand" href="{{ route('application.dashboard') }}">Application</a>

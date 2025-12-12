@@ -17,6 +17,7 @@
     <link rel="stylesheet" href="{{ asset('css/custom.css') }}">
 </head>
 <body>
+    @include('partials.logo')
     <div class="container mt-4">
         <div class="row justify-content-center">
             <div class="col-md-5">

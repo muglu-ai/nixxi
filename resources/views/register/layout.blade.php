@@ -97,6 +97,7 @@
     @stack('styles')
 </head>
 <body>
+    @include('partials.logo')
     <div class="container mt-4">
         @yield('content')
     </div>
