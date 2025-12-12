@@ -11,6 +11,31 @@
 
 <div class="row">
     <div class="col-md-6">
+        <!-- Search Form for Requests -->
+        <div class="card mb-3">
+            <div class="card-body">
+                <form method="GET" action="{{ route('admin.requests-messages') }}" class="row g-2">
+                    <div class="col-md-8">
+                        <input type="text" 
+                               name="requests_search" 
+                               class="form-control form-control-sm" 
+                               placeholder="Search requests by registration name, email, or ID..."
+                               value="{{ request('requests_search') }}">
+                    </div>
+                    <div class="col-md-4">
+                        <button type="submit" class="btn btn-primary btn-sm w-100">Search</button>
+                    </div>
+                    @if(request('requests_search'))
+                        <div class="col-12">
+                            <a href="{{ route('admin.requests-messages', ['messages_page' => request('messages_page')]) }}" class="btn btn-sm btn-outline-secondary">Clear</a>
+                        </div>
+                    @endif
+                    @if(request('messages_search'))
+                        <input type="hidden" name="messages_search" value="{{ request('messages_search') }}">
+                    @endif
+                </form>
+            </div>
+        </div>
         <div class="card">
             <div class="card-header bg-warning text-white">
                 <h5 class="mb-0">Profile Update Requests ({{ $profileUpdateRequests->total() }})</h5>
@@ -57,6 +82,31 @@
     </div>
 
     <div class="col-md-6">
+        <!-- Search Form for Messages -->
+        <div class="card mb-3">
+            <div class="card-body">
+                <form method="GET" action="{{ route('admin.requests-messages') }}" class="row g-2">
+                    <div class="col-md-8">
+                        <input type="text" 
+                               name="messages_search" 
+                               class="form-control form-control-sm" 
+                               placeholder="Search messages by subject, content, or registration..."
+                               value="{{ request('messages_search') }}">
+                    </div>
+                    <div class="col-md-4">
+                        <button type="submit" class="btn btn-primary btn-sm w-100">Search</button>
+                    </div>
+                    @if(request('messages_search'))
+                        <div class="col-12">
+                            <a href="{{ route('admin.requests-messages', ['requests_page' => request('requests_page')]) }}" class="btn btn-sm btn-outline-secondary">Clear</a>
+                        </div>
+                    @endif
+                    @if(request('requests_search'))
+                        <input type="hidden" name="requests_search" value="{{ request('requests_search') }}">
+                    @endif
+                </form>
+            </div>
+        </div>
         <div class="card">
             <div class="card-header bg-info text-white">
                 <h5 class="mb-0">Recent Messages ({{ $messages->total() }})</h5>
@@ -83,7 +133,7 @@
                                         @endif
                                     </div>
                                     <div>
-                                        <a href="{{ route('admin.users.show', $message->user_id) }}" class="btn btn-sm btn-primary">View User</a>
+                                        <a href="{{ route('admin.users.show', $message->user_id) }}" class="btn btn-sm btn-primary">View Registration</a>
                                     </div>
                                 </div>
                             </div>

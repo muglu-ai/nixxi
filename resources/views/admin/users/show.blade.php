@@ -1,12 +1,12 @@
 @extends('admin.layout')
 
-@section('title', 'User Details')
+@section('title', 'Registration Details')
 
 @section('content')
 <div class="row mb-4">
     <div class="col-12">
-        <h1>User Details</h1>
-        <a href="{{ route('admin.users') }}" class="btn btn-secondary">Back to Users</a>
+        <h1>Registration Details</h1>
+        <a href="{{ route('admin.users') }}" class="btn btn-secondary">Back to Registrations</a>
     </div>
 </div>
 

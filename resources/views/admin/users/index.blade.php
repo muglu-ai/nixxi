@@ -10,6 +10,34 @@
     </div>
 </div>
 
+<!-- Search Form -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-body">
+                <form method="GET" action="{{ route('admin.users') }}" class="row g-3">
+                    <div class="col-md-10">
+                        <input type="text" 
+                               name="search" 
+                               class="form-control" 
+                               placeholder="Search by name, email, mobile, PAN, registration ID, or status..."
+                               value="{{ request('search') }}">
+                    </div>
+                    <div class="col-md-2">
+                        <button type="submit" class="btn btn-primary w-100">Search</button>
+                    </div>
+                    @if(request('search'))
+                        <div class="col-12">
+                            <a href="{{ route('admin.users') }}" class="btn btn-sm btn-outline-secondary">Clear Search</a>
+                            <small class="text-muted ms-2">Showing results for: <strong>{{ request('search') }}</strong></small>
+                        </div>
+                    @endif
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
 <div class="row">
     <div class="col-12">
         <div class="card">

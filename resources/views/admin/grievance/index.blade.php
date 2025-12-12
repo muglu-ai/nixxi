@@ -11,6 +11,34 @@
         </div>
     </div>
 
+    <!-- Search Form -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body">
+                    <form method="GET" action="{{ route('admin.grievance.index') }}" class="row g-3">
+                        <div class="col-md-10">
+                            <input type="text" 
+                                   name="search" 
+                                   class="form-control" 
+                                   placeholder="Search by ticket ID, subject, description, status, type, priority, or registration details..."
+                                   value="{{ request('search') }}">
+                        </div>
+                        <div class="col-md-2">
+                            <button type="submit" class="btn btn-primary w-100">Search</button>
+                        </div>
+                        @if(request('search'))
+                            <div class="col-12">
+                                <a href="{{ route('admin.grievance.index') }}" class="btn btn-sm btn-outline-secondary">Clear Search</a>
+                                <small class="text-muted ms-2">Showing results for: <strong>{{ request('search') }}</strong></small>
+                            </div>
+                        @endif
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div class="card">
         <div class="card-header bg-primary">
             <h5 class="mb-0">Tickets List</h5>
@@ -22,7 +50,7 @@
                         <thead>
                             <tr>
                                 <th>Ticket ID</th>
-                                <th>User</th>
+                                <th>Registration</th>
                                 <th>Type</th>
                                 <th>Subject</th>
                                 <th>Status</th>

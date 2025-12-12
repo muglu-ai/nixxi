@@ -32,6 +32,37 @@
     </div>
 @endif
 
+<!-- Search Form -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-body">
+                <form method="GET" action="{{ route('admin.applications') }}" class="row g-3">
+                    <div class="col-md-10">
+                        <input type="text" 
+                               name="search" 
+                               class="form-control" 
+                               placeholder="Search by application ID, registration name, email, registration ID, or status..."
+                               value="{{ request('search') }}">
+                    </div>
+                    <div class="col-md-2">
+                        <button type="submit" class="btn btn-primary w-100">Search</button>
+                    </div>
+                    @if(request('search'))
+                        <div class="col-12">
+                            <a href="{{ route('admin.applications') }}" class="btn btn-sm btn-outline-secondary">Clear Search</a>
+                            <small class="text-muted ms-2">Showing results for: <strong>{{ request('search') }}</strong></small>
+                        </div>
+                    @endif
+                    @if(request('role'))
+                        <input type="hidden" name="role" value="{{ request('role') }}">
+                    @endif
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
 <div class="row">
     <div class="col-12">
         <div class="card border-0 shadow-sm" style="border-radius: 16px;">
@@ -45,7 +76,7 @@
                             <thead>
                                 <tr>
                                     <th>Application ID</th>
-                                    <th>User</th>
+                                    <th>Registration</th>
                                     <th>Status</th>
                                     <th>Submitted At</th>
                                     <th>Last Updated</th>

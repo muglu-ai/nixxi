@@ -29,6 +29,28 @@ class SuperAdminGrievanceController extends Controller
 
         $query = Ticket::with(['user', 'assignedAdmin', 'messages']);
 
+        // Search functionality
+        if ($request->filled('search')) {
+            $search = $request->input('search');
+            $query->where(function ($q) use ($search) {
+                $q->where('ticket_id', 'like', "%{$search}%")
+                    ->orWhere('subject', 'like', "%{$search}%")
+                    ->orWhere('description', 'like', "%{$search}%")
+                    ->orWhere('status', 'like', "%{$search}%")
+                    ->orWhere('type', 'like', "%{$search}%")
+                    ->orWhere('priority', 'like', "%{$search}%")
+                    ->orWhereHas('user', function ($userQuery) use ($search) {
+                        $userQuery->where('fullname', 'like', "%{$search}%")
+                            ->orWhere('email', 'like', "%{$search}%")
+                            ->orWhere('registrationid', 'like', "%{$search}%");
+                    })
+                    ->orWhereHas('assignedAdmin', function ($adminQuery) use ($search) {
+                        $adminQuery->where('name', 'like', "%{$search}%")
+                            ->orWhere('email', 'like', "%{$search}%");
+                    });
+            });
+        }
+
         // Filter by status
         if ($request->has('status') && $request->status !== '') {
             $query->where('status', $request->status);
@@ -48,7 +70,7 @@ class SuperAdminGrievanceController extends Controller
             }
         }
 
-        $tickets = $query->latest()->paginate(20);
+        $tickets = $query->latest()->paginate(20)->withQueryString();
 
         // Get all admins for assignment dropdown
         $admins = Admin::with('roles')->get();

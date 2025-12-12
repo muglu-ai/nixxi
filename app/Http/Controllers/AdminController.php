@@ -158,12 +158,25 @@ class AdminController extends Controller
     /**
      * Display all users.
      */
-    public function users()
+    public function users(Request $request)
     {
         try {
-            $users = Registration::with(['messages', 'profileUpdateRequests'])
-                ->latest()
-                ->paginate(20);
+            $query = Registration::with(['messages', 'profileUpdateRequests']);
+
+            // Search functionality
+            if ($request->filled('search')) {
+                $search = $request->input('search');
+                $query->where(function ($q) use ($search) {
+                    $q->where('fullname', 'like', "%{$search}%")
+                        ->orWhere('email', 'like', "%{$search}%")
+                        ->orWhere('mobile', 'like', "%{$search}%")
+                        ->orWhere('pancardno', 'like', "%{$search}%")
+                        ->orWhere('registrationid', 'like', "%{$search}%")
+                        ->orWhere('status', 'like', "%{$search}%");
+                });
+            }
+
+            $users = $query->latest()->paginate(20)->withQueryString();
 
             return view('admin.users.index', compact('users'));
         } catch (QueryException $e) {
@@ -633,7 +646,21 @@ class AdminController extends Controller
                 }
             }
 
-            $applications = $query->orderBy('submitted_at', 'desc')->paginate(20);
+            // Search functionality
+            if ($request->filled('search')) {
+                $search = $request->input('search');
+                $query->where(function ($q) use ($search) {
+                    $q->where('application_id', 'like', "%{$search}%")
+                        ->orWhereHas('user', function ($userQuery) use ($search) {
+                            $userQuery->where('fullname', 'like', "%{$search}%")
+                                ->orWhere('email', 'like', "%{$search}%")
+                                ->orWhere('registrationid', 'like', "%{$search}%");
+                        })
+                        ->orWhere('status', 'like', "%{$search}%");
+                });
+            }
+
+            $applications = $query->orderBy('submitted_at', 'desc')->paginate(20)->withQueryString();
 
             return view('admin.applications.index', compact('applications', 'admin', 'selectedRole'));
         } catch (QueryException $e) {
@@ -1072,21 +1099,46 @@ class AdminController extends Controller
     /**
      * Display all profile update requests and messages for admin.
      */
-    public function requestsAndMessages()
+    public function requestsAndMessages(Request $request)
     {
         try {
             $admin = $this->getCurrentAdmin();
 
             // Get all pending profile update requests with user info
-            $profileUpdateRequests = ProfileUpdateRequest::with(['user'])
-                ->where('status', 'pending')
-                ->latest()
-                ->paginate(20, ['*'], 'requests_page');
+            $requestsQuery = ProfileUpdateRequest::with(['user'])
+                ->where('status', 'pending');
+
+            // Search for requests
+            if ($request->filled('requests_search')) {
+                $search = $request->input('requests_search');
+                $requestsQuery->where(function ($q) use ($search) {
+                    $q->whereHas('user', function ($userQuery) use ($search) {
+                        $userQuery->where('fullname', 'like', "%{$search}%")
+                            ->orWhere('email', 'like', "%{$search}%")
+                            ->orWhere('registrationid', 'like', "%{$search}%");
+                    });
+                });
+            }
+
+            $profileUpdateRequests = $requestsQuery->latest()->paginate(20, ['*'], 'requests_page')->withQueryString();
 
             // Get all recent messages sent to users
-            $messages = Message::with(['user'])
-                ->latest()
-                ->paginate(20, ['*'], 'messages_page');
+            $messagesQuery = Message::with(['user']);
+
+            // Search for messages
+            if ($request->filled('messages_search')) {
+                $search = $request->input('messages_search');
+                $messagesQuery->where(function ($q) use ($search) {
+                    $q->where('subject', 'like', "%{$search}%")
+                        ->orWhere('message', 'like', "%{$search}%")
+                        ->orWhereHas('user', function ($userQuery) use ($search) {
+                            $userQuery->where('fullname', 'like', "%{$search}%")
+                                ->orWhere('email', 'like', "%{$search}%");
+                        });
+                });
+            }
+
+            $messages = $messagesQuery->latest()->paginate(20, ['*'], 'messages_page')->withQueryString();
 
             return view('admin.requests-messages', compact('admin', 'profileUpdateRequests', 'messages'));
         } catch (QueryException $e) {
@@ -1106,15 +1158,28 @@ class AdminController extends Controller
     /**
      * Display admin messages inbox.
      */
-    public function messages()
+    public function messages(Request $request)
     {
         try {
             $admin = $this->getCurrentAdmin();
 
-            // Get all messages sent to users
-            $messages = Message::with(['user'])
-                ->latest()
-                ->paginate(20);
+            $query = Message::with(['user']);
+
+            // Search functionality
+            if ($request->filled('search')) {
+                $search = $request->input('search');
+                $query->where(function ($q) use ($search) {
+                    $q->where('subject', 'like', "%{$search}%")
+                        ->orWhere('message', 'like', "%{$search}%")
+                        ->orWhereHas('user', function ($userQuery) use ($search) {
+                            $userQuery->where('fullname', 'like', "%{$search}%")
+                                ->orWhere('email', 'like', "%{$search}%")
+                                ->orWhere('registrationid', 'like', "%{$search}%");
+                        });
+                });
+            }
+
+            $messages = $query->latest()->paginate(20)->withQueryString();
 
             return view('admin.messages.index', compact('admin', 'messages'));
         } catch (QueryException $e) {
@@ -1134,15 +1199,28 @@ class AdminController extends Controller
     /**
      * Display all profile update requests.
      */
-    public function profileUpdateRequests()
+    public function profileUpdateRequests(Request $request)
     {
         try {
             $admin = $this->getCurrentAdmin();
 
-            // Get all profile update requests with user info
-            $requests = ProfileUpdateRequest::with(['user', 'approver'])
-                ->latest()
-                ->paginate(20);
+            $query = ProfileUpdateRequest::with(['user', 'approver']);
+
+            // Search functionality
+            if ($request->filled('search')) {
+                $search = $request->input('search');
+                $query->where(function ($q) use ($search) {
+                    $q->where('status', 'like', "%{$search}%")
+                        ->orWhereHas('user', function ($userQuery) use ($search) {
+                            $userQuery->where('fullname', 'like', "%{$search}%")
+                                ->orWhere('email', 'like', "%{$search}%")
+                                ->orWhere('registrationid', 'like', "%{$search}%")
+                                ->orWhere('mobile', 'like', "%{$search}%");
+                        });
+                });
+            }
+
+            $requests = $query->latest()->paginate(20)->withQueryString();
 
             return view('admin.profile-update-requests.index', compact('admin', 'requests'));
         } catch (QueryException $e) {

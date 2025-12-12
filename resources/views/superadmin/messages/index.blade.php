@@ -7,7 +7,7 @@
     <!-- Page Header -->
     <div class="mb-4">
         <h2 class="mb-1" style="color: #2c3e50; font-weight: 600;">All Messages</h2>
-        <p class="text-muted mb-0">View and search all messages between admins and users</p>
+        <p class="text-muted mb-0">View and search all messages between admins and registrations</p>
     </div>
 
     <!-- Search and Filter -->
@@ -18,14 +18,14 @@
                     <input type="text" 
                            name="search" 
                            class="form-control" 
-                           placeholder="Search by user name, email, admin name, subject, or message content..."
+                           placeholder="Search by registration name, email, admin name, subject, or message content..."
                            value="{{ request('search') }}">
                 </div>
                 <div class="col-md-3">
                     <select name="sent_by" class="form-select">
                         <option value="">All Senders</option>
                         <option value="admin" {{ request('sent_by') === 'admin' ? 'selected' : '' }}>Admin</option>
-                        <option value="user" {{ request('sent_by') === 'user' ? 'selected' : '' }}>User</option>
+                        <option value="user" {{ request('sent_by') === 'user' ? 'selected' : '' }}>Registration</option>
                     </select>
                 </div>
                 <div class="col-md-1">
@@ -46,7 +46,7 @@
                     <table class="table table-hover mb-0">
                         <thead>
                             <tr>
-                                <th style="color: #2c3e50; font-weight: 600; padding: 1rem;">User</th>
+                                <th style="color: #2c3e50; font-weight: 600; padding: 1rem;">Registration</th>
                                 <th style="color: #2c3e50; font-weight: 600; padding: 1rem;">Subject</th>
                                 <th style="color: #2c3e50; font-weight: 600; padding: 1rem;">Message Preview</th>
                                 <th style="color: #2c3e50; font-weight: 600; padding: 1rem;">From</th>
@@ -71,7 +71,7 @@
                                     </div>
                                     @if($message->user_reply)
                                         <div class="mt-2 p-2 bg-light rounded" style="max-width: 300px;">
-                                            <small class="text-muted d-block mb-1"><strong>User Reply:</strong></small>
+                                            <small class="text-muted d-block mb-1"><strong>Registration Reply:</strong></small>
                                             <small>{{ \Illuminate\Support\Str::limit($message->user_reply, 80) }}</small>
                                         </div>
                                     @endif

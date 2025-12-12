@@ -17,7 +17,7 @@ class AdminGrievanceController extends Controller
     /**
      * Display list of tickets assigned to the admin.
      */
-    public function index(): View|RedirectResponse
+    public function index(Request $request): View|RedirectResponse
     {
         $adminId = session('admin_id');
         $admin = Admin::find($adminId);
@@ -27,10 +27,28 @@ class AdminGrievanceController extends Controller
                 ->with('error', 'Admin session expired. Please login again.');
         }
 
-        $tickets = Ticket::where('assigned_to', $adminId)
-            ->with(['user', 'messages'])
-            ->latest()
-            ->paginate(15);
+        $query = Ticket::where('assigned_to', $adminId)
+            ->with(['user', 'messages']);
+
+        // Search functionality
+        if ($request->filled('search')) {
+            $search = $request->input('search');
+            $query->where(function ($q) use ($search) {
+                $q->where('ticket_id', 'like', "%{$search}%")
+                    ->orWhere('subject', 'like', "%{$search}%")
+                    ->orWhere('description', 'like', "%{$search}%")
+                    ->orWhere('status', 'like', "%{$search}%")
+                    ->orWhere('type', 'like', "%{$search}%")
+                    ->orWhere('priority', 'like', "%{$search}%")
+                    ->orWhereHas('user', function ($userQuery) use ($search) {
+                        $userQuery->where('fullname', 'like', "%{$search}%")
+                            ->orWhere('email', 'like', "%{$search}%")
+                            ->orWhere('registrationid', 'like', "%{$search}%");
+                    });
+            });
+        }
+
+        $tickets = $query->latest()->paginate(15)->withQueryString();
 
         return view('admin.grievance.index', compact('admin', 'tickets'));
     }

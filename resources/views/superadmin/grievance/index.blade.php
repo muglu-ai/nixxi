@@ -18,6 +18,15 @@
         </div>
         <div class="card-body">
             <form method="GET" action="{{ route('superadmin.grievance.index') }}" class="row g-3">
+                <div class="col-md-6">
+                    <label for="search" class="form-label">Search</label>
+                    <input type="text" 
+                           name="search" 
+                           id="search"
+                           class="form-control" 
+                           placeholder="Search by ticket ID, subject, description, status, type, priority, registration, or admin..."
+                           value="{{ request('search') }}">
+                </div>
                 <div class="col-md-3">
                     <label for="status" class="form-label">Status</label>
                     <select name="status" id="status" class="form-select">
@@ -69,7 +78,7 @@
                         <thead>
                             <tr>
                                 <th>Ticket ID</th>
-                                <th>User</th>
+                                <th>Registration</th>
                                 <th>Type</th>
                                 <th>Subject</th>
                                 <th>Status</th>

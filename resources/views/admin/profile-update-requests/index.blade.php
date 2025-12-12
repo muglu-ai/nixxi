@@ -6,7 +6,35 @@
 <div class="row mb-4">
     <div class="col-12">
         <h1>Profile Update Requests</h1>
-        <p class="text-muted">All profile update requests from users</p>
+        <p class="text-muted">All profile update requests from registrations</p>
+    </div>
+</div>
+
+<!-- Search Form -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-body">
+                <form method="GET" action="{{ route('admin.profile-update-requests') }}" class="row g-3">
+                    <div class="col-md-10">
+                        <input type="text" 
+                               name="search" 
+                               class="form-control" 
+                               placeholder="Search by status, registration name, email, registration ID, or mobile..."
+                               value="{{ request('search') }}">
+                    </div>
+                    <div class="col-md-2">
+                        <button type="submit" class="btn btn-primary w-100">Search</button>
+                    </div>
+                    @if(request('search'))
+                        <div class="col-12">
+                            <a href="{{ route('admin.profile-update-requests') }}" class="btn btn-sm btn-outline-secondary">Clear Search</a>
+                            <small class="text-muted ms-2">Showing results for: <strong>{{ request('search') }}</strong></small>
+                        </div>
+                    @endif
+                </form>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -22,7 +50,7 @@
                         <table class="table table-hover">
                             <thead>
                                 <tr>
-                                    <th>User</th>
+                                    <th>Registration</th>
                                     <th>Requested Changes</th>
                                     <th>Status</th>
                                     <th>Requested At</th>
@@ -68,7 +96,7 @@
                                             @endif
                                         </td>
                                         <td>
-                                            <a href="{{ route('admin.users.show', $request->user_id) }}" class="btn btn-sm btn-primary">View User</a>
+                                            <a href="{{ route('admin.users.show', $request->user_id) }}" class="btn btn-sm btn-primary">View Registration</a>
                                         </td>
                                     </tr>
                                 @endforeach

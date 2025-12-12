@@ -1,6 +1,6 @@
 @extends('superadmin.layout')
 
-@section('title', 'All Users')
+@section('title', 'All Registration')
 
 @section('content')
 <div class="container-fluid py-4">
@@ -8,8 +8,8 @@
     <div class="mb-4">
         <div class="d-flex justify-content-between align-items-center">
             <div>
-                <h2 class="mb-1" style="color: #2c3e50; font-weight: 600;">All Users</h2>
-                <p class="text-muted mb-0">Manage all registered users</p>
+                <h2 class="mb-1" style="color: #2c3e50; font-weight: 600;">All Registration</h2>
+                <p class="text-muted mb-0">Manage all registered registrations</p>
             </div>
             <a href="{{ route('superadmin.dashboard') }}" class="btn btn-outline-secondary px-4" style="border-radius: 10px; font-weight: 500;">
                 <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" class="me-2" viewBox="0 0 16 16">
@@ -55,7 +55,7 @@
         <div class="col-12">
             <div class="card border-0 shadow-sm" style="border-radius: 16px;">
                 <div class="card-header bg-primary text-white" style="border-radius: 16px 16px 0 0;">
-                    <h5 class="mb-0" style="font-weight: 600;">Users List ({{ $users->total() }})</h5>
+                    <h5 class="mb-0" style="font-weight: 600;">Registration List ({{ $users->total() }})</h5>
                 </div>
                 <div class="card-body p-4">
                     @if($users->count() > 0)
@@ -107,7 +107,7 @@
                                 <path d="M7 14s-1 0-1-1 1-4 5-4 5 3 5 4-1 1-1 1H7Zm4-6a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm-5.784 6A2.238 2.238 0 0 1 5 13c0-1.355.68-2.75 1.936-3.72A6.325 6.325 0 0 0 5 9c-4 0-5 3-5 4s1 1 1 1h4.216Z"/>
                                 <path d="M4.5 8a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z"/>
                             </svg>
-                            <p class="text-muted">No users found.</p>
+                            <p class="text-muted">No registrations found.</p>
                         </div>
                     @endif
                 </div>

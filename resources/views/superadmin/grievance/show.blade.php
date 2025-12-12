@@ -22,7 +22,7 @@
         <div class="card-body">
             <div class="row mb-3">
                 <div class="col-md-6">
-                    <p><strong>User:</strong> {{ $ticket->user->fullname ?? 'N/A' }}</p>
+                    <p><strong>Registration:</strong> {{ $ticket->user->fullname ?? 'N/A' }}</p>
                     <p><strong>Email:</strong> {{ $ticket->user->email ?? 'N/A' }}</p>
                     <p><strong>Type:</strong> <span class="badge bg-info">{{ $ticket->type_display }}</span></p>
                     <p><strong>Priority:</strong> <span class="badge bg-{{ $ticket->priority_badge_color }}">{{ ucfirst($ticket->priority) }}</span></p>
