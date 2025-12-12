@@ -95,8 +95,8 @@
                                         <small class="text-muted">{{ $application->user->email }}</small>
                                     </td>
                                     <td>
-                                        <a href="{{ route('admin.users.show', $application->nodal_officer_id) }}">
-                                            {{ $application->nodal_officer->fullname }}
+                                        <a href="{{ route('admin.users.show', $application->node_name) }}">
+                                            {{ $application->user->node_name }}
                                         </a><br>
                                         <small class="text-muted">{{ $application->nodal_officer->email }}</small>
                                     </td>
