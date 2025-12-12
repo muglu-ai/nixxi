@@ -77,6 +77,7 @@
                                 <tr>
                                     <th>Application ID</th>
                                     <th>Applicant Name</th>
+                                    <th>Node Name</th>
                                     <th>Status</th>
                                     <th>Submitted At</th>
                                     <th>Last Updated</th>
@@ -92,6 +93,12 @@
                                             {{ $application->user->fullname }}
                                         </a><br>
                                         <small class="text-muted">{{ $application->user->email }}</small>
+                                    </td>
+                                    <td>
+                                        <a href="{{ route('admin.users.show', $application->nodal_officer_id) }}">
+                                            {{ $application->nodal_officer->fullname }}
+                                        </a><br>
+                                        <small class="text-muted">{{ $application->nodal_officer->email }}</small>
                                     </td>
                                     <td>
                                         @if($application->application_type === 'IX')
