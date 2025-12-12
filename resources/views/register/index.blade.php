@@ -282,23 +282,23 @@
                 fullnameLabel.innerHTML = 'Full Name <span style="color: #4169E1;">*</span>';
             }
             if (fullnameInput) {
-                fullnameInput.placeholder = 'Enter your full name';
+                fullnameInput.placeholder = 'Enter your full name (As per PAN)';
             }
             if (fullnameHelp) {
                 fullnameHelp.textContent = 'Only letters, spaces, apostrophes (\'), and hyphens (-) are allowed';
             }
             if (dateofbirthLabel) {
-                dateofbirthLabel.innerHTML = 'Date of Birth <span style="color: #4169E1;">*</span>';
+                dateofbirthLabel.innerHTML = 'Date of Birth (As per PAN) <span style="color: #4169E1;">*</span>';
             }
             if (dateofbirthHelp) {
                 dateofbirthHelp.textContent = 'Enter your date of birth';
             }
         } else {
             if (fullnameLabel) {
-                fullnameLabel.innerHTML = 'Entity Name <span style="color: #4169E1;">*</span>';
+                fullnameLabel.innerHTML = 'Entity Name (As per PAN) <span style="color: #4169E1;">*</span>';
             }
             if (fullnameInput) {
-                fullnameInput.placeholder = 'Enter entity/company name (As per PAN)';
+                fullnameInput.placeholder = 'Enter entity/company name';
             }
             if (fullnameHelp) {
                 fullnameHelp.textContent = 'Only letters, spaces, apostrophes (\'), and hyphens (-) are allowed';
