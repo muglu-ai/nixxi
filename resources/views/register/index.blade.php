@@ -56,33 +56,35 @@
                         @enderror
                     </div>
                     
-                    <div class="mb-3">
-                        <label for="fullname" class="form-label" id="fullnameLabel">Full Name <span style="color: #4169E1;">*</span></label>
-                        <input type="text" 
-                               class="form-control @error('fullname') is-invalid @enderror" 
-                               id="fullname" 
-                               name="fullname" 
-                               value="{{ old('fullname') }}"
-                               placeholder="Enter full name or affiliate name"
-                               required>
-                        <small class="form-text text-muted" id="fullnameHelp">Only letters, spaces, and apostrophes (') are allowed</small>
-                        @error('fullname')
-                            <div class="invalid-feedback">{{ $message }}</div>
-                        @enderror
-                    </div>
-                    
-                    <div class="mb-3">
-                        <label for="dateofbirth" class="form-label" id="dateofbirthLabel">Date of Birth <span style="color: #4169E1;">*</span></label>
-                        <input type="date" 
-                               class="form-control @error('dateofbirth') is-invalid @enderror" 
-                               id="dateofbirth" 
-                               name="dateofbirth" 
-                               value="{{ old('dateofbirth') }}"
-                               required>
-                        <small class="form-text text-muted" id="dateofbirthHelp"></small>
-                        @error('dateofbirth')
-                            <div class="invalid-feedback">{{ $message }}</div>
-                        @enderror
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="fullname" class="form-label" id="fullnameLabel">Full Name (As per PAN) <span style="color: #4169E1;">*</span></label>
+                            <input type="text" 
+                                   class="form-control @error('fullname') is-invalid @enderror" 
+                                   id="fullname" 
+                                   name="fullname" 
+                                   value="{{ old('fullname') }}"
+                                   placeholder="Enter full name or affiliate name"
+                                   required>
+                            <small class="form-text text-muted" id="fullnameHelp">Only letters, spaces, and apostrophes (') are allowed</small>
+                            @error('fullname')
+                                <div class="invalid-feedback">{{ $message }}</div>
+                            @enderror
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <label for="dateofbirth" class="form-label" id="dateofbirthLabel">Date of Birth (As per PAN)<span style="color: #4169E1;">*</span></label>
+                            <input type="date" 
+                                   class="form-control @error('dateofbirth') is-invalid @enderror" 
+                                   id="dateofbirth" 
+                                   name="dateofbirth" 
+                                   value="{{ old('dateofbirth') }}"
+                                   required>
+                            <small class="form-text text-muted" id="dateofbirthHelp"></small>
+                            @error('dateofbirth')
+                                <div class="invalid-feedback">{{ $message }}</div>
+                            @enderror
+                        </div>
                     </div>
                     
                     <div class="mb-3">
@@ -110,84 +112,86 @@
                         @enderror
                     </div>
                     
-                    <div class="mb-3">
-                        <label for="email" class="form-label">Email Address <span style="color: #4169E1;">*</span></label>
-                        <div class="input-group">
-                            <input type="email" 
-                                   class="form-control @error('email') is-invalid @enderror" 
-                                   id="email" 
-                                   name="email" 
-                                   value="{{ old('email') }}"
-                                   required>
-                            <button type="button" 
-                                    class="btn btn-outline-primary" 
-                                    id="getEmailOtpBtn"
-                                    onclick="getEmailOtp()">
-                                Get OTP
-                            </button>
-                        </div>
-                        <div id="emailOtpSection" style="display: none;" class="mt-2">
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="email" class="form-label">Email Address <span style="color: #4169E1;">*</span></label>
                             <div class="input-group">
-                                <input type="text" 
-                                       class="form-control" 
-                                       id="email_otp" 
-                                       name="email_otp" 
-                                       placeholder="Enter 6-digit OTP"
-                                       maxlength="6">
+                                <input type="email" 
+                                       class="form-control @error('email') is-invalid @enderror" 
+                                       id="email" 
+                                       name="email" 
+                                       value="{{ old('email') }}"
+                                       required>
                                 <button type="button" 
-                                        class="btn btn-success" 
-                                        onclick="verifyEmailOtp()">
-                                    Verify
+                                        class="btn btn-outline-primary" 
+                                        id="getEmailOtpBtn"
+                                        onclick="getEmailOtp()">
+                                    Get OTP
                                 </button>
                             </div>
-                            <small class="form-text text-muted" id="emailOtpStatus"></small>
+                            <div id="emailOtpSection" style="display: none;" class="mt-2">
+                                <div class="input-group">
+                                    <input type="text" 
+                                           class="form-control" 
+                                           id="email_otp" 
+                                           name="email_otp" 
+                                           placeholder="Enter 6-digit OTP"
+                                           maxlength="6">
+                                    <button type="button" 
+                                            class="btn btn-success" 
+                                            onclick="verifyEmailOtp()">
+                                        Verify
+                                    </button>
+                                </div>
+                                <small class="form-text text-muted" id="emailOtpStatus"></small>
+                            </div>
+                            <div id="emailVerificationStatus" class="mt-2" style="display: none;"></div>
+                            <input type="hidden" id="email_verified" name="email_verified" value="0">
+                            @error('email')
+                                <div class="invalid-feedback">{{ $message }}</div>
+                            @enderror
                         </div>
-                        <div id="emailVerificationStatus" class="mt-2" style="display: none;"></div>
-                        <input type="hidden" id="email_verified" name="email_verified" value="0">
-                        @error('email')
-                            <div class="invalid-feedback">{{ $message }}</div>
-                        @enderror
-                    </div>
-                    
-                    <div class="mb-3">
-                        <label for="mobile" class="form-label">Mobile Number <span style="color: #4169E1;">*</span></label>
-                        <div class="input-group">
-                            <input type="tel" 
-                                   class="form-control @error('mobile') is-invalid @enderror" 
-                                   id="mobile" 
-                                   name="mobile" 
-                                   value="{{ old('mobile') }}"
-                                   placeholder="10-digit mobile number"
-                                   maxlength="10"
-                                   required>
-                            <button type="button" 
-                                    class="btn btn-outline-primary" 
-                                    id="getMobileOtpBtn"
-                                    onclick="getMobileOtp()">
-                                Get OTP
-                            </button>
-                        </div>
-                        <div id="mobileOtpSection" style="display: none;" class="mt-2">
+                        
+                        <div class="col-md-6">
+                            <label for="mobile" class="form-label">Mobile Number <span style="color: #4169E1;">*</span></label>
                             <div class="input-group">
-                                <input type="text" 
-                                       class="form-control" 
-                                       id="mobile_otp" 
-                                       name="mobile_otp" 
-                                       placeholder="Enter 6-digit OTP"
-                                       maxlength="6">
+                                <input type="tel" 
+                                       class="form-control @error('mobile') is-invalid @enderror" 
+                                       id="mobile" 
+                                       name="mobile" 
+                                       value="{{ old('mobile') }}"
+                                       placeholder="10-digit mobile number"
+                                       maxlength="10"
+                                       required>
                                 <button type="button" 
-                                        class="btn btn-success" 
-                                        onclick="verifyMobileOtp()">
-                                    Verify
+                                        class="btn btn-outline-primary" 
+                                        id="getMobileOtpBtn"
+                                        onclick="getMobileOtp()">
+                                    Get OTP
                                 </button>
                             </div>
-                            <small class="form-text text-muted" id="mobileOtpStatus"></small>
+                            <div id="mobileOtpSection" style="display: none;" class="mt-2">
+                                <div class="input-group">
+                                    <input type="text" 
+                                           class="form-control" 
+                                           id="mobile_otp" 
+                                           name="mobile_otp" 
+                                           placeholder="Enter 6-digit OTP"
+                                           maxlength="6">
+                                    <button type="button" 
+                                            class="btn btn-success" 
+                                            onclick="verifyMobileOtp()">
+                                        Verify
+                                    </button>
+                                </div>
+                                <small class="form-text text-muted" id="mobileOtpStatus"></small>
+                            </div>
+                            <div id="mobileVerificationStatus" class="mt-2" style="display: none;"></div>
+                            <input type="hidden" id="mobile_verified" name="mobile_verified" value="0">
+                            @error('mobile')
+                                <div class="invalid-feedback">{{ $message }}</div>
+                            @enderror
                         </div>
-                        <div id="mobileVerificationStatus" class="mt-2" style="display: none;"></div>
-                        <input type="hidden" id="mobile_verified" name="mobile_verified" value="0">
-                        @error('mobile')
-                            <div class="invalid-feedback">{{ $message }}</div>
-                        @enderror
                     </div>
                     
                     <!-- Disclaimer/Declaration -->
@@ -294,13 +298,13 @@
                 fullnameLabel.innerHTML = 'Entity Name <span style="color: #4169E1;">*</span>';
             }
             if (fullnameInput) {
-                fullnameInput.placeholder = 'Enter entity/company name';
+                fullnameInput.placeholder = 'Enter entity/company name (As per PAN)';
             }
             if (fullnameHelp) {
                 fullnameHelp.textContent = 'Only letters, spaces, apostrophes (\'), and hyphens (-) are allowed';
             }
             if (dateofbirthLabel) {
-                dateofbirthLabel.innerHTML = 'Date of Incorporation <span style="color: #4169E1;">*</span>';
+                dateofbirthLabel.innerHTML = 'Date of Incorporation (As per PAN) <span style="color: #4169E1;">*</span>';
             }
             if (dateofbirthHelp) {
                 dateofbirthHelp.textContent = 'Enter the date of incorporation';
