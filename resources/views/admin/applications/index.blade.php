@@ -95,10 +95,21 @@
                                         <small class="text-muted">{{ $application->user->email }}</small>
                                     </td>
                                     <td>
-                                        <a href="{{ route('admin.users.show', $application->node_name) }}">
-                                            {{ $application->user->node_name }}
-                                        </a><br>
-                                        <small class="text-muted">{{ $application->nodal_officer->email }}</small>
+                                        <span class="text-capitalize">
+                                            {{ strtolower($application->node_name) }}
+                                        </span>
+                                        @if(!empty($application->node_state_name))
+                                            <br>
+                                            <span class="text-muted text-capitalize" style="font-size: 90%;">
+                                                {{ strtolower($application->node_state_name) }}
+                                            </span>
+                                        @endif
+                                        @if(!empty($application->node_details))
+                                            <br>
+                                            <small class="text-muted" style="font-size: 90%;">
+                                                {{ strtolower($application->node_details) }}
+                                            </small>
+                                        @endif
                                     </td>
                                     <td>
                                         @if($application->application_type === 'IX')
