@@ -18,7 +18,7 @@
             <a href="{{ route('admin.users') }}" class="text-decoration-none">
                 <div class="card">
                     <div class="card-header bg-primary">
-                        <h6 class="mb-0">Total Users</h6>
+                        <h6 class="mb-0">Total Registrations</h6>
                     </div>
                     <div class="card-body">
                         <div class="d-flex align-items-center justify-content-between">
@@ -112,7 +112,7 @@
                         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" class="me-2" viewBox="0 0 16 16">
                             <path d="M7 14s-1 0-1-1 1-4 5-4 5 3 5 4-1 1-1 1H7Zm4-6a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm-5.784 6A2.238 2.238 0 0 1 5 13c0-1.355.68-2.75 1.936-3.72A6.325 6.325 0 0 0 5 9c-4 0-5 3-5 4s1 1 1 1h4.216Z"/>
                         </svg>
-                        View All Users
+                        View All Registrations
                     </a>
                     @if($admin->hasRole('processor') || $admin->hasRole('finance') || $admin->hasRole('technical'))
                     <a href="{{ route('admin.applications', ['role' => $selectedRole]) }}" class="btn btn-success btn-lg w-100 mb-2" style="border-radius: 10px; font-weight: 500;">
@@ -128,7 +128,7 @@
         <div class="col-md-6">
             <div class="card border-0 shadow-sm" style="border-radius: 16px;">
                 <div class="card-header bg-primary text-white" style="border-radius: 16px 16px 0 0;">
-                    <h5 class="mb-0" style="font-weight: 600;">Recent Users</h5>
+                    <h5 class="mb-0" style="font-weight: 600;">Recent Registrations</h5>
                 </div>
                 <div class="card-body p-4">
                     @if($recentUsers->count() > 0)
@@ -148,9 +148,19 @@
                                         <td><a href="{{ route('admin.users.show', $user->id) }}" style="color: #0d6efd; text-decoration: none;">{{ $user->fullname }}</a></td>
                                         <td>{{ $user->email }}</td>
                                         <td>
-                                            <span class="badge rounded-pill px-3 py-1 bg-{{ $user->status === 'pending' ? 'warning' : ($user->status === 'approved' ? 'success' : 'secondary') }}">
-                                                {{ ucfirst($user->status) }}
-                                            </span>
+                                            @if($user->status === 'approved')
+                                                <span class="badge rounded-pill px-3 py-1 bg-success">
+                                                    Registered
+                                                </span>
+                                            @elseif($user->status === 'pending')
+                                                <span class="badge rounded-pill px-3 py-1 bg-warning">
+                                                    Pending
+                                                </span>
+                                            @else
+                                                <span class="badge rounded-pill px-3 py-1 bg-secondary">
+                                                    Rejected
+                                                </span>
+                                            @endif
                                         </td>
                                         <td>{{ $user->created_at->format('M d, Y') }}</td>
                                     </tr>
@@ -159,7 +169,7 @@
                             </table>
                         </div>
                     @else
-                        <p class="text-muted mb-0">No users yet.</p>
+                        <p class="text-muted mb-0">No registrations yet.</p>
                     @endif
                 </div>
             </div>
