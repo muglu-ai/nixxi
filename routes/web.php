@@ -363,6 +363,14 @@ Route::get('/admin/view-logs', function (Request $request) {
                 stripos($line, 'Payment') !== false) {
                 $filteredLines[] = $line;
             }
+        } elseif ($filter === 'email') {
+            if (stripos($line, 'Mail') !== false || 
+                stripos($line, 'email') !== false || 
+                stripos($line, 'Email') !== false ||
+                stripos($line, 'OTP') !== false ||
+                stripos($line, 'sent') !== false) {
+                $filteredLines[] = $line;
+            }
         } elseif ($filter === 'errors') {
             if (stripos($line, 'ERROR') !== false || 
                 stripos($line, 'Exception') !== false || 

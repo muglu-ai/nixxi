@@ -88,6 +88,7 @@
                         <div class="btn-group" role="group">
                             <select name="filter" class="form-select form-select-sm d-inline-block" style="width: auto;" onchange="this.form.submit()">
                                 <option value="all" {{ $filter === 'all' ? 'selected' : '' }}>All Logs</option>
+                                <option value="email" {{ $filter === 'email' ? 'selected' : '' }}>Email/Mail Only</option>
                                 <option value="payu" {{ $filter === 'payu' ? 'selected' : '' }}>PayU/Payment Only</option>
                                 <option value="errors" {{ $filter === 'errors' ? 'selected' : '' }}>Errors Only</option>
                             </select>
