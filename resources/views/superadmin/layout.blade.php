@@ -30,10 +30,13 @@
             <a class="navbar-brand" href="{{ route('superadmin.dashboard') }}">
                 SUPER ADMIN
             </a>
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation" id="mobileMenuToggle">
                 <span class="navbar-toggler-icon"></span>
             </button>
             <div class="collapse navbar-collapse" id="navbarNav">
+                <button type="button" class="btn-close btn-close-white d-lg-none" aria-label="Close" id="mobileMenuClose">
+                    <span>&times;</span>
+                </button>
                 <ul class="navbar-nav ms-auto align-items-center">
                     <li class="nav-item">
                         <a class="nav-link" href="{{ route('superadmin.dashboard') }}">
@@ -147,6 +150,93 @@
     <!-- Bootstrap JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     
+    <!-- Mobile Menu Script -->
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const mobileMenuToggle = document.getElementById('mobileMenuToggle');
+            const mobileMenuClose = document.getElementById('mobileMenuClose');
+            const navbarCollapse = document.getElementById('navbarNav');
+            const body = document.body;
+
+            function showCloseButton() {
+                if (mobileMenuClose && window.innerWidth < 992) {
+                    mobileMenuClose.style.display = 'flex';
+                }
+            }
+
+            function hideCloseButton() {
+                if (mobileMenuClose) {
+                    mobileMenuClose.style.display = 'none';
+                }
+            }
+
+            if (mobileMenuToggle && mobileMenuClose && navbarCollapse) {
+                // Handle menu open
+                mobileMenuToggle.addEventListener('click', function() {
+                    setTimeout(function() {
+                        if (navbarCollapse.classList.contains('show')) {
+                            body.classList.add('mobile-menu-open');
+                            showCloseButton();
+                        }
+                    }, 100);
+                });
+
+                // Handle close button click
+                mobileMenuClose.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (typeof bootstrap !== 'undefined' && bootstrap.Collapse) {
+                        const bsCollapse = bootstrap.Collapse.getInstance(navbarCollapse) || new bootstrap.Collapse(navbarCollapse, {toggle: false});
+                        bsCollapse.hide();
+                    } else {
+                        navbarCollapse.classList.remove('show');
+                    }
+                    body.classList.remove('mobile-menu-open');
+                    hideCloseButton();
+                });
+
+                // Handle Bootstrap collapse events
+                navbarCollapse.addEventListener('hidden.bs.collapse', function() {
+                    body.classList.remove('mobile-menu-open');
+                    hideCloseButton();
+                });
+
+                navbarCollapse.addEventListener('shown.bs.collapse', function() {
+                    body.classList.add('mobile-menu-open');
+                    showCloseButton();
+                });
+
+                // Close menu when clicking on a nav link
+                const navLinks = navbarCollapse.querySelectorAll('.nav-link:not(.dropdown-toggle):not([data-bs-toggle])');
+                navLinks.forEach(function(link) {
+                    link.addEventListener('click', function() {
+                        if (window.innerWidth < 992) {
+                            setTimeout(function() {
+                                if (typeof bootstrap !== 'undefined' && bootstrap.Collapse) {
+                                    const bsCollapse = bootstrap.Collapse.getInstance(navbarCollapse);
+                                    if (bsCollapse) {
+                                        bsCollapse.hide();
+                                    }
+                                } else {
+                                    navbarCollapse.classList.remove('show');
+                                }
+                                body.classList.remove('mobile-menu-open');
+                                hideCloseButton();
+                            }, 300);
+                        }
+                    });
+                });
+
+                // Handle window resize
+                window.addEventListener('resize', function() {
+                    if (window.innerWidth >= 992) {
+                        body.classList.remove('mobile-menu-open');
+                        hideCloseButton();
+                    }
+                });
+            }
+        });
+    </script>
     
     <!-- Additional Scripts -->
     @stack('scripts')
