@@ -97,16 +97,18 @@
                                     </td>
                                     <td>{{ $application->submitted_at ? $application->submitted_at->format('d M Y, h:i A') : 'N/A' }}</td>
                                     <td>{{ $application->updated_at->format('d M Y, h:i A') }}</td>
-                                    <td class="d-flex flex-wrap gap-2">
-                                        <a href="{{ route('user.applications.show', $application->id) }}" class="btn btn-sm btn-primary">
-                                            View Details
-                                        </a>
-
-                                        @if($isIxDraftAwaitingPayment)
-                                            <a href="{{ route('user.applications.ix.pay-now', $application->id) }}" class="btn btn-sm btn-success">
-                                                Pay Now
+                                    <td style="vertical-align: middle;">
+                                        <div class="d-flex flex-wrap gap-2 align-items-center">
+                                            <a href="{{ route('user.applications.show', $application->id) }}" class="btn btn-sm btn-primary">
+                                                View Details
                                             </a>
-                                        @endif
+
+                                            @if($isIxDraftAwaitingPayment)
+                                                <a href="{{ route('user.applications.ix.pay-now', $application->id) }}" class="btn btn-sm btn-success">
+                                                    Pay Now
+                                                </a>
+                                            @endif
+                                        </div>
                                     </td>
                                 </tr>
                                 @endforeach
