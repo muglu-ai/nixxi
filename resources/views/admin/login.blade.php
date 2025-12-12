@@ -15,6 +15,51 @@
     
     <!-- Custom Theme CSS -->
     <link rel="stylesheet" href="{{ asset('css/custom.css') }}">
+    <style>
+        :root {
+            --theme-primary: #1e3a8a; /* Navy Blue for admin */
+            --theme-primary-dark: #1e40af;
+            --black: #000000;
+        }
+
+        .card-header.bg-primary {
+            background-color: var(--theme-primary) !important;
+            color: var(--white) !important;
+            border-bottom: 2px solid var(--black) !important;
+        }
+
+        .card-header.bg-primary * {
+            color: var(--white) !important;
+        }
+
+        .btn-primary {
+            background-color: var(--theme-primary) !important;
+            border-color: var(--theme-primary) !important;
+            border-bottom: 2px solid var(--black) !important;
+            color: var(--white) !important;
+        }
+
+        .btn-primary:hover {
+            background-color: var(--theme-primary-dark) !important;
+            border-color: var(--theme-primary-dark) !important;
+            color: var(--white) !important;
+        }
+
+        .form-control:focus,
+        .form-select:focus {
+            border-color: var(--black) !important;
+            border-bottom: 2px solid var(--theme-primary) !important;
+            box-shadow: 0 0 0 0.2rem rgba(30, 58, 138, 0.2) !important;
+        }
+
+        a {
+            color: var(--theme-primary) !important;
+        }
+
+        a:hover {
+            color: var(--theme-primary-dark) !important;
+        }
+    </style>
 </head>
 <body>
     <div class="nixi-logo-fixed">

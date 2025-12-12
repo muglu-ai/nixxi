@@ -218,7 +218,7 @@ h1, h2, h3, h4, h5, h6 {
     font-family: var(--font-family-primary);
     font-weight: var(--font-weight-bold);
     line-height: var(--line-height-tight);
-    color: var(--text-on-light);
+    color: var(--black) !important;
     margin: 0 0 var(--spacing-md) 0;
     letter-spacing: -0.02em;
 }
@@ -227,31 +227,151 @@ h1 {
     font-size: var(--font-size-5xl);
     font-weight: var(--font-weight-black);
     line-height: 1.1;
+    color: var(--black) !important;
+    border-bottom: 3px solid var(--theme-primary);
+    padding-bottom: var(--spacing-sm);
 }
 
 h2 { 
     font-size: var(--font-size-4xl);
     font-weight: var(--font-weight-extrabold);
+    color: var(--black) !important;
+    border-bottom: 2px solid var(--theme-primary);
+    padding-bottom: var(--spacing-xs);
 }
 
 h3 { 
     font-size: var(--font-size-3xl);
     font-weight: var(--font-weight-bold);
+    color: var(--black) !important;
+    border-bottom: 2px solid var(--black);
+    padding-bottom: var(--spacing-xs);
 }
 
 h4 { 
     font-size: var(--font-size-2xl);
     font-weight: var(--font-weight-bold);
+    color: var(--black) !important;
+    border-bottom: 1px solid var(--black);
+    padding-bottom: 4px;
 }
 
 h5 { 
     font-size: var(--font-size-xl);
     font-weight: var(--font-weight-semibold);
+    color: var(--black) !important;
 }
 
 h6 { 
     font-size: var(--font-size-lg);
     font-weight: var(--font-weight-semibold);
+    color: var(--black) !important;
+}
+
+/* Headings inside cards - ensure visibility */
+.card h1,
+.card h2,
+.card h3,
+.card h4,
+.card h5,
+.card h6,
+.card-body h1,
+.card-body h2,
+.card-body h3,
+.card-body h4,
+.card-body h5,
+.card-body h6 {
+    color: var(--black) !important;
+}
+
+/* Headings inside card headers - white text */
+.card-header h1,
+.card-header h2,
+.card-header h3,
+.card-header h4,
+.card-header h5,
+.card-header h6,
+.card-header .card-title {
+    color: var(--white) !important;
+    border-bottom: none !important;
+    padding-bottom: 0 !important;
+}
+
+/* Headings with background colors */
+.bg-primary h1,
+.bg-primary h2,
+.bg-primary h3,
+.bg-primary h4,
+.bg-primary h5,
+.bg-primary h6,
+.bg-dark h1,
+.bg-dark h2,
+.bg-dark h3,
+.bg-dark h4,
+.bg-dark h5,
+.bg-dark h6,
+.navbar h1,
+.navbar h2,
+.navbar h3,
+.navbar h4,
+.navbar h5,
+.navbar h6 {
+    color: var(--white) !important;
+    border-bottom: none !important;
+}
+
+/* Ensure all headings are visible on white backgrounds */
+body h1,
+body h2,
+body h3,
+body h4,
+body h5,
+body h6 {
+    color: var(--black) !important;
+}
+
+/* Force all headings to be black by default - will be overridden for dark backgrounds */
+.container-fluid h1,
+.container-fluid h2,
+.container-fluid h3,
+.container-fluid h4,
+.container-fluid h5,
+.container-fluid h6,
+.row h1,
+.row h2,
+.row h3,
+.row h4,
+.row h5,
+.row h6,
+.col h1,
+.col h2,
+.col h3,
+.col h4,
+.col h5,
+.col h6 {
+    color: var(--black) !important;
+}
+
+/* Exception: headings in dark backgrounds */
+.bg-dark h1,
+.bg-dark h2,
+.bg-dark h3,
+.bg-dark h4,
+.bg-dark h5,
+.bg-dark h6,
+.bg-primary h1,
+.bg-primary h2,
+.bg-primary h3,
+.bg-primary h4,
+.bg-primary h5,
+.bg-primary h6,
+.navbar h1,
+.navbar h2,
+.navbar h3,
+.navbar h4,
+.navbar h5,
+.navbar h6 {
+    color: var(--white) !important;
 }
 
 p {
@@ -480,7 +600,7 @@ textarea.form-control {
 
 .card-header {
     background-color: var(--black);
-    color: var(--white);
+    color: var(--white) !important;
     padding: var(--spacing-md) var(--spacing-lg);
     border-bottom: 2px solid var(--theme-primary);
     font-weight: var(--font-weight-bold);
@@ -490,10 +610,64 @@ textarea.form-control {
     border-radius: var(--border-radius-lg) var(--border-radius-lg) 0 0;
 }
 
+/* Card header text must be white for visibility */
+.card-header:not(.bg-light) *,
+.card-header:not(.bg-light) h1,
+.card-header:not(.bg-light) h2,
+.card-header:not(.bg-light) h3,
+.card-header:not(.bg-light) h4,
+.card-header:not(.bg-light) h5,
+.card-header:not(.bg-light) h6,
+.card-header:not(.bg-light) .card-title,
+.card-header:not(.bg-light) p,
+.card-header:not(.bg-light) span {
+    color: var(--white) !important;
+}
+
+/* Ensure headings are visible - remove any black backgrounds on headings themselves */
+h1, h2, h3, h4, h5, h6 {
+    background-color: transparent !important;
+}
+
+/* Only card headers should have dark backgrounds, not headings */
+.card-header {
+    background-color: var(--black);
+}
+
+.card-header.bg-primary {
+    background-color: var(--black) !important;
+}
+
+.card-header.bg-success {
+    background-color: var(--success) !important;
+}
+
+.card-header.bg-info {
+    background-color: var(--info) !important;
+}
+
+.card-header.bg-danger {
+    background-color: var(--danger) !important;
+}
+
+.card-header.bg-warning {
+    background-color: var(--theme-primary) !important;
+}
+
 .card-header.bg-light {
     background-color: var(--gray-100);
-    color: var(--text-on-light);
-    border-bottom: 2px solid var(--border-color);
+    color: var(--black) !important;
+    border-bottom: 2px solid var(--black);
+}
+
+.card-header.bg-light h1,
+.card-header.bg-light h2,
+.card-header.bg-light h3,
+.card-header.bg-light h4,
+.card-header.bg-light h5,
+.card-header.bg-light h6,
+.card-header.bg-light .card-title {
+    color: var(--black) !important;
 }
 
 .card-header.bg-primary {
@@ -516,6 +690,34 @@ textarea.form-control {
 
 .card-body {
     padding: var(--spacing-lg);
+    background-color: var(--white);
+}
+
+/* Ensure headings in card body are visible */
+.card-body h1,
+.card-body h2,
+.card-body h3,
+.card-body h4,
+.card-body h5,
+.card-body h6,
+.card-body .card-title,
+.card-body .card-subtitle {
+    color: var(--black) !important;
+}
+
+/* Card title and subtitle */
+.card-title {
+    color: var(--black) !important;
+    font-weight: var(--font-weight-bold);
+    margin-bottom: var(--spacing-sm);
+    border-bottom: 2px solid var(--theme-primary);
+    padding-bottom: var(--spacing-xs);
+}
+
+.card-subtitle {
+    color: var(--gray-700) !important;
+    font-weight: var(--font-weight-medium);
+    margin-bottom: var(--spacing-sm);
 }
 
 .card-footer {
@@ -662,6 +864,31 @@ textarea.form-control {
     background-color: var(--black) !important;
     border-bottom: 3px solid var(--theme-primary);
     border-radius: 0;
+}
+
+/* Ensure navbar items stay on one line */
+.navbar .container-fluid {
+    display: flex;
+    align-items: center;
+    flex-wrap: nowrap;
+}
+
+.navbar-nav {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    flex-wrap: nowrap;
+    white-space: nowrap;
+}
+
+.navbar-nav .nav-item {
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.navbar-nav .nav-link {
+    white-space: nowrap;
+    padding: 0.5rem 0.75rem;
 }
 
 /* User Panel Navbar - Yellow Accent */
@@ -874,16 +1101,31 @@ a.nav-link[style*="danger"]:hover {
 /* Pagination - Rounded */
 .pagination {
     gap: var(--spacing-xs);
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .page-link {
     border: 1px solid var(--border-color);
     color: var(--black);
-    padding: var(--spacing-sm) var(--spacing-md);
+    padding: 0.375rem 0.75rem;
     border-radius: var(--border-radius);
     transition: all var(--transition-fast);
     font-size: var(--font-size-sm);
     font-weight: var(--font-weight-semibold);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 38px;
+    height: 38px;
+}
+
+/* Pagination SVG icons - make them smaller */
+.page-link svg {
+    width: 14px !important;
+    height: 14px !important;
+    display: block;
 }
 
 .page-link:hover {
@@ -896,6 +1138,11 @@ a.nav-link[style*="danger"]:hover {
     background-color: var(--black);
     border-color: var(--black);
     color: var(--white);
+}
+
+.page-item.disabled .page-link {
+    opacity: 0.5;
+    cursor: not-allowed;
 }
 
 /* Custom Scrollbar - Industrial */
@@ -947,6 +1194,30 @@ button:focus,
     h1 { font-size: var(--font-size-4xl); }
     h2 { font-size: var(--font-size-3xl); }
     h3 { font-size: var(--font-size-2xl); }
+
+    /* Navbar responsive - allow wrapping on mobile */
+    .navbar .container-fluid {
+        flex-wrap: wrap;
+    }
+
+    .navbar-nav {
+        flex-wrap: wrap;
+    }
+}
+
+/* Ensure navbar items stay on one line on larger screens */
+@media (min-width: 992px) {
+    .navbar .container-fluid {
+        flex-wrap: nowrap;
+    }
+
+    .navbar-nav {
+        flex-wrap: nowrap;
+    }
+
+    .navbar-nav .nav-item {
+        flex-shrink: 0;
+    }
 }
 
 /* Bootstrap Overrides - Semantic Colors */
