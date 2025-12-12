@@ -21,12 +21,14 @@
     flex-shrink: 0;
     padding: 6px 10px;
     border-radius: 8px;
-    background: rgba(255, 255, 255, 0.1);
+    background: #ffffff;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .nixi-logo-link:hover {
-    opacity: 0.9;
-    background: rgba(255, 255, 255, 0.15);
+    opacity: 0.95;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+    transform: translateY(-1px);
 }
 
 /* Fixed logo container for login/register pages */
