@@ -279,10 +279,10 @@
         
         if (registrationType === 'individual') {
             if (fullnameLabel) {
-                fullnameLabel.innerHTML = 'Full Name <span style="color: #4169E1;">*</span>';
+                fullnameLabel.innerHTML = 'Full Name (As per PAN) <span style="color: #4169E1;">*</span>';
             }
             if (fullnameInput) {
-                fullnameInput.placeholder = 'Enter your full name (As per PAN)';
+                fullnameInput.placeholder = 'Enter your full name';
             }
             if (fullnameHelp) {
                 fullnameHelp.textContent = 'Only letters, spaces, apostrophes (\'), and hyphens (-) are allowed';
