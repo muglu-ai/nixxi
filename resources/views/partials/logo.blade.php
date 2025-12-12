@@ -17,12 +17,38 @@
     text-decoration: none;
     line-height: 1;
     margin-right: 15px;
-    transition: opacity 0.3s ease;
+    transition: all 0.3s ease;
     flex-shrink: 0;
+    padding: 6px 10px;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.1);
 }
 
 .nixi-logo-link:hover {
     opacity: 0.9;
+    background: rgba(255, 255, 255, 0.15);
+}
+
+/* Fixed logo container for login/register pages */
+.nixi-logo-fixed {
+    position: fixed;
+    top: 15px;
+    left: 15px;
+    z-index: 1050;
+}
+
+.nixi-logo-fixed .nixi-logo-link {
+    background: rgba(255, 255, 255, 0.95);
+    padding: 8px 12px;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    margin-right: 0;
+}
+
+.nixi-logo-fixed .nixi-logo-link:hover {
+    background: rgba(255, 255, 255, 1);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    transform: translateY(-2px);
 }
 
 .nixi-logo {
@@ -55,6 +81,15 @@
     .navbar > .container-fluid {
         flex-wrap: nowrap;
     }
+    
+    .nixi-logo-fixed {
+        top: 10px;
+        left: 10px;
+    }
+    
+    .nixi-logo-fixed .nixi-logo-link {
+        padding: 6px 10px;
+    }
 }
 
 @media (max-width: 576px) {
@@ -71,6 +106,15 @@
     .navbar-brand {
         font-size: 0.9rem;
     }
+    
+    .nixi-logo-fixed {
+        top: 8px;
+        left: 8px;
+    }
+    
+    .nixi-logo-fixed .nixi-logo-link {
+        padding: 5px 8px;
+    }
 }
 
 @media (max-width: 400px) {
@@ -86,6 +130,15 @@
     .navbar-brand {
         font-size: 0.85rem;
         padding: 0.25rem 0.5rem;
+    }
+    
+    .nixi-logo-fixed {
+        top: 8px;
+        left: 8px;
+    }
+    
+    .nixi-logo-fixed .nixi-logo-link {
+        padding: 5px 8px;
     }
 }
 </style>
