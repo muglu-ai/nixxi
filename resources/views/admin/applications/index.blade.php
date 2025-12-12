@@ -95,10 +95,20 @@
                                         <small class="text-muted">{{ $application->user->email }}</small>
                                     </td>
                                     <td>
-                                        
-                                            {{ $application->nixi_location }}
-                                        <br>
-                                        <small class="text-muted">{{ $application->nixi_location_details }}</small>
+                                        @php
+                                            $locationData = $application->application_data['location'] ?? null;
+                                        @endphp
+                                        @if($locationData)
+                                            <div>{{ $locationData['name'] ?? 'N/A' }}</div>
+                                            @if(isset($locationData['node_type']))
+                                                <small class="text-muted">{{ ucfirst($locationData['node_type']) }}</small>
+                                            @endif
+                                            @if(isset($locationData['state']))
+                                                <br><small class="text-muted">{{ $locationData['state'] }}</small>
+                                            @endif
+                                        @else
+                                            <span class="text-muted">N/A</span>
+                                        @endif
                                     </td>
                                     <td>
                                         @if($application->application_type === 'IX')
