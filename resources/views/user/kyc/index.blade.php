@@ -129,7 +129,7 @@
 
                     <div class="alert alert-info py-2">
                         <small>
-                            Please verify <strong>at least one</strong> of GSTIN, UDYAM or CIN.
+                            Please verify <strong>both CIN and GSTIN</strong> to proceed.
                         </small>
                     </div>
 
@@ -148,7 +148,23 @@
                     </div>
 
                     <div class="mb-3">
-                        <label class="form-label">GSTIN</label>
+                        <label class="form-label">CIN (MCA) Number <span class="text-danger">*</span></label>
+                        <div class="input-group">
+                            <input type="text"
+                                   class="form-control"
+                                   id="cin"
+                                   name="cin"
+                                   value="{{ $kyc->cin }}"
+                                   required>
+                            <button class="btn btn-outline-secondary" type="button" id="verifyMcaBtn">Verify CIN</button>
+                        </div>
+                        <small id="mcaStatus" class="form-text text-muted">
+                            Provide CIN if the organisation is registered with MCA.
+                        </small>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">GSTIN (To be used for Invoice and Billing) <span class="text-danger">*</span></label>
                         <div class="input-group">
                             <input type="text"
                                    class="form-control"
@@ -156,7 +172,8 @@
                                    name="gstin"
                                    maxlength="15"
                                    value="{{ $kyc->gstin }}"
-                                   placeholder="Enter 15 character GSTIN">
+                                   placeholder="Enter 15 character GSTIN"
+                                   required>
                             <button class="btn btn-outline-success" type="button" id="verifyGstBtn">Verify GST</button>
                         </div>
                         <small id="gstStatus" class="form-text text-muted">
@@ -176,21 +193,6 @@
                         </div>
                         <small id="udyamStatus" class="form-text text-muted">
                             Provide UDYAM number for MSME verification.
-                        </small>
-                    </div>
-
-                    <div class="mb-3">
-                        <label class="form-label mb-1">CIN (MCA) Number (Optional)</label>
-                        <div class="input-group">
-                            <input type="text"
-                                   class="form-control"
-                                   id="cin"
-                                   name="cin"
-                                   value="{{ $kyc->cin }}">
-                            <button class="btn btn-outline-secondary" type="button" id="verifyMcaBtn">Verify CIN</button>
-                        </div>
-                        <small id="mcaStatus" class="form-text text-muted">
-                            Provide CIN if the organisation is registered with MCA.
                         </small>
                     </div>
                 </div>
@@ -359,11 +361,14 @@
 
     document.getElementById('nextStepBtn').addEventListener('click', function () {
         const gstVerified = document.getElementById('gst_verified').value === '1';
-        const udyamVerified = document.getElementById('udyam_verified').value === '1';
         const mcaVerified = document.getElementById('mca_verified').value === '1';
 
-        if (!gstVerified && !udyamVerified && !mcaVerified) {
-            alert('Please verify at least one of GSTIN, UDYAM or CIN before continuing to the next step.');
+        if (!mcaVerified) {
+            alert('Please verify CIN before continuing to the next step.');
+            return;
+        }
+        if (!gstVerified) {
+            alert('Please verify GSTIN before continuing to the next step.');
             return;
         }
         setStep(2);
@@ -1116,8 +1121,8 @@
         const emailVerified = document.getElementById('contact_email_verified').value === '1';
         const mobileVerified = document.getElementById('contact_mobile_verified').value === '1';
 
-        if ((!gstVerified && !udyamVerified && !mcaVerified) || !namePanDobVerified || !emailVerified || !mobileVerified) {
-            alert('Please complete all required verifications (at least one of GSTIN/UDYAM/CIN, PAN details, Email and Mobile) before submitting KYC.');
+        if (!mcaVerified || !gstVerified || !namePanDobVerified || !emailVerified || !mobileVerified) {
+            alert('Please complete all required verifications (CIN, GSTIN, PAN details, Email and Mobile) before submitting KYC.');
             return;
         }
 

@@ -85,16 +85,16 @@ class UserKycController extends Controller
             $validated = $request->validate([
                 // Step 1 - MSME question
                 'is_msme' => 'required|in:0,1',
-                // Step 1 - at least one of GST / UDYAM / CIN must be verified
-                'gstin' => 'nullable|string|size:15|regex:/^[0-9A-Z]{15}$/',
-                'gst_verification_id' => 'nullable|integer',
-                'gst_verified' => 'nullable|boolean',
+                // Step 1 - Both CIN and GSTIN must be verified
+                'cin' => 'required|string',
+                'mca_verification_id' => 'required|integer',
+                'mca_verified' => 'required|boolean|accepted',
+                'gstin' => 'required|string|size:15|regex:/^[0-9A-Z]{15}$/',
+                'gst_verification_id' => 'required|integer',
+                'gst_verified' => 'required|boolean|accepted',
                 'udyam_number' => 'nullable|string',
                 'udyam_verification_id' => 'nullable|integer',
                 'udyam_verified' => 'nullable|boolean',
-                'cin' => 'nullable|string',
-                'mca_verification_id' => 'nullable|integer',
-                'mca_verified' => 'nullable|boolean',
                 // Step 2 - contact / authorised representative
                 'contact_name' => 'required|string|max:255',
                 'contact_dob' => 'required|date|before:today',
@@ -109,16 +109,35 @@ class UserKycController extends Controller
                 'billing_address' => 'nullable|string',
             ]);
 
-            // Ensure at least one organisation identifier is verified
-            $hasAnyOrgVerification = ! empty($validated['gst_verification_id'])
-                || ! empty($validated['udyam_verification_id'])
-                || ! empty($validated['mca_verification_id']);
-
-            if (! $hasAnyOrgVerification) {
+            // Ensure both CIN and GSTIN are verified
+            if (empty($validated['mca_verification_id']) || ! $validated['mca_verified']) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Please verify at least one of GSTIN, UDYAM or CIN before submitting KYC.',
+                    'message' => 'Please verify CIN before submitting KYC.',
                 ], 422);
+            }
+
+            if (empty($validated['gst_verification_id']) || ! $validated['gst_verified']) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Please verify GSTIN before submitting KYC.',
+                ], 422);
+            }
+
+            // Ensure CIN verification record is valid and belongs to user
+            $mcaVerification = null;
+            if (! empty($validated['mca_verification_id'])) {
+                $mcaVerification = McaVerification::where('id', $validated['mca_verification_id'])
+                    ->where('user_id', $userId)
+                    ->where('is_verified', true)
+                    ->first();
+
+                if (! $mcaVerification) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'CIN is not verified. Please verify again.',
+                    ], 422);
+                }
             }
 
             // Ensure GST verification record is valid and belongs to user
@@ -145,13 +164,6 @@ class UserKycController extends Controller
                     ->first();
             }
 
-            $mcaVerification = null;
-            if (! empty($validated['mca_verification_id'])) {
-                $mcaVerification = McaVerification::where('id', $validated['mca_verification_id'])
-                    ->where('user_id', $userId)
-                    ->where('is_verified', true)
-                    ->first();
-            }
 
             // Ensure company names from different documents (GST / UDYAM / CIN) match
             $companyNames = [];
