@@ -17,6 +17,7 @@
                             <thead>
                                 <tr>
                                     <th>Application ID</th>
+                                    <th>Node Name</th>
                                     <th>Status</th>
                                     <th>Current Stage</th>
                                     <th>Submitted At</th>
@@ -36,6 +37,22 @@
                                 @endphp
                                 <tr>
                                     <td><strong>{{ $application->application_id }}</strong></td>
+                                    <td>
+                                        @php
+                                            $locationData = $application->application_data['location'] ?? null;
+                                        @endphp
+                                        @if($locationData)
+                                            <div>{{ $locationData['name'] ?? 'N/A' }}</div>
+                                            @if(isset($locationData['node_type']))
+                                                <small class="text-muted">{{ ucfirst($locationData['node_type']) }}</small>
+                                            @endif
+                                            @if(isset($locationData['state']))
+                                                <br><small class="text-muted">{{ $locationData['state'] }}</small>
+                                            @endif
+                                        @else
+                                            <span class="text-muted">N/A</span>
+                                        @endif
+                                    </td>
                                     <td>
                                         @if($isIxDraftAwaitingPayment)
                                             <span class="badge bg-warning">Draft - Payment Pending</span>
