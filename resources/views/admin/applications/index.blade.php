@@ -95,9 +95,9 @@
                                         <small class="text-muted">{{ $application->user->email }}</small>
                                     </td>
                                     <td>
-                                        <a href="{{ route('admin.users.show', $application->node_location) }}">
-                                            {{ $application->user->node_location }}
-                                        </a><br>
+                                        
+                                            {{ $application->node_location }}
+                                        <br>
                                         <small class="text-muted">{{ $application->node_location_details }}</small>
                                     </td>
                                     <td>
