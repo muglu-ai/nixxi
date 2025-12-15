@@ -711,8 +711,8 @@ class RegisterController extends Controller
                 // Don't fail registration if email fails
             }
 
-            return redirect()->route('register.index')
-                ->with('success', 'Registration successful! Your Registration ID is: '.$registrationId.'. Please check your email for login credentials.');
+            return redirect()->route('login.index')
+                ->with('success', 'Registration successful! Your Registration ID is: '.$registrationId.'. Please check your email for login credentials. Login to continue.');
         } catch (ValidationException $e) {
             return back()->withErrors($e->errors())->withInput();
         } catch (QueryException $e) {
@@ -844,8 +844,8 @@ class RegisterController extends Controller
             // Clear session
             session()->forget('pending_registration_id');
 
-            return redirect()->route('register.index')
-                ->with('success', 'Registration successful! Your Registration ID is: '.$registration->registrationid);
+            return redirect()->route('login.index')
+                ->with('success', 'Registration successful! Your Registration ID is: '.$registration->registrationid.'. Login to continue.');
         } catch (ValidationException $e) {
             return back()->withErrors($e->errors())->withInput();
         } catch (Exception $e) {
