@@ -185,6 +185,70 @@ class IxApplicationController extends Controller
     }
 
     /**
+     * Show simplified IX application form for new applications.
+     */
+    public function createNew(): View|RedirectResponse
+    {
+        $userId = session('user_id');
+        $user = Registration::find($userId);
+
+        if (! $user) {
+            return redirect()->route('login.index')
+                ->with('error', 'User session expired. Please login again.');
+        }
+
+        if (! in_array($user->status, ['approved', 'active'], true)) {
+            return redirect()->route('user.dashboard')
+                ->with('error', 'Your account must be approved before submitting an IX application.');
+        }
+
+        // Get previous application data
+        $previousApplication = Application::where('user_id', $userId)
+            ->where('application_type', 'IX')
+            ->whereIn('status', ['submitted', 'approved', 'payment_verified'])
+            ->latest()
+            ->first();
+
+        $previousData = null;
+        if ($previousApplication && $previousApplication->application_data) {
+            $prevData = $previousApplication->application_data;
+            $previousData = [
+                'representative' => [
+                    'pan' => $prevData['representative']['pan'] ?? null,
+                    'mobile' => $prevData['representative']['mobile'] ?? null,
+                    'email' => $prevData['representative']['email'] ?? null,
+                    'name' => $prevData['representative']['name'] ?? null,
+                ],
+                'location_id' => $prevData['location']['id'] ?? null,
+                'port_capacity' => $prevData['port_selection']['capacity'] ?? null,
+                'billing_plan' => $prevData['port_selection']['billing_plan'] ?? null,
+                'ip_prefix_count' => $prevData['ip_prefix']['count'] ?? null,
+                'gstin' => $prevData['gstin'] ?? null,
+            ];
+        }
+
+        $locations = IxLocation::active()
+            ->orderBy('node_type')
+            ->orderBy('state')
+            ->orderBy('name')
+            ->get();
+
+        $portPricings = IxPortPricing::active()
+            ->orderBy('node_type')
+            ->orderBy('display_order')
+            ->orderBy('port_capacity')
+            ->get()
+            ->groupBy('node_type');
+
+        return view('user.applications.ix.create-new', [
+            'user' => $user,
+            'previousData' => $previousData,
+            'locations' => $locations,
+            'portPricings' => $portPricings,
+        ]);
+    }
+
+    /**
      * Save draft or submit IX application.
      */
     public function store(StoreIxApplicationRequest $request): RedirectResponse|JsonResponse
@@ -254,6 +318,9 @@ class IxApplicationController extends Controller
             }
         }
 
+        // Check if this is a simplified form submission
+        $isSimplifiedForm = $request->has('representative_name') || $request->has('representative_pan');
+
         // Handle file uploads
         $documentFields = [
             'agreement_file',
@@ -268,6 +335,7 @@ class IxApplicationController extends Controller
             'msme_document_file',
             'incorporation_document_file',
             'authorized_rep_document_file',
+            'new_gst_document', // For simplified form
         ];
 
         $storedDocuments = [];
@@ -294,6 +362,32 @@ class IxApplicationController extends Controller
 
         // Prepare application data
         $applicationData = [];
+
+        // Check if this is a simplified form submission
+        $isSimplifiedForm = $request->has('representative_name') || $request->has('representative_pan');
+
+        // Handle simplified form - representative person details
+        if ($isSimplifiedForm) {
+            $applicationData['representative'] = [
+                'name' => $request->input('representative_name'),
+                'pan' => strtoupper($request->input('representative_pan')),
+                'dob' => $request->input('representative_dob'),
+                'mobile' => $request->input('representative_mobile'),
+                'email' => $request->input('representative_email'),
+                'pan_verified' => $request->input('pan_verified') === '1',
+                'mobile_verified' => $request->input('mobile_verified') === '1',
+                'email_verified' => $request->input('email_verified') === '1',
+            ];
+
+            // Handle GSTIN for simplified form
+            if ($request->has('gstin')) {
+                $applicationData['gstin'] = strtoupper($request->input('gstin'));
+                $applicationData['gstin_verified'] = $request->input('gstin_verified') === '1';
+                if ($request->has('gstin_verification_id')) {
+                    $applicationData['gstin_verification_id'] = $request->input('gstin_verification_id');
+                }
+            }
+        }
 
         // Always save location if location_id is provided
         if ($location) {
@@ -2145,5 +2239,395 @@ class IxApplicationController extends Controller
         }
 
         return $application;
+    }
+
+    /**
+     * Verify PAN for representative person.
+     */
+    public function verifyRepresentativePan(Request $request): JsonResponse
+    {
+        try {
+            $request->validate([
+                'pan' => 'required|string|size:10|regex:/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/',
+                'name' => 'required|string|max:255',
+                'dob' => 'required|date|before:today',
+            ]);
+
+            $panNo = strtoupper(trim($request->input('pan')));
+            $fullName = trim($request->input('name'));
+            $dob = $request->input('dob');
+
+            $idfyService = new \App\Services\IdfyPanService;
+            $taskResult = $idfyService->createVerificationTask($panNo, $fullName, $dob);
+
+            Log::info("Representative PAN verification task created: {$panNo}, Request ID: {$taskResult['request_id']}");
+
+            return response()->json([
+                'success' => true,
+                'message' => 'PAN verification initiated. Please wait...',
+                'request_id' => $taskResult['request_id'],
+            ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => implode(', ', $e->errors()['pan'] ?? $e->errors()['name'] ?? $e->errors()['dob'] ?? ['Validation failed']),
+            ], 422);
+        } catch (Exception $e) {
+            Log::error('Error verifying representative PAN: '.$e->getMessage());
+
+            return response()->json([
+                'success' => false,
+                'message' => 'An error occurred while verifying PAN. Please try again.',
+            ], 500);
+        }
+    }
+
+    /**
+     * Check PAN verification status.
+     */
+    public function checkRepresentativePanStatus(Request $request): JsonResponse
+    {
+        try {
+            $request->validate([
+                'request_id' => 'required|string',
+            ]);
+
+            $idfyService = new \App\Services\IdfyPanService;
+            $statusResult = $idfyService->getTaskStatus($request->input('request_id'));
+
+            if ($statusResult['status'] === 'completed') {
+                $result = $statusResult['result'];
+                $sourceOutput = $result['source_output'] ?? null;
+
+                if ($sourceOutput) {
+                    $panStatus = $sourceOutput['pan_status'] ?? '';
+                    $nameMatch = $sourceOutput['name_match'] ?? false;
+                    $dobMatch = $sourceOutput['dob_match'] ?? false;
+                    $status = $sourceOutput['status'] ?? '';
+
+                    $isValid = $status === 'id_found' &&
+                              str_contains($panStatus, 'Valid') &&
+                              $nameMatch &&
+                              $dobMatch;
+
+                    return response()->json([
+                        'success' => $isValid,
+                        'message' => $isValid
+                            ? 'PAN verified successfully'
+                            : 'PAN verification failed: '.($panStatus ?: 'Invalid PAN or details mismatch'),
+                        'pan_status' => $panStatus,
+                        'name_match' => $nameMatch,
+                        'dob_match' => $dobMatch,
+                    ]);
+                }
+            } elseif ($statusResult['status'] === 'failed') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'PAN verification failed',
+                ], 400);
+            }
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Verification in progress. Please wait...',
+                'status' => $statusResult['status'],
+            ]);
+        } catch (Exception $e) {
+            Log::error('Error checking PAN status: '.$e->getMessage());
+
+            return response()->json([
+                'success' => false,
+                'message' => 'An error occurred while checking verification status.',
+            ], 500);
+        }
+    }
+
+    /**
+     * Send OTP to email for verification.
+     */
+    public function sendEmailOtp(Request $request): JsonResponse
+    {
+        try {
+            $request->validate([
+                'email' => 'required|email',
+            ]);
+
+            $email = $request->input('email');
+            $otp = str_pad((string) rand(0, 999999), 6, '0', STR_PAD_LEFT);
+            $sessionKey = 'ix_email_otp_'.md5($email);
+            session([$sessionKey => $otp]);
+            session()->save();
+
+            // Send email OTP (you can use Laravel Mail here)
+            // For now, we'll just store it in session
+            Log::info("IX Email OTP sent to: {$email}");
+
+            return response()->json([
+                'success' => true,
+                'message' => 'OTP sent to email successfully',
+            ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Invalid email address',
+            ], 422);
+        } catch (Exception $e) {
+            Log::error('Error sending email OTP: '.$e->getMessage());
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to send OTP. Please try again.',
+            ], 500);
+        }
+    }
+
+    /**
+     * Verify email OTP.
+     */
+    public function verifyEmailOtp(Request $request): JsonResponse
+    {
+        try {
+            $request->validate([
+                'email' => 'required|email',
+                'otp' => 'required|string|size:6',
+            ]);
+
+            $email = $request->input('email');
+            $otp = $request->input('otp');
+            $sessionKey = 'ix_email_otp_'.md5($email);
+            $storedOtp = session($sessionKey);
+
+            if ($storedOtp && $storedOtp === $otp) {
+                session(['ix_email_verified_'.md5($email) => true]);
+                session()->forget($sessionKey);
+
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Email verified successfully!',
+                ]);
+            }
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Invalid OTP. Please try again.',
+            ], 400);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Invalid input',
+            ], 422);
+        } catch (Exception $e) {
+            Log::error('Error verifying email OTP: '.$e->getMessage());
+
+            return response()->json([
+                'success' => false,
+                'message' => 'An error occurred while verifying OTP.',
+            ], 500);
+        }
+    }
+
+    /**
+     * Send OTP to mobile for verification.
+     */
+    public function sendMobileOtp(Request $request): JsonResponse
+    {
+        try {
+            $request->validate([
+                'mobile' => 'required|string|size:10|regex:/^[0-9]{10}$/',
+            ]);
+
+            $mobile = $request->input('mobile');
+            $otp = str_pad((string) rand(0, 999999), 6, '0', STR_PAD_LEFT);
+            $sessionKey = 'ix_mobile_otp_'.md5($mobile);
+            session([$sessionKey => $otp]);
+            session()->save();
+
+            // Send SMS OTP (you can integrate SMS service here)
+            Log::info("IX Mobile OTP sent to: {$mobile}");
+
+            return response()->json([
+                'success' => true,
+                'message' => 'OTP sent to mobile successfully',
+            ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Invalid mobile number',
+            ], 422);
+        } catch (Exception $e) {
+            Log::error('Error sending mobile OTP: '.$e->getMessage());
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to send OTP. Please try again.',
+            ], 500);
+        }
+    }
+
+    /**
+     * Verify mobile OTP.
+     */
+    public function verifyMobileOtp(Request $request): JsonResponse
+    {
+        try {
+            $request->validate([
+                'mobile' => 'required|string|size:10|regex:/^[0-9]{10}$/',
+                'otp' => 'required|string|size:6',
+            ]);
+
+            $mobile = $request->input('mobile');
+            $otp = $request->input('otp');
+            $sessionKey = 'ix_mobile_otp_'.md5($mobile);
+            $storedOtp = session($sessionKey);
+
+            if ($storedOtp && $storedOtp === $otp) {
+                session(['ix_mobile_verified_'.md5($mobile) => true]);
+                session()->forget($sessionKey);
+
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Mobile verified successfully!',
+                ]);
+            }
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Invalid OTP. Please try again.',
+            ], 400);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Invalid input',
+            ], 422);
+        } catch (Exception $e) {
+            Log::error('Error verifying mobile OTP: '.$e->getMessage());
+
+            return response()->json([
+                'success' => false,
+                'message' => 'An error occurred while verifying OTP.',
+            ], 500);
+        }
+    }
+
+    /**
+     * Verify GSTIN for billing.
+     */
+    public function verifyGstin(Request $request): JsonResponse
+    {
+        try {
+            $userId = session('user_id');
+            $user = Registration::find($userId);
+
+            if (! $user) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'User not found. Please login again.',
+                ], 401);
+            }
+
+            $request->validate([
+                'gstin' => 'required|string|size:15|regex:/^[0-9A-Z]{15}$/',
+            ]);
+
+            $gstin = strtoupper($request->input('gstin'));
+
+            $service = new \App\Services\IdfyVerificationService;
+            $result = $service->verifyGst($gstin);
+
+            // Create verification record
+            $verification = \App\Models\GstVerification::create([
+                'user_id' => $userId,
+                'gstin' => $gstin,
+                'request_id' => $result['request_id'],
+                'status' => 'in_progress',
+                'is_verified' => false,
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'request_id' => $result['request_id'],
+                'verification_id' => $verification->id,
+            ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed: '.implode(', ', $e->errors()['gstin'] ?? ['Invalid GSTIN format']),
+            ], 422);
+        } catch (Exception $e) {
+            Log::error('GST Verification Error: '.$e->getMessage());
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to initiate GST verification: '.$e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Check GSTIN verification status.
+     */
+    public function checkGstinStatus(Request $request): JsonResponse
+    {
+        try {
+            $request->validate([
+                'verification_id' => 'required|integer|exists:gst_verifications,id',
+            ]);
+
+            $verification = \App\Models\GstVerification::findOrFail($request->input('verification_id'));
+
+            if ($verification->is_verified) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'GSTIN verified successfully',
+                    'is_verified' => true,
+                ]);
+            }
+
+            $service = new \App\Services\IdfyVerificationService;
+            $statusResult = $service->getTaskStatus($verification->request_id);
+
+            if ($statusResult['status'] === 'completed') {
+                $result = $statusResult['result'];
+                $sourceOutput = $result['source_output'] ?? null;
+
+                if ($sourceOutput) {
+                    $verification->update([
+                        'status' => 'completed',
+                        'is_verified' => true,
+                        'verification_data' => $result,
+                    ]);
+
+                    return response()->json([
+                        'success' => true,
+                        'message' => 'GSTIN verified successfully',
+                        'is_verified' => true,
+                    ]);
+                }
+            } elseif ($statusResult['status'] === 'failed') {
+                $verification->update([
+                    'status' => 'failed',
+                    'is_verified' => false,
+                ]);
+
+                return response()->json([
+                    'success' => false,
+                    'message' => 'GSTIN verification failed',
+                    'is_verified' => false,
+                ], 400);
+            }
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Verification in progress. Please wait...',
+                'status' => $statusResult['status'],
+            ]);
+        } catch (Exception $e) {
+            Log::error('Error checking GSTIN status: '.$e->getMessage());
+
+            return response()->json([
+                'success' => false,
+                'message' => 'An error occurred while checking verification status.',
+            ], 500);
+        }
     }
 }

@@ -271,6 +271,7 @@ Route::prefix('user')->name('user.')->middleware(['user.auth'])->group(function 
         // IX Application routes
         Route::prefix('ix')->name('ix.')->group(function () {
             Route::get('/create', [IxApplicationController::class, 'create'])->name('create');
+            Route::get('/create-new', [IxApplicationController::class, 'createNew'])->name('create-new');
             Route::post('/submit', [IxApplicationController::class, 'store'])->name('store');
             Route::post('/initiate-payment', [IxApplicationController::class, 'initiatePayment'])->name('initiate-payment');
             Route::get('/{id}/pay-now', [IxApplicationController::class, 'payNow'])->name('pay-now');
@@ -281,6 +282,16 @@ Route::prefix('user')->name('user.')->middleware(['user.auth'])->group(function 
             Route::get('/pricing', [IxApplicationController::class, 'pricing'])->name('pricing');
             Route::get('/application-pricing', [IxApplicationController::class, 'getApplicationPricing'])->name('application-pricing');
             Route::get('/{id}/download-application-pdf', [IxApplicationController::class, 'downloadApplicationPdf'])->name('download-application-pdf');
+            
+            // Verification endpoints
+            Route::post('/verify-representative-pan', [IxApplicationController::class, 'verifyRepresentativePan'])->name('verify-representative-pan');
+            Route::post('/check-representative-pan-status', [IxApplicationController::class, 'checkRepresentativePanStatus'])->name('check-representative-pan-status');
+            Route::post('/send-email-otp', [IxApplicationController::class, 'sendEmailOtp'])->name('send-email-otp');
+            Route::post('/verify-email-otp', [IxApplicationController::class, 'verifyEmailOtp'])->name('verify-email-otp');
+            Route::post('/send-mobile-otp', [IxApplicationController::class, 'sendMobileOtp'])->name('send-mobile-otp');
+            Route::post('/verify-mobile-otp', [IxApplicationController::class, 'verifyMobileOtp'])->name('verify-mobile-otp');
+            Route::post('/verify-gstin', [IxApplicationController::class, 'verifyGstin'])->name('verify-gstin');
+            Route::post('/check-gstin-status', [IxApplicationController::class, 'checkGstinStatus'])->name('check-gstin-status');
         });
 
         // PDF download routes (must be before {id} route)

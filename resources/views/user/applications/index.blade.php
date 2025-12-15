@@ -125,17 +125,27 @@
                             <path d="M14 14V4.5L9.5 0H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2zM9.5 3A1.5 1.5 0 0 0 11 4.5h2V14a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1h5.5v2z"/>
                         </svg>
                         <p class="text-muted mb-4">No applications yet.</p>
-                        <a href="{{ route('user.applications.ix.create') }}" class="btn btn-primary btn-lg">
-                            <i class="bi bi-plus-circle"></i> New IX Application
-                        </a>
+                        <div class="d-flex gap-2 justify-content-center">
+                            <a href="{{ route('user.applications.ix.create-new') }}" class="btn btn-primary btn-lg">
+                                <i class="bi bi-plus-circle"></i> New IX Application
+                            </a>
+                            <a href="{{ route('user.applications.ix.create') }}" class="btn btn-outline-primary btn-lg">
+                                <i class="bi bi-file-earmark-text"></i> Full Application Form
+                            </a>
+                        </div>
                     </div>
                 @endif
                 
                 @if($applications->count() > 0)
                     <div class="mt-4 text-end">
-                        <a href="{{ route('user.applications.ix.create') }}" class="btn btn-primary">
-                            <i class="bi bi-plus-circle"></i> New IX Application
-                        </a>
+                        <div class="d-flex gap-2 justify-content-end">
+                            <a href="{{ route('user.applications.ix.create-new') }}" class="btn btn-primary">
+                                <i class="bi bi-plus-circle"></i> New IX Application
+                            </a>
+                            <a href="{{ route('user.applications.ix.create') }}" class="btn btn-outline-primary">
+                                <i class="bi bi-file-earmark-text"></i> Full Form
+                            </a>
+                        </div>
                     </div>
                 @endif
             </div>
