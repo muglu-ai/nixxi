@@ -3,10 +3,19 @@
 namespace App\Http\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Contracts\Validation\Validator;
+use Illuminate\Validation\ValidationException;
 use Illuminate\Validation\Rule;
 
 class StoreIxApplicationRequest extends FormRequest
 {
+    protected function prepareForValidation(): void
+    {
+        if ($this->has('previous_gstin') && trim((string) $this->input('previous_gstin')) === '') {
+            $this->merge(['previous_gstin' => null]);
+        }
+    }
+
     /**
      * Determine if the user is authorized to make this request.
      */
@@ -34,6 +43,10 @@ class StoreIxApplicationRequest extends FormRequest
 
         // Simplified form rules
         if ($isSimplifiedForm) {
+            $previousGstin = strtoupper((string) $this->input('previous_gstin'));
+            $currentGstin = strtoupper((string) $this->input('gstin'));
+            $gstChanged = $previousGstin && $currentGstin && $previousGstin !== $currentGstin;
+
             return [
                 'representative_name' => [$required, 'string', 'max:255'],
                 'representative_pan' => [$required, 'string', 'size:10', 'regex:/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/'],
@@ -48,9 +61,16 @@ class StoreIxApplicationRequest extends FormRequest
                 'billing_plan' => [$required, Rule::in(['arc', 'mrc', 'quarterly'])],
                 'ip_prefix_count' => [$required, 'integer', 'min:1', 'max:500'],
                 'gstin' => [$required, 'string', 'size:15', 'regex:/^[0-9A-Z]{15}$/'],
+                'previous_gstin' => ['nullable', 'string', 'size:15', 'regex:/^[0-9A-Z]{15}$/'],
                 'gstin_verified' => [$required, 'in:1'],
                 'gstin_verification_id' => 'nullable|integer|exists:gst_verifications,id',
-                'new_gst_document' => 'nullable|file|mimes:pdf|max:10240',
+                'new_gst_document' => [
+                    $gstChanged ? 'required' : 'nullable',
+                    'file',
+                    'mimes:pdf',
+                    'max:10240',
+                ],
+                'is_simplified' => 'nullable|boolean',
             ];
         }
 
@@ -196,5 +216,42 @@ class StoreIxApplicationRequest extends FormRequest
             'authorized_rep_document_file.required' => 'Authorized representative document is required.',
             'declaration_confirmed.accepted' => 'You must accept the declaration before proceeding.',
         ];
+    }
+
+    /**
+     * Additional server-side verification to ensure OTP/API checks were completed.
+     */
+    protected function withValidator(Validator $validator): void
+    {
+        $validator->after(function (Validator $validator): void {
+            $isSimplifiedForm = $this->has('representative_name') || $this->has('representative_pan');
+            if (! $isSimplifiedForm) {
+                return;
+            }
+
+            $pan = strtoupper((string) $this->input('representative_pan'));
+            if (! session()->get('ix_pan_verified_'.md5($pan), false)) {
+                $validator->errors()->add('representative_pan', 'PAN verification not completed.');
+            }
+
+            $mobile = (string) $this->input('representative_mobile');
+            if (! session()->get('ix_mobile_verified_'.md5($mobile), false)) {
+                $validator->errors()->add('representative_mobile', 'Mobile verification not completed.');
+            }
+
+            $email = (string) $this->input('representative_email');
+            if (! session()->get('ix_email_verified_'.md5($email), false)) {
+                $validator->errors()->add('representative_email', 'Email verification not completed.');
+            }
+
+            $gstin = strtoupper((string) $this->input('gstin'));
+            $verificationId = $this->input('gstin_verification_id');
+            $gstVerifiedById = $verificationId ? session()->get('ix_gstin_verified_'.$verificationId, false) : false;
+            $gstVerifiedByValue = session()->get('ix_gstin_verified_value_'.md5($gstin), false);
+
+            if (! $gstVerifiedById || ! $gstVerifiedByValue) {
+                $validator->errors()->add('gstin', 'GSTIN verification not completed.');
+            }
+        });
     }
 }

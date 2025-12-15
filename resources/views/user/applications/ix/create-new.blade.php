@@ -23,6 +23,8 @@
             <form id="newIxApplicationForm" method="POST" action="{{ route('user.applications.ix.store') }}" enctype="multipart/form-data">
                 @csrf
                 <input type="hidden" name="application_id" id="applicationIdInput" value="">
+                <input type="hidden" name="is_simplified" value="1">
+                <input type="hidden" name="previous_gstin" id="previousGstin" value="{{ data_get($previousData, 'gstin') }}">
 
                 {{-- Representative Person Details --}}
                 <div class="card mb-4">
@@ -34,13 +36,13 @@
                             <div class="col-md-6">
                                 <label class="form-label">Name <span class="text-danger">*</span></label>
                                 <input type="text" name="representative_name" id="representativeName" class="form-control" 
-                                    value="{{ $previousData['representative']['name'] ?? '' }}" required>
+                                    value="{{ data_get($previousData, 'representative.name') }}" required>
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label">PAN <span class="text-danger">*</span></label>
                                 <div class="input-group">
                                     <input type="text" name="representative_pan" id="representativePan" class="form-control" 
-                                        value="{{ $previousData['representative']['pan'] ?? '' }}" 
+                                        value="{{ data_get($previousData, 'representative.pan') }}" 
                                         placeholder="ABCDE1234F" maxlength="10" required>
                                     <button type="button" class="btn btn-outline-primary" id="verifyPanBtn">Verify</button>
                                 </div>
@@ -55,7 +57,7 @@
                                 <label class="form-label">Mobile <span class="text-danger">*</span></label>
                                 <div class="input-group">
                                     <input type="text" name="representative_mobile" id="representativeMobile" class="form-control" 
-                                        value="{{ $previousData['representative']['mobile'] ?? '' }}" 
+                                        value="{{ data_get($previousData, 'representative.mobile') }}" 
                                         placeholder="10 digit mobile number" maxlength="10" required>
                                     <button type="button" class="btn btn-outline-primary" id="sendMobileOtpBtn">Send OTP</button>
                                 </div>
@@ -70,7 +72,7 @@
                                 <label class="form-label">Email <span class="text-danger">*</span></label>
                                 <div class="input-group">
                                     <input type="email" name="representative_email" id="representativeEmail" class="form-control" 
-                                        value="{{ $previousData['representative']['email'] ?? '' }}" required>
+                                        value="{{ data_get($previousData, 'representative.email') }}" required>
                                     <button type="button" class="btn btn-outline-primary" id="sendEmailOtpBtn">Send OTP</button>
                                 </div>
                                 <div id="emailOtpSection" class="mt-2 d-none">
@@ -99,7 +101,7 @@
                                         <option value="{{ $location->id }}"
                                             data-node-type="{{ $location->node_type }}"
                                             data-state="{{ $location->state }}"
-                                            {{ $previousData && $previousData['location_id'] == $location->id ? 'selected' : '' }}>
+                                            {{ data_get($previousData, 'location_id') == $location->id ? 'selected' : '' }}>
                                             {{ $location->name }} ({{ ucfirst($location->node_type) }} - {{ $location->state }})
                                         </option>
                                     @endforeach
@@ -125,7 +127,7 @@
                                             @foreach($entries as $pricing)
                                                 <option value="{{ $pricing->port_capacity }}" 
                                                     data-node-type="{{ $nodeType }}"
-                                                    {{ $previousData && $previousData['port_capacity'] == $pricing->port_capacity ? 'selected' : '' }}>
+                                                    {{ data_get($previousData, 'port_capacity') == $pricing->port_capacity ? 'selected' : '' }}>
                                                     {{ $pricing->port_capacity }}
                                                 </option>
                                             @endforeach
@@ -138,17 +140,17 @@
                                 <div class="d-flex gap-3">
                                     <div class="form-check">
                                         <input class="form-check-input" type="radio" name="billing_plan" id="planArc" value="arc" 
-                                            {{ $previousData && $previousData['billing_plan'] == 'arc' ? 'checked' : '' }} required>
+                                            {{ data_get($previousData, 'billing_plan') == 'arc' ? 'checked' : '' }} required>
                                         <label class="form-check-label" for="planArc">Annual (ARC)</label>
                                     </div>
                                     <div class="form-check">
                                         <input class="form-check-input" type="radio" name="billing_plan" id="planMrc" value="mrc"
-                                            {{ $previousData && $previousData['billing_plan'] == 'mrc' ? 'checked' : '' }} required>
+                                            {{ data_get($previousData, 'billing_plan') == 'mrc' ? 'checked' : '' }} required>
                                         <label class="form-check-label" for="planMrc">Monthly (MRC)</label>
                                     </div>
                                     <div class="form-check">
                                         <input class="form-check-input" type="radio" name="billing_plan" id="planQuarterly" value="quarterly"
-                                            {{ $previousData && $previousData['billing_plan'] == 'quarterly' ? 'checked' : '' }} required>
+                                            {{ data_get($previousData, 'billing_plan') == 'quarterly' ? 'checked' : '' }} required>
                                         <label class="form-check-label" for="planQuarterly">Quarterly</label>
                                     </div>
                                 </div>
@@ -167,7 +169,7 @@
                             <div class="col-md-12">
                                 <label class="form-label">Number of IP Prefixes <span class="text-danger">*</span></label>
                                 <input type="number" name="ip_prefix_count" id="ipPrefixCount" class="form-control" 
-                                    value="{{ $previousData['ip_prefix_count'] ?? '' }}" min="1" required>
+                                    value="{{ data_get($previousData, 'ip_prefix_count') }}" min="1" required>
                             </div>
                         </div>
                     </div>
@@ -184,7 +186,7 @@
                                 <label class="form-label">GSTIN <span class="text-danger">*</span></label>
                                 <div class="input-group">
                                     <input type="text" name="gstin" id="gstin" class="form-control" 
-                                        value="{{ $previousData['gstin'] ?? '' }}" 
+                                        value="{{ data_get($previousData, 'gstin') }}" 
                                         placeholder="15 character GSTIN" maxlength="15" required>
                                     <button type="button" class="btn btn-outline-primary" id="verifyGstinBtn">Verify</button>
                                 </div>
@@ -203,8 +205,8 @@
                     </div>
                     <div class="card-body">
                         <div class="row g-3">
-                            <div class="col-md-12">
-                                <label class="form-label">New GST Document (if applicable)</label>
+                            <div class="col-md-12" id="newGstDocGroup">
+                                <label class="form-label">New GST Document (required when GSTIN changes)</label>
                                 <input type="file" name="new_gst_document" id="newGstDocument" class="form-control" accept=".pdf">
                                 <small class="text-muted">Upload PDF file (max 10MB)</small>
                             </div>
@@ -227,6 +229,29 @@ document.addEventListener('DOMContentLoaded', function() {
     const csrfToken = '{{ csrf_token() }}';
     let panRequestId = null;
     let gstinVerificationId = null;
+    const previousGstin = document.getElementById('previousGstin')?.value?.toUpperCase() || '';
+    const gstinInput = document.getElementById('gstin');
+    const newGstDocGroup = document.getElementById('newGstDocGroup');
+    const newGstDocument = document.getElementById('newGstDocument');
+
+    function toggleGstDocRequirement() {
+        if (!gstinInput || !newGstDocGroup) {
+            return;
+        }
+        const currentGstin = gstinInput.value.trim().toUpperCase();
+        const needsDoc = !!previousGstin && !!currentGstin && currentGstin !== previousGstin;
+        newGstDocGroup.style.display = needsDoc ? 'block' : 'none';
+        if (needsDoc) {
+            newGstDocument?.setAttribute('required', 'required');
+        } else {
+            newGstDocument?.removeAttribute('required');
+            if (newGstDocument) {
+                newGstDocument.value = '';
+            }
+        }
+    }
+    toggleGstDocRequirement();
+    gstinInput?.addEventListener('input', toggleGstDocRequirement);
 
     // PAN Verification
     document.getElementById('verifyPanBtn').addEventListener('click', function() {

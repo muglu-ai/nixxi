@@ -437,11 +437,12 @@ class IxApplicationController extends Controller
                 ];
             }
         }
-        if (isset($validated['ip_prefix_count'])) {
+        $ipPrefixCount = $validated['ip_prefix_count'] ?? $request->input('ip_prefix_count');
+        if ($ipPrefixCount) {
             $applicationData['ip_prefix'] = [
-                'count' => $validated['ip_prefix_count'],
-                'source' => $validated['ip_prefix_source'] ?? null,
-                'provider' => $validated['ip_prefix_provider'] ?? null,
+                'count' => $ipPrefixCount,
+                'source' => $validated['ip_prefix_source'] ?? $request->input('ip_prefix_source') ?? null,
+                'provider' => $validated['ip_prefix_provider'] ?? $request->input('ip_prefix_provider') ?? null,
             ];
         }
         if (isset($validated['pre_peering_connectivity'])) {
@@ -604,6 +605,11 @@ class IxApplicationController extends Controller
             'application_id' => $application->application_id,
             'user_id' => $userId,
         ]);
+
+        if ($request->boolean('is_simplified')) {
+            return redirect()->route('user.applications.ix.pay-now', $application->id)
+                ->with('success', 'Application saved. Please review details and complete payment.');
+        }
 
         return redirect()->route('user.applications.index')
             ->with('success', 'IX application submitted successfully. You can download the application PDF from the applications list.');
@@ -2262,6 +2268,16 @@ class IxApplicationController extends Controller
 
             Log::info("Representative PAN verification task created: {$panNo}, Request ID: {$taskResult['request_id']}");
 
+            // Track PAN request for later server-side verification checks
+            session([
+                'ix_pan_request_'.$taskResult['request_id'] => [
+                    'pan' => $panNo,
+                    'name' => $fullName,
+                    'dob' => $dob,
+                ],
+            ]);
+            session()->save();
+
             return response()->json([
                 'success' => true,
                 'message' => 'PAN verification initiated. Please wait...',
@@ -2309,6 +2325,15 @@ class IxApplicationController extends Controller
                               str_contains($panStatus, 'Valid') &&
                               $nameMatch &&
                               $dobMatch;
+
+                    // Persist server-side verification flag when valid
+                    $panData = session('ix_pan_request_'.$request->input('request_id'));
+                    if ($isValid && $panData && isset($panData['pan'])) {
+                        session([
+                            'ix_pan_verified_'.md5($panData['pan']) => true,
+                        ]);
+                        session()->save();
+                    }
 
                     return response()->json([
                         'success' => $isValid,
@@ -2543,6 +2568,12 @@ class IxApplicationController extends Controller
                 'is_verified' => false,
             ]);
 
+            // Track GST request for later server-side verification checks
+            session([
+                'ix_gstin_request_'.$verification->id => $gstin,
+            ]);
+            session()->save();
+
             return response()->json([
                 'success' => true,
                 'request_id' => $result['request_id'],
@@ -2596,6 +2627,15 @@ class IxApplicationController extends Controller
                         'is_verified' => true,
                         'verification_data' => $result,
                     ]);
+
+                    $gstin = session('ix_gstin_request_'.$verification->id) ?? $verification->gstin;
+                    if ($gstin) {
+                        session([
+                            'ix_gstin_verified_'.$verification->id => true,
+                            'ix_gstin_verified_value_'.md5($gstin) => true,
+                        ]);
+                        session()->save();
+                    }
 
                     return response()->json([
                         'success' => true,
