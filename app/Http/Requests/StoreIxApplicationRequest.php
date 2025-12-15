@@ -235,12 +235,12 @@ class StoreIxApplicationRequest extends FormRequest
             }
 
             $mobile = (string) $this->input('representative_mobile');
-            if (! session()->get('ix_mobile_verified_'.md5($mobile), false)) {
+            if (! session()->get('mobile_verified_'.md5($mobile), false)) {
                 $validator->errors()->add('representative_mobile', 'Mobile verification not completed.');
             }
 
             $email = (string) $this->input('representative_email');
-            if (! session()->get('ix_email_verified_'.md5($email), false)) {
+            if (! session()->get('email_verified_'.md5($email), false)) {
                 $validator->errors()->add('representative_email', 'Email verification not completed.');
             }
 

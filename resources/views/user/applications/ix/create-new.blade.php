@@ -14,12 +14,6 @@
 
     <div class="card border-0 shadow-sm">
         <div class="card-body">
-            @if($previousData)
-                <div class="alert alert-info mb-4">
-                    <i class="bi bi-info-circle"></i> We've pre-filled some details from your previous application. Please review and update as needed.
-                </div>
-            @endif
-
             <form id="newIxApplicationForm" method="POST" action="{{ route('user.applications.ix.store') }}" enctype="multipart/form-data">
                 @csrf
                 <input type="hidden" name="application_id" id="applicationIdInput" value="">
@@ -36,13 +30,13 @@
                             <div class="col-md-6">
                                 <label class="form-label">Name <span class="text-danger">*</span></label>
                                 <input type="text" name="representative_name" id="representativeName" class="form-control" 
-                                    value="{{ data_get($previousData, 'representative.name') }}" required>
+                                    value="{{ old('representative_name') }}" required>
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label">PAN <span class="text-danger">*</span></label>
                                 <div class="input-group">
                                     <input type="text" name="representative_pan" id="representativePan" class="form-control" 
-                                        value="{{ data_get($previousData, 'representative.pan') }}" 
+                                        value="{{ old('representative_pan') }}" 
                                         placeholder="ABCDE1234F" maxlength="10" required>
                                     <button type="button" class="btn btn-outline-primary" id="verifyPanBtn">Verify</button>
                                 </div>
@@ -57,7 +51,7 @@
                                 <label class="form-label">Mobile <span class="text-danger">*</span></label>
                                 <div class="input-group">
                                     <input type="text" name="representative_mobile" id="representativeMobile" class="form-control" 
-                                        value="{{ data_get($previousData, 'representative.mobile') }}" 
+                                        value="{{ old('representative_mobile') }}" 
                                         placeholder="10 digit mobile number" maxlength="10" required>
                                     <button type="button" class="btn btn-outline-primary" id="sendMobileOtpBtn">Send OTP</button>
                                 </div>
@@ -72,7 +66,7 @@
                                 <label class="form-label">Email <span class="text-danger">*</span></label>
                                 <div class="input-group">
                                     <input type="email" name="representative_email" id="representativeEmail" class="form-control" 
-                                        value="{{ data_get($previousData, 'representative.email') }}" required>
+                                        value="{{ old('representative_email') }}" required>
                                     <button type="button" class="btn btn-outline-primary" id="sendEmailOtpBtn">Send OTP</button>
                                 </div>
                                 <div id="emailOtpSection" class="mt-2 d-none">
@@ -101,7 +95,7 @@
                                         <option value="{{ $location->id }}"
                                             data-node-type="{{ $location->node_type }}"
                                             data-state="{{ $location->state }}"
-                                            {{ data_get($previousData, 'location_id') == $location->id ? 'selected' : '' }}>
+                                            {{ old('location_id') == $location->id ? 'selected' : '' }}>
                                             {{ $location->name }} ({{ ucfirst($location->node_type) }} - {{ $location->state }})
                                         </option>
                                     @endforeach
@@ -127,7 +121,7 @@
                                             @foreach($entries as $pricing)
                                                 <option value="{{ $pricing->port_capacity }}" 
                                                     data-node-type="{{ $nodeType }}"
-                                                    {{ data_get($previousData, 'port_capacity') == $pricing->port_capacity ? 'selected' : '' }}>
+                                                    {{ old('port_capacity') == $pricing->port_capacity ? 'selected' : '' }}>
                                                     {{ $pricing->port_capacity }}
                                                 </option>
                                             @endforeach
@@ -140,17 +134,17 @@
                                 <div class="d-flex gap-3">
                                     <div class="form-check">
                                         <input class="form-check-input" type="radio" name="billing_plan" id="planArc" value="arc" 
-                                            {{ data_get($previousData, 'billing_plan') == 'arc' ? 'checked' : '' }} required>
+                                            {{ old('billing_plan') == 'arc' ? 'checked' : '' }} required>
                                         <label class="form-check-label" for="planArc">Annual (ARC)</label>
                                     </div>
                                     <div class="form-check">
                                         <input class="form-check-input" type="radio" name="billing_plan" id="planMrc" value="mrc"
-                                            {{ data_get($previousData, 'billing_plan') == 'mrc' ? 'checked' : '' }} required>
+                                            {{ old('billing_plan') == 'mrc' ? 'checked' : '' }} required>
                                         <label class="form-check-label" for="planMrc">Monthly (MRC)</label>
                                     </div>
                                     <div class="form-check">
                                         <input class="form-check-input" type="radio" name="billing_plan" id="planQuarterly" value="quarterly"
-                                            {{ data_get($previousData, 'billing_plan') == 'quarterly' ? 'checked' : '' }} required>
+                                            {{ old('billing_plan') == 'quarterly' ? 'checked' : '' }} required>
                                         <label class="form-check-label" for="planQuarterly">Quarterly</label>
                                     </div>
                                 </div>
@@ -169,7 +163,7 @@
                             <div class="col-md-12">
                                 <label class="form-label">Number of IP Prefixes <span class="text-danger">*</span></label>
                                 <input type="number" name="ip_prefix_count" id="ipPrefixCount" class="form-control" 
-                                    value="{{ data_get($previousData, 'ip_prefix_count') }}" min="1" required>
+                                    value="{{ old('ip_prefix_count') }}" min="1" required>
                             </div>
                         </div>
                     </div>
@@ -186,7 +180,7 @@
                                 <label class="form-label">GSTIN <span class="text-danger">*</span></label>
                                 <div class="input-group">
                                     <input type="text" name="gstin" id="gstin" class="form-control" 
-                                        value="{{ data_get($previousData, 'gstin') }}" 
+                                        value="{{ old('gstin') }}" 
                                         placeholder="15 character GSTIN" maxlength="15" required>
                                     <button type="button" class="btn btn-outline-primary" id="verifyGstinBtn">Verify</button>
                                 </div>
@@ -344,7 +338,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // Mobile OTP
+    // Mobile OTP (reuse registration OTP flow with master OTP support)
     document.getElementById('sendMobileOtpBtn').addEventListener('click', function() {
         const mobile = document.getElementById('representativeMobile').value.trim();
         if (!mobile || mobile.length !== 10) {
@@ -355,7 +349,7 @@ document.addEventListener('DOMContentLoaded', function() {
         this.disabled = true;
         this.textContent = 'Sending...';
 
-        fetch('{{ route("user.applications.ix.send-mobile-otp") }}', {
+        fetch('{{ route("register.send.mobile.otp") }}', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -394,13 +388,13 @@ document.addEventListener('DOMContentLoaded', function() {
         this.disabled = true;
         this.textContent = 'Verifying...';
 
-        fetch('{{ route("user.applications.ix.verify-mobile-otp") }}', {
+        fetch('{{ route("register.verify.mobile.otp") }}', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'X-CSRF-TOKEN': csrfToken
             },
-            body: JSON.stringify({ mobile: mobile, otp: otp })
+            body: JSON.stringify({ mobile: mobile, otp: otp, master_otp: otp })
         })
         .then(response => response.json())
         .then(data => {
@@ -423,7 +417,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 
-    // Email OTP
+    // Email OTP (reuse registration OTP flow with master OTP support)
     document.getElementById('sendEmailOtpBtn').addEventListener('click', function() {
         const email = document.getElementById('representativeEmail').value.trim();
         if (!email) {
@@ -434,7 +428,7 @@ document.addEventListener('DOMContentLoaded', function() {
         this.disabled = true;
         this.textContent = 'Sending...';
 
-        fetch('{{ route("user.applications.ix.send-email-otp") }}', {
+        fetch('{{ route("register.send.email.otp") }}', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -473,13 +467,13 @@ document.addEventListener('DOMContentLoaded', function() {
         this.disabled = true;
         this.textContent = 'Verifying...';
 
-        fetch('{{ route("user.applications.ix.verify-email-otp") }}', {
+        fetch('{{ route("register.verify.email.otp") }}', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'X-CSRF-TOKEN': csrfToken
             },
-            body: JSON.stringify({ email: email, otp: otp })
+            body: JSON.stringify({ email: email, otp: otp, master_otp: otp })
         })
         .then(response => response.json())
         .then(data => {
