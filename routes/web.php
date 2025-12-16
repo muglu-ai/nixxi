@@ -320,6 +320,8 @@ Route::get('/user/login-from-cookie', [LoginController::class, 'loginFromCookie'
 // PayU Callback URLs (MUST be outside auth middleware - PayU redirects user here)
 // These routes are accessible without authentication since PayU redirects the user's browser
 Route::any('/user/applications/ix/payment-success', [IxApplicationController::class, 'paymentSuccess'])->name('user.applications.ix.payment-success');
+
+
 Route::any('/user/applications/ix/payment-failure', [IxApplicationController::class, 'paymentFailure'])->name('user.applications.ix.payment-failure');
 
 // PayU S2S Webhook (must be outside auth middleware - PayU server calls this directly)
