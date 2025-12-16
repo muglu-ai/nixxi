@@ -821,6 +821,37 @@ class IxApplicationController extends Controller
     }
 
     /**
+     * Download IX invoice PDF.
+     */
+    public function downloadInvoicePdf($id): \Symfony\Component\HttpFoundation\BinaryFileResponse|RedirectResponse
+    {
+        try {
+            $userId = session('user_id');
+            $application = Application::where('id', $id)
+                ->where('user_id', $userId)
+                ->where('application_type', 'IX')
+                ->firstOrFail();
+
+            $data = $application->application_data ?? [];
+            $invoicePdfPath = $data['pdfs']['invoice_pdf'] ?? null;
+
+            if (! $invoicePdfPath || ! Storage::disk('public')->exists($invoicePdfPath)) {
+                return redirect()->route('user.applications.index')
+                    ->with('error', 'Invoice PDF not found. Please contact support.');
+            }
+
+            $filePath = Storage::disk('public')->path($invoicePdfPath);
+
+            return response()->download($filePath, $application->application_id.'_invoice.pdf');
+        } catch (Exception $e) {
+            Log::error('Error downloading IX invoice PDF: '.$e->getMessage());
+
+            return redirect()->route('user.applications.index')
+                ->with('error', 'Unable to download invoice PDF.');
+        }
+    }
+
+    /**
      * Download application PDF.
      */
     public function downloadApplicationPdf($id): \Symfony\Component\HttpFoundation\BinaryFileResponse|RedirectResponse

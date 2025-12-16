@@ -282,6 +282,7 @@ Route::prefix('user')->name('user.')->middleware(['user.auth'])->group(function 
             Route::get('/pricing', [IxApplicationController::class, 'pricing'])->name('pricing');
             Route::get('/application-pricing', [IxApplicationController::class, 'getApplicationPricing'])->name('application-pricing');
             Route::get('/{id}/download-application-pdf', [IxApplicationController::class, 'downloadApplicationPdf'])->name('download-application-pdf');
+            Route::get('/{id}/download-invoice-pdf', [IxApplicationController::class, 'downloadInvoicePdf'])->name('download-invoice-pdf');
             
             // Verification endpoints
             Route::post('/verify-representative-pan', [IxApplicationController::class, 'verifyRepresentativePan'])->name('verify-representative-pan');
