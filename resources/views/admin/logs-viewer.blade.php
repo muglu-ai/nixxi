@@ -80,6 +80,41 @@
             </div>
         </div>
 
+        {{-- Payment Reset Section --}}
+        <div class="card mb-4">
+            <div class="card-header bg-warning">
+                <h5 class="mb-0">Reset Payment Status (Debug Tool)</h5>
+            </div>
+            <div class="card-body">
+                <form method="POST" action="{{ route('admin.reset-payment-status') }}" id="resetPaymentForm">
+                    @csrf
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Application ID or Application Number</label>
+                            <input type="text" name="application_identifier" id="applicationIdentifier" 
+                                class="form-control" placeholder="Enter Application ID (e.g., APP12345678) or Database ID" required>
+                            <small class="text-muted">Enter either the application_id (e.g., APP12345678) or the database ID</small>
+                        </div>
+                        <div class="col-md-6 d-flex align-items-end">
+                            <button type="submit" class="btn btn-warning">
+                                <i class="bi bi-arrow-counterclockwise"></i> Reset Payment to Pending
+                            </button>
+                        </div>
+                    </div>
+                </form>
+                @if(session('payment_reset_success'))
+                    <div class="alert alert-success mt-3 mb-0">
+                        {{ session('payment_reset_success') }}
+                    </div>
+                @endif
+                @if(session('payment_reset_error'))
+                    <div class="alert alert-danger mt-3 mb-0">
+                        {{ session('payment_reset_error') }}
+                    </div>
+                @endif
+            </div>
+        </div>
+
         <div class="card">
             <div class="card-header d-flex justify-content-between align-items-center">
                 <h5 class="mb-0">Laravel Logs</h5>
@@ -141,11 +176,6 @@
         if (logContainer) {
             logContainer.scrollTop = logContainer.scrollHeight;
         }
-
-        // Auto-refresh every 5 seconds
-        setInterval(function() {
-            location.reload();
-        }, 5000);
     </script>
 </body>
 </html>

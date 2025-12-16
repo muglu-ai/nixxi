@@ -406,3 +406,67 @@ Route::get('/admin/view-logs', function (Request $request) {
         'lastModified' => date('Y-m-d H:i:s', filemtime($logFile)),
     ]);
 })->name('admin.view-logs');
+
+// ⚠️ TEMPORARY: Reset Payment Status Route - REMOVE AFTER DEBUGGING ⚠️
+Route::post('/admin/reset-payment-status', function (Request $request) {
+    // Basic security - require user authentication
+    if (!session('user_id')) {
+        return redirect()->route('login.index')
+            ->with('error', 'Please login to reset payment status.');
+    }
+    
+    $request->validate([
+        'application_identifier' => 'required|string',
+    ]);
+    
+    $identifier = trim($request->input('application_identifier'));
+    
+    // Try to find application by application_id first, then by database ID
+    $application = \App\Models\Application::where('application_id', $identifier)
+        ->orWhere('id', $identifier)
+        ->first();
+    
+    if (!$application) {
+        return redirect()->route('admin.view-logs')
+            ->with('payment_reset_error', 'Application not found with identifier: ' . $identifier);
+    }
+    
+    // Only allow resetting IX applications
+    if ($application->application_type !== 'IX') {
+        return redirect()->route('admin.view-logs')
+            ->with('payment_reset_error', 'This tool only works for IX applications. Found application type: ' . $application->application_type);
+    }
+    
+    // Get application data
+    $applicationData = $application->application_data ?? [];
+    
+    // Reset payment status to pending
+    if (!isset($applicationData['payment'])) {
+        $applicationData['payment'] = [];
+    }
+    
+    $applicationData['payment']['status'] = 'pending';
+    $applicationData['payment']['reset_at'] = now('Asia/Kolkata')->toDateTimeString();
+    $applicationData['payment']['reset_by'] = session('user_id');
+    
+    // Set application status to draft if it's not already
+    $oldStatus = $application->status;
+    $application->update([
+        'status' => 'draft',
+        'application_data' => $applicationData,
+        'submitted_at' => null, // Clear submitted_at so it can be resubmitted
+    ]);
+    
+    // Log the status change
+    \App\Models\ApplicationStatusHistory::log(
+        $application->id,
+        $oldStatus,
+        'draft',
+        'system',
+        session('user_id'),
+        'Payment status reset to pending via debug tool - Pay Now button enabled'
+    );
+    
+    return redirect()->route('admin.view-logs')
+        ->with('payment_reset_success', 'Payment status reset to pending for application ' . $application->application_id . '. The "Pay Now" button should now be visible.');
+})->name('admin.reset-payment-status');
