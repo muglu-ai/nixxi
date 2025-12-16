@@ -18,6 +18,15 @@ return Application::configure(basePath: dirname(__DIR__))
             'application' => \App\Http\Middleware\ApplicationMiddleware::class,
             'user.auth' => \App\Http\Middleware\UserAuthMiddleware::class,
         ]);
+        
+        // Exclude payment callback routes from CSRF verification
+        // These routes are called by PayU gateway and don't have CSRF tokens
+        $middleware->validateCsrfTokens(except: [
+            'user/applications/ix/payment-success',
+            'user/applications/ix/payment-failure',
+            'payu/webhook',
+            'user/login-from-cookie',
+        ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         // Handle database connection errors
@@ -106,6 +115,41 @@ return Application::configure(basePath: dirname(__DIR__))
                     'message' => 'Database connection unavailable. Please try again later.',
                 ], 503);
             }
+        });
+        
+        // Handle CSRF token mismatch (419 errors) for payment callbacks
+        $exceptions->render(function (\Illuminate\Session\TokenMismatchException $e, $request) {
+            $url = $request->url();
+            
+            \Illuminate\Support\Facades\Log::warning('CSRF Token Mismatch', [
+                'url' => $url,
+                'method' => $request->method(),
+                'ip' => $request->ip(),
+                'user_agent' => $request->userAgent(),
+            ]);
+            
+            // Check if it's a payment callback URL
+            if (str_contains($url, '/payment-success') || 
+                str_contains($url, '/payment-failure') ||
+                str_contains($url, '/payu/webhook')) {
+                
+                // Redirect to login-from-cookie to restore session
+                return redirect()->route('user.login-from-cookie', [
+                    'redirect' => $url . ($request->getQueryString() ? '?' . $request->getQueryString() : ''),
+                    'error' => urlencode('Session expired. Restoring session...'),
+                ]);
+            }
+            
+            // For AJAX requests, return JSON response
+            if ($request->expectsJson() || $request->ajax()) {
+                return response()->json([
+                    'message' => 'Your session has expired. Please refresh the page.',
+                    'error' => 'Session Expired'
+                ], 419);
+            }
+            
+            // Default 419 handling - show error page
+            return response()->view('errors.419', [], 419);
         });
         
         // Handle all other exceptions
