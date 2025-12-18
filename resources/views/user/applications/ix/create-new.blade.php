@@ -462,7 +462,7 @@ document.addEventListener('DOMContentLoaded', function() {
         filterLocations();
     }
 
-    // Payment summary calculation - same application pricing as full form step 3
+    // Payment summary calculation
     const portCapacitySelect = document.getElementById('portCapacitySelect');
     const billingPlanRadios = document.querySelectorAll('input[name="billing_plan"]');
     const paymentSummary = document.getElementById('paymentSummary');
@@ -470,10 +470,30 @@ document.addEventListener('DOMContentLoaded', function() {
     const gstPercentage = {{ $applicationPricing->gst_percentage ?? 18 }};
 
     function updatePaymentSummary() {
+        const selectedOption = portCapacitySelect.options[portCapacitySelect.selectedIndex];
         const billingPlan = document.querySelector('input[name="billing_plan"]:checked')?.value;
 
-        // Application fee is fixed from configuration (same as full form)
-        const billingAmount = applicationFee;
+        if (!selectedOption.value || !billingPlan) {
+            paymentSummary.style.display = 'none';
+            return;
+        }
+
+        // Port/Location fee from pricing table (for step 1 display only)
+        let portFee = 0;
+        if (billingPlan === 'arc') {
+            portFee = parseFloat(selectedOption.dataset.arc || 0);
+        } else if (billingPlan === 'mrc') {
+            portFee = parseFloat(selectedOption.dataset.mrc || 0);
+        } else if (billingPlan === 'quarterly') {
+            portFee = parseFloat(selectedOption.dataset.quarterly || 0);
+        }
+
+        // For step 1, show estimated billing based on port fee.
+        // For step 2 (payment), show application fee only, same as full form step 3.
+        const isPaymentStep = currentStep === 2;
+        const baseAmount = isPaymentStep ? applicationFee : portFee;
+
+        const billingAmount = baseAmount;
         const gstAmount = (billingAmount * gstPercentage) / 100;
         const totalAmount = billingAmount + gstAmount;
 
@@ -486,14 +506,12 @@ document.addEventListener('DOMContentLoaded', function() {
             'mrc': 'Monthly',
             'quarterly': 'Quarterly'
         };
-        if (billingPlan) {
-            document.getElementById('billingFrequencyDisplay').textContent = frequencyMap[billingPlan] || '—';
-        }
+        document.getElementById('billingFrequencyDisplay').textContent = frequencyMap[billingPlan] || '—';
         
         paymentSummary.style.display = 'block';
         
         // Update summary on payment step
-        if (currentStep === 2) {
+        if (isPaymentStep) {
             document.getElementById('summaryBillingAmount').textContent = billingAmount.toFixed(2);
             document.getElementById('summaryGstAmount').textContent = gstAmount.toFixed(2);
             document.getElementById('summaryTotalAmount').textContent = totalAmount.toFixed(2);
