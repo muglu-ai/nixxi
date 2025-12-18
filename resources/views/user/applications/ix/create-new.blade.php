@@ -217,7 +217,7 @@
                             <div id="paymentSummary" class="mt-3" style="display: none;">
                                 <div class="alert alert-info">
                                     <h6 class="mb-2">Payment Summary</h6>
-                                    <p class="mb-1"><strong>Application Fee:</strong> ₹<span id="applicationFeeDisplay">0.00</span></p>
+                                    <p class="mb-1"><strong>Billing Amount:</strong> ₹<span id="billingAmountDisplay">0.00</span></p>
                                     <p class="mb-1"><strong>GST (<span id="gstPercentageDisplay">{{ $applicationPricing->gst_percentage ?? 18 }}</span>%):</strong> ₹<span id="gstAmountDisplay">0.00</span></p>
                                     <p class="mb-0"><strong>Total Amount:</strong> ₹<span id="totalAmountDisplay">0.00</span></p>
                                     <p class="mb-0 mt-2 small"><strong>Billing Frequency:</strong> <span id="billingFrequencyDisplay">—</span></p>
@@ -278,17 +278,27 @@
                         <div class="col-lg-5">
                             <div class="card border h-100">
                                 <div class="card-header bg-light">
-                                    <h5 class="mb-0">Payment Details</h5>
+                                    <h5 class="mb-0">Declaration & Payment</h5>
                                 </div>
                                 <div class="card-body">
+                                    <p class="small text-muted">Declaration:</p>
+                                    <p class="small">
+                                        We agree to pay Membership fee of Rs.1000 + applicable taxes when demanded at the time of peering and annually once the peering is established. We agree to abide by the Memorandum and Articles of Association and the Rules of the company.
+                                    </p>
+                                    <div class="form-check mb-3">
+                                        <input class="form-check-input" type="checkbox" name="declaration_confirmed" id="declarationConfirmed" value="1" required>
+                                        <label class="form-check-label" for="declarationConfirmed">
+                                            I have read and agree to the declaration above.
+                                        </label>
+                                    </div>
                                     <div class="alert alert-info mb-0" id="pricingInfo">
-                                        <p class="mb-1"><strong>Application Fee:</strong> ₹<span id="summaryApplicationFee">{{ number_format($applicationPricing->application_fee ?? 1000, 2) }}</span></p>
-                                        <p class="mb-1"><strong>GST (<span id="summaryGstPercentage">{{ $applicationPricing->gst_percentage ?? 18 }}</span>%):</strong> ₹<span id="summaryGstAmount">{{ number_format((($applicationPricing->application_fee ?? 1000) * ($applicationPricing->gst_percentage ?? 18)) / 100, 2) }}</span></p>
-                                        <p class="mb-1"><strong>Total Amount:</strong> ₹<span id="summaryTotalAmount">{{ number_format($applicationPricing->total_amount ?? 1180, 2) }}</span></p>
+                                        <p class="mb-1"><strong>Billing Amount:</strong> ₹<span id="summaryBillingAmount">0.00</span></p>
+                                        <p class="mb-1"><strong>GST (<span id="summaryGstPercentage">{{ $applicationPricing->gst_percentage ?? 18 }}</span>%):</strong> ₹<span id="summaryGstAmount">0.00</span></p>
+                                        <p class="mb-1"><strong>Total Amount:</strong> ₹<span id="summaryTotalAmount">0.00</span></p>
                                         <p class="mb-0 small mt-2">You will be redirected to PayU payment gateway to complete the payment.</p>
                                     </div>
                                     <button type="submit" class="btn btn-success w-100 mt-3" id="submitAndPayBtn">
-                                        <i class="fas fa-credit-card"></i> Proceed to Payment
+                                        <i class="fas fa-credit-card"></i> Pay Now
                                     </button>
                                 </div>
                             </div>
@@ -371,6 +381,7 @@ document.addEventListener('DOMContentLoaded', function() {
         
         if (currentStep === 2) {
             updateSummary();
+            updatePaymentSummary(); // Update payment amounts on payment step
         }
     }
 
@@ -476,11 +487,12 @@ document.addEventListener('DOMContentLoaded', function() {
             portFee = parseFloat(selectedOption.dataset.quarterly || 0);
         }
 
-        const totalFee = applicationFee + portFee;
-        const gstAmount = (totalFee * gstPercentage) / 100;
-        const totalAmount = totalFee + gstAmount;
+        // Billing amount is just the port fee (not including application fee)
+        const billingAmount = portFee;
+        const gstAmount = (billingAmount * gstPercentage) / 100;
+        const totalAmount = billingAmount + gstAmount;
 
-        document.getElementById('applicationFeeDisplay').textContent = totalFee.toFixed(2);
+        document.getElementById('billingAmountDisplay').textContent = billingAmount.toFixed(2);
         document.getElementById('gstAmountDisplay').textContent = gstAmount.toFixed(2);
         document.getElementById('totalAmountDisplay').textContent = totalAmount.toFixed(2);
         
@@ -492,6 +504,13 @@ document.addEventListener('DOMContentLoaded', function() {
         document.getElementById('billingFrequencyDisplay').textContent = frequencyMap[billingPlan] || '—';
         
         paymentSummary.style.display = 'block';
+        
+        // Update summary on payment step
+        if (currentStep === 2) {
+            document.getElementById('summaryBillingAmount').textContent = billingAmount.toFixed(2);
+            document.getElementById('summaryGstAmount').textContent = gstAmount.toFixed(2);
+            document.getElementById('summaryTotalAmount').textContent = totalAmount.toFixed(2);
+        }
     }
 
     portCapacitySelect.addEventListener('change', updatePaymentSummary);
@@ -632,6 +651,9 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
 
+        // Check if email is already verified - allow resending
+        const isVerified = document.getElementById('emailVerified').value === '1';
+        
         this.disabled = true;
         this.textContent = 'Sending...';
 
@@ -647,18 +669,24 @@ document.addEventListener('DOMContentLoaded', function() {
         .then(data => {
             if (data.success) {
                 document.getElementById('emailOtpSection').classList.remove('d-none');
+                // Reset verification status when resending
+                if (isVerified) {
+                    document.getElementById('emailVerified').value = '0';
+                    document.getElementById('emailVerifyStatus').innerHTML = '';
+                }
                 this.textContent = 'OTP Sent';
+                this.disabled = false;
             } else {
                 alert(data.message);
                 this.disabled = false;
-                this.textContent = 'Send OTP';
+                this.textContent = isVerified ? 'Resend OTP' : 'Send OTP';
             }
         })
         .catch(error => {
             console.error('Error:', error);
             alert('Error sending OTP');
             this.disabled = false;
-            this.textContent = 'Send OTP';
+            this.textContent = isVerified ? 'Resend OTP' : 'Send OTP';
         });
     });
 
@@ -696,9 +724,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (emailInput) {
                     emailInput.readOnly = true;
                 }
+                // Keep button enabled for resending OTP, but change text
                 if (sendEmailBtn) {
-                    sendEmailBtn.disabled = true;
-                    sendEmailBtn.textContent = 'Verified';
+                    sendEmailBtn.disabled = false;
+                    sendEmailBtn.textContent = 'Resend OTP';
                 }
             } else {
                 statusEl.innerHTML = '<span class="badge bg-danger">' + data.message + '</span>';
@@ -722,6 +751,9 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
 
+        // Check if mobile is already verified - allow resending
+        const isVerified = document.getElementById('mobileVerified').value === '1';
+
         this.disabled = true;
         this.textContent = 'Sending...';
 
@@ -740,18 +772,24 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (data.otp) {
                     document.getElementById('mobileOtpDisplay').textContent = 'OTP: ' + data.otp;
                 }
+                // Reset verification status when resending
+                if (isVerified) {
+                    document.getElementById('mobileVerified').value = '0';
+                    document.getElementById('mobileVerifyStatus').innerHTML = '';
+                }
                 this.textContent = 'OTP Sent';
+                this.disabled = false;
             } else {
                 alert(data.message);
                 this.disabled = false;
-                this.textContent = 'Send OTP';
+                this.textContent = isVerified ? 'Resend OTP' : 'Send OTP';
             }
         })
         .catch(error => {
             console.error('Error:', error);
             alert('Error sending OTP');
             this.disabled = false;
-            this.textContent = 'Send OTP';
+            this.textContent = isVerified ? 'Resend OTP' : 'Send OTP';
         });
     });
 
@@ -789,9 +827,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (mobileInput) {
                     mobileInput.readOnly = true;
                 }
+                // Keep button enabled for resending OTP, but change text
                 if (sendMobileBtn) {
-                    sendMobileBtn.disabled = true;
-                    sendMobileBtn.textContent = 'Verified';
+                    sendMobileBtn.disabled = false;
+                    sendMobileBtn.textContent = 'Resend OTP';
                 }
             } else {
                 statusEl.innerHTML = '<span class="badge bg-danger">' + data.message + '</span>';
@@ -903,7 +942,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     // Form submission
-    form.addEventListener('submit', function(e) {
+    form.addEventListener('submit', async function(e) {
         if (currentStep === 1) {
             e.preventDefault();
             if (validateStep1()) {
@@ -913,10 +952,65 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         
         // Step 2 submission - proceed to payment
+        e.preventDefault();
+        
         if (!validateStep1()) {
-            e.preventDefault();
             alert('Please complete all required fields and verifications.');
             return false;
+        }
+        
+        // Check declaration checkbox
+        const declarationCheckbox = document.getElementById('declarationConfirmed');
+        if (!declarationCheckbox || !declarationCheckbox.checked) {
+            alert('Please accept the declaration before proceeding to payment.');
+            return false;
+        }
+        
+        if (!confirm('Are you sure you want to submit this application and proceed to payment? You will not be able to edit it after submission.')) {
+            return false;
+        }
+
+        const formData = new FormData(form);
+        formData.append('is_draft', '0');
+        formData.append('initiate_payment', '1');
+
+        try {
+            const response = await fetch('{{ route("user.applications.ix.initiate-payment") }}', {
+                method: 'POST',
+                body: formData,
+                headers: {
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content || csrfToken
+                }
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                if (data.success && data.payment_form) {
+                    // Create a form and submit to PayU
+                    const payuForm = document.createElement('form');
+                    payuForm.method = 'POST';
+                    payuForm.action = data.payment_url;
+                    
+                    Object.keys(data.payment_form).forEach(key => {
+                        const input = document.createElement('input');
+                        input.type = 'hidden';
+                        input.name = key;
+                        input.value = data.payment_form[key];
+                        payuForm.appendChild(input);
+                    });
+                    
+                    document.body.appendChild(payuForm);
+                    payuForm.submit();
+                } else {
+                    alert('Error initiating payment: ' + (data.message || 'Unknown error'));
+                }
+            } else {
+                const errorData = await response.json();
+                alert('Error submitting application: ' + (errorData.message || 'Please check all fields and try again.'));
+            }
+        } catch (error) {
+            alert('Error submitting application. Please try again.');
+            console.error(error);
         }
     });
 });
