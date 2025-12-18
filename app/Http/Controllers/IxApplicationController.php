@@ -1217,6 +1217,20 @@ class IxApplicationController extends Controller
             );
 
             return $response;
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $e->errors(),
+            ], 422);
+        } catch (Exception $e) {
+            Log::error('Error initiating payment: '.$e->getMessage());
+
+            return response()->json([
+                'success' => false,
+                'message' => 'An error occurred while initiating payment. Please try again.',
+            ], 500);
+        }
     }
 
     /**
