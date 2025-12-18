@@ -230,7 +230,13 @@ class StoreIxApplicationRequest extends FormRequest
             }
 
             $pan = strtoupper((string) $this->input('representative_pan'));
-            if (! session()->get('ix_pan_verified_'.md5($pan), false)) {
+            $panVerifiedFlag = (string) $this->input('pan_verified') === '1';
+            $sessionPanVerified = session()->get('ix_pan_verified_'.md5($pan), false);
+
+            // Accept either the session-based PAN verification flag or the hidden form flag.
+            // This prevents false negatives when the session flag is missing but the user
+            // has successfully verified PAN through the UI.
+            if (! $panVerifiedFlag && ! $sessionPanVerified) {
                 $validator->errors()->add('representative_pan', 'PAN verification not completed.');
             }
 

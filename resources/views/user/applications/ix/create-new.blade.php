@@ -729,10 +729,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (emailInput) {
                     emailInput.readOnly = true;
                 }
-                // Keep button enabled for resending OTP, but change text
                 if (sendEmailBtn) {
-                    sendEmailBtn.disabled = false;
-                    sendEmailBtn.textContent = 'Resend OTP';
+                    sendEmailBtn.disabled = true;
+                    sendEmailBtn.textContent = 'Verified';
                 }
             } else {
                 statusEl.innerHTML = '<span class="badge bg-danger">' + data.message + '</span>';
@@ -832,10 +831,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (mobileInput) {
                     mobileInput.readOnly = true;
                 }
-                // Keep button enabled for resending OTP, but change text
                 if (sendMobileBtn) {
-                    sendMobileBtn.disabled = false;
-                    sendMobileBtn.textContent = 'Resend OTP';
+                    sendMobileBtn.disabled = true;
+                    sendMobileBtn.textContent = 'Verified';
                 }
             } else {
                 statusEl.innerHTML = '<span class="badge bg-danger">' + data.message + '</span>';
