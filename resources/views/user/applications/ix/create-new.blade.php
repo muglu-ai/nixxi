@@ -593,7 +593,22 @@ document.addEventListener('DOMContentLoaded', function() {
             if (data.success) {
                 statusEl.innerHTML = '<span class="badge bg-success">' + data.message + '</span>';
                 document.getElementById('panVerified').value = '1';
-                btn.disabled = false;
+
+                // Lock PAN-related fields once verified
+                const nameInput = document.getElementById('representativeName');
+                const dobInput = document.getElementById('representativeDob');
+                const panInput = document.getElementById('representativePan');
+                if (nameInput) {
+                    nameInput.readOnly = true;
+                }
+                if (dobInput) {
+                    dobInput.readOnly = true;
+                }
+                if (panInput) {
+                    panInput.readOnly = true;
+                }
+
+                btn.disabled = true;
                 btn.textContent = 'Verified';
             } else if (data.status === 'in_progress' || data.status === 'pending') {
                 setTimeout(checkPanStatus, 2000);
@@ -674,6 +689,17 @@ document.addEventListener('DOMContentLoaded', function() {
                 statusEl.innerHTML = '<span class="badge bg-success">' + data.message + '</span>';
                 document.getElementById('emailVerified').value = '1';
                 document.getElementById('emailOtpSection').classList.add('d-none');
+
+                // Lock email once verified
+                const emailInput = document.getElementById('representativeEmail');
+                const sendEmailBtn = document.getElementById('sendEmailOtpBtn');
+                if (emailInput) {
+                    emailInput.readOnly = true;
+                }
+                if (sendEmailBtn) {
+                    sendEmailBtn.disabled = true;
+                    sendEmailBtn.textContent = 'Verified';
+                }
             } else {
                 statusEl.innerHTML = '<span class="badge bg-danger">' + data.message + '</span>';
                 this.disabled = false;
@@ -756,6 +782,17 @@ document.addEventListener('DOMContentLoaded', function() {
                 statusEl.innerHTML = '<span class="badge bg-success">' + data.message + '</span>';
                 document.getElementById('mobileVerified').value = '1';
                 document.getElementById('mobileOtpSection').classList.add('d-none');
+
+                // Lock mobile once verified
+                const mobileInput = document.getElementById('representativeMobile');
+                const sendMobileBtn = document.getElementById('sendMobileOtpBtn');
+                if (mobileInput) {
+                    mobileInput.readOnly = true;
+                }
+                if (sendMobileBtn) {
+                    sendMobileBtn.disabled = true;
+                    sendMobileBtn.textContent = 'Verified';
+                }
             } else {
                 statusEl.innerHTML = '<span class="badge bg-danger">' + data.message + '</span>';
                 this.disabled = false;
@@ -834,7 +871,12 @@ document.addEventListener('DOMContentLoaded', function() {
             if (data.success && data.is_verified) {
                 statusEl.innerHTML = '<span class="badge bg-success">' + data.message + '</span>';
                 document.getElementById('gstinVerified').value = '1';
-                btn.disabled = false;
+
+                // Lock GSTIN once verified
+                if (gstinInput) {
+                    gstinInput.readOnly = true;
+                }
+                btn.disabled = true;
                 btn.textContent = 'Verified';
                 
                 // Check if GST matches KYC GST
