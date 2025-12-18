@@ -14,208 +14,321 @@
 
     <div class="card border-0 shadow-sm">
         <div class="card-body">
+            <div class="row g-3 mb-4">
+                <div class="col">
+                    <div class="step-indicator active" data-step="1">1. Application Details</div>
+                </div>
+                <div class="col">
+                    <div class="step-indicator" data-step="2">2. Payment</div>
+                </div>
+            </div>
+
             <form id="newIxApplicationForm" method="POST" action="{{ route('user.applications.ix.store') }}" enctype="multipart/form-data">
                 @csrf
                 <input type="hidden" name="application_id" id="applicationIdInput" value="">
                 <input type="hidden" name="is_simplified" value="1">
                 <input type="hidden" name="previous_gstin" id="previousGstin" value="{{ data_get($previousData, 'gstin') }}">
+                <input type="hidden" name="kyc_gstin" id="kycGstin" value="{{ $kycGstin ?? '' }}">
 
-                {{-- Representative Person Details --}}
-                <div class="card mb-4">
-                    <div class="card-header bg-primary text-white">
-                        <h5 class="mb-0">Representative Person Details</h5>
-                    </div>
-                    <div class="card-body">
-                        <div class="row g-3">
-                            <div class="col-md-6">
-                                <label class="form-label">Name <span class="text-danger">*</span></label>
-                                <input type="text" name="representative_name" id="representativeName" class="form-control" 
-                                    value="{{ old('representative_name') }}" required>
-                            </div>
-                            <div class="col-md-6">
-                                <label class="form-label">PAN <span class="text-danger">*</span></label>
-                                <div class="input-group">
-                                    <input type="text" name="representative_pan" id="representativePan" class="form-control" 
-                                        value="{{ old('representative_pan') }}" 
-                                        placeholder="ABCDE1234F" maxlength="10" required>
-                                    <button type="button" class="btn btn-outline-primary" id="verifyPanBtn">Verify</button>
-                                </div>
-                                <div id="panVerifyStatus" class="mt-2"></div>
-                                <input type="hidden" name="pan_verified" id="panVerified" value="0">
-                            </div>
-                            <div class="col-md-6">
-                                <label class="form-label">Date of Birth <span class="text-danger">*</span></label>
-                                <input type="date" name="representative_dob" id="representativeDob" class="form-control" required>
-                            </div>
-                            <div class="col-md-6">
-                                <label class="form-label">Mobile <span class="text-danger">*</span></label>
-                                <div class="input-group">
-                                    <input type="text" name="representative_mobile" id="representativeMobile" class="form-control" 
-                                        value="{{ old('representative_mobile') }}" 
-                                        placeholder="10 digit mobile number" maxlength="10" required>
-                                    <button type="button" class="btn btn-outline-primary" id="sendMobileOtpBtn">Send OTP</button>
-                                </div>
-                                <div id="mobileOtpSection" class="mt-2 d-none">
-                                    <input type="text" id="mobileOtp" class="form-control mb-2" placeholder="Enter OTP" maxlength="6">
-                                    <button type="button" class="btn btn-sm btn-success" id="verifyMobileOtpBtn">Verify OTP</button>
-                                </div>
-                                <div id="mobileVerifyStatus" class="mt-2"></div>
-                                <input type="hidden" name="mobile_verified" id="mobileVerified" value="0">
-                            </div>
-                            <div class="col-md-6">
-                                <label class="form-label">Email <span class="text-danger">*</span></label>
-                                <div class="input-group">
-                                    <input type="email" name="representative_email" id="representativeEmail" class="form-control" 
-                                        value="{{ old('representative_email') }}" required>
-                                    <button type="button" class="btn btn-outline-primary" id="sendEmailOtpBtn">Send OTP</button>
-                                </div>
-                                <div id="emailOtpSection" class="mt-2 d-none">
-                                    <input type="text" id="emailOtp" class="form-control mb-2" placeholder="Enter OTP" maxlength="6">
-                                    <button type="button" class="btn btn-sm btn-success" id="verifyEmailOtpBtn">Verify OTP</button>
-                                </div>
-                                <div id="emailVerifyStatus" class="mt-2"></div>
-                                <input type="hidden" name="email_verified" id="emailVerified" value="0">
-                            </div>
+                {{-- Step 1: Application Details --}}
+                <div class="form-step" data-step="1">
+                    {{-- Representative Person Details --}}
+                    <div class="card mb-4">
+                        <div class="card-header bg-primary text-white">
+                            <h5 class="mb-0">Representative Person Details</h5>
                         </div>
-                    </div>
-                </div>
-
-                {{-- NIXI Location --}}
-                <div class="card mb-4">
-                    <div class="card-header bg-primary text-white">
-                        <h5 class="mb-0">NIXI Location</h5>
-                    </div>
-                    <div class="card-body">
-                        <div class="row g-3">
-                            <div class="col-md-12">
-                                <label class="form-label">Select Location <span class="text-danger">*</span></label>
-                                <select name="location_id" id="locationSelect" class="form-select" required>
-                                    <option value="">Select Location</option>
-                                    @foreach($locations as $location)
-                                        <option value="{{ $location->id }}"
-                                            data-node-type="{{ $location->node_type }}"
-                                            data-state="{{ $location->state }}"
-                                            {{ old('location_id') == $location->id ? 'selected' : '' }}>
-                                            {{ $location->name }} ({{ ucfirst($location->node_type) }} - {{ $location->state }})
-                                        </option>
-                                    @endforeach
-                                </select>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                {{-- Port Capacity & Billing Plan --}}
-                <div class="card mb-4">
-                    <div class="card-header bg-primary text-white">
-                        <h5 class="mb-0">Port Capacity & Billing Plan</h5>
-                    </div>
-                    <div class="card-body">
-                        <div class="row g-3">
-                            <div class="col-md-6">
-                                <label class="form-label">Port Capacity <span class="text-danger">*</span></label>
-                                <select name="port_capacity" id="portCapacitySelect" class="form-select" required>
-                                    <option value="">Select capacity</option>
-                                    @foreach($portPricings as $nodeType => $entries)
-                                        <optgroup label="{{ ucfirst($nodeType) }} nodes">
-                                            @foreach($entries as $pricing)
-                                                <option value="{{ $pricing->port_capacity }}" 
-                                                    data-node-type="{{ $nodeType }}"
-                                                    {{ old('port_capacity') == $pricing->port_capacity ? 'selected' : '' }}>
-                                                    {{ $pricing->port_capacity }}
-                                                </option>
-                                            @endforeach
-                                        </optgroup>
-                                    @endforeach
-                                </select>
-                            </div>
-                            <div class="col-md-6">
-                                <label class="form-label">Billing Plan <span class="text-danger">*</span></label>
-                                <div class="d-flex gap-3">
-                                    <div class="form-check">
-                                        <input class="form-check-input" type="radio" name="billing_plan" id="planArc" value="arc" 
-                                            {{ old('billing_plan') == 'arc' ? 'checked' : '' }} required>
-                                        <label class="form-check-label" for="planArc">Annual (ARC)</label>
+                        <div class="card-body">
+                            <div class="row g-3">
+                                <div class="col-md-6">
+                                    <label class="form-label">Name as per PAN <span class="text-danger">*</span></label>
+                                    <input type="text" name="representative_name" id="representativeName" class="form-control" 
+                                        value="{{ old('representative_name') }}" required>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">DOB as per PAN <span class="text-danger">*</span></label>
+                                    <input type="date" name="representative_dob" id="representativeDob" class="form-control" required>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">PAN Number <span class="text-danger">*</span></label>
+                                    <div class="input-group">
+                                        <input type="text" name="representative_pan" id="representativePan" class="form-control" 
+                                            value="{{ old('representative_pan') }}" 
+                                            placeholder="ABCDE1234F" maxlength="10" required>
+                                        <button type="button" class="btn btn-outline-primary" id="verifyPanBtn">Verify</button>
                                     </div>
-                                    <div class="form-check">
-                                        <input class="form-check-input" type="radio" name="billing_plan" id="planMrc" value="mrc"
-                                            {{ old('billing_plan') == 'mrc' ? 'checked' : '' }} required>
-                                        <label class="form-check-label" for="planMrc">Monthly (MRC)</label>
+                                    <div id="panVerifyStatus" class="mt-2"></div>
+                                    <input type="hidden" name="pan_verified" id="panVerified" value="0">
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">Email <span class="text-danger">*</span></label>
+                                    <div class="input-group">
+                                        <input type="email" name="representative_email" id="representativeEmail" class="form-control" 
+                                            value="{{ old('representative_email') }}" required>
+                                        <button type="button" class="btn btn-outline-primary" id="sendEmailOtpBtn">Send OTP</button>
                                     </div>
-                                    <div class="form-check">
-                                        <input class="form-check-input" type="radio" name="billing_plan" id="planQuarterly" value="quarterly"
-                                            {{ old('billing_plan') == 'quarterly' ? 'checked' : '' }} required>
-                                        <label class="form-check-label" for="planQuarterly">Quarterly</label>
+                                    <div id="emailOtpSection" class="mt-2 d-none">
+                                        <input type="text" id="emailOtp" class="form-control mb-2" placeholder="Enter OTP" maxlength="6">
+                                        <button type="button" class="btn btn-sm btn-success" id="verifyEmailOtpBtn">Verify OTP</button>
                                     </div>
+                                    <div id="emailVerifyStatus" class="mt-2"></div>
+                                    <input type="hidden" name="email_verified" id="emailVerified" value="0">
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">Mobile <span class="text-danger">*</span></label>
+                                    <div class="input-group">
+                                        <input type="text" name="representative_mobile" id="representativeMobile" class="form-control" 
+                                            value="{{ old('representative_mobile') }}" 
+                                            placeholder="10 digit mobile number" maxlength="10" required>
+                                        <button type="button" class="btn btn-outline-primary" id="sendMobileOtpBtn">Send OTP</button>
+                                    </div>
+                                    <div id="mobileOtpSection" class="mt-2 d-none">
+                                        <input type="text" id="mobileOtp" class="form-control mb-2" placeholder="Enter OTP" maxlength="6">
+                                        <button type="button" class="btn btn-sm btn-success" id="verifyMobileOtpBtn">Verify OTP</button>
+                                        <small class="form-text text-muted d-block mt-2" id="mobileOtpDisplay"></small>
+                                    </div>
+                                    <div id="mobileVerifyStatus" class="mt-2"></div>
+                                    <input type="hidden" name="mobile_verified" id="mobileVerified" value="0">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {{-- GSTIN for Billing --}}
+                    <div class="card mb-4">
+                        <div class="card-header bg-primary text-white">
+                            <h5 class="mb-0">GSTIN (For Billing)</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="row g-3">
+                                <div class="col-md-12">
+                                    <label class="form-label">GST Number <span class="text-danger">*</span></label>
+                                    <div class="input-group">
+                                        <input type="text" name="gstin" id="gstin" class="form-control" 
+                                            value="{{ old('gstin') }}" 
+                                            placeholder="15 character GSTIN" maxlength="15" required>
+                                        <button type="button" class="btn btn-outline-primary" id="verifyGstinBtn">Verify</button>
+                                    </div>
+                                    <div id="gstinVerifyStatus" class="mt-2"></div>
+                                    <input type="hidden" name="gstin_verified" id="gstinVerified" value="0">
+                                    <input type="hidden" name="gstin_verification_id" id="gstinVerificationId" value="">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {{-- Documents (shown only if GST doesn't match KYC GST) --}}
+                    <div class="card mb-4" id="documentsSection" style="display: none;">
+                        <div class="card-header bg-primary text-white">
+                            <h5 class="mb-0">Documents</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="row g-3">
+                                <div class="col-md-12">
+                                    <label class="form-label">GST Document (PDF) <span class="text-danger">*</span></label>
+                                    <input type="file" name="new_gst_document" id="newGstDocument" class="form-control" accept=".pdf">
+                                    <small class="text-muted">Upload PDF file (max 10MB)</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {{-- NIXI Location --}}
+                    <div class="card mb-4">
+                        <div class="card-header bg-primary text-white">
+                            <h5 class="mb-0">NIXI Location</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="row g-3">
+                                <div class="col-md-12">
+                                    <label class="form-label">Select Location <span class="text-danger">*</span></label>
+                                    <select name="location_id" id="locationSelect" class="form-select" required>
+                                        <option value="">Select Location</option>
+                                        @foreach($locations as $location)
+                                            <option value="{{ $location->id }}"
+                                                data-node-type="{{ $location->node_type }}"
+                                                data-state="{{ $location->state }}"
+                                                {{ old('location_id') == $location->id ? 'selected' : '' }}>
+                                                {{ $location->name }} ({{ ucfirst($location->node_type) }} - {{ $location->state }})
+                                            </option>
+                                        @endforeach
+                                    </select>
+                                    @if($gstState)
+                                        <div class="form-check mt-2">
+                                            <input class="form-check-input" type="checkbox" id="filterByGstState" checked data-gst-state="{{ $gstState }}">
+                                            <label class="form-check-label small text-muted" for="filterByGstState">
+                                                Show locations in GST state ({{ $gstState }})
+                                            </label>
+                                        </div>
+                                    @endif
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {{-- Port Capacity & Billing Plan --}}
+                    <div class="card mb-4">
+                        <div class="card-header bg-primary text-white">
+                            <h5 class="mb-0">Port Capacity & Billing Plan</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="row g-3">
+                                <div class="col-md-6">
+                                    <label class="form-label">Port Capacity <span class="text-danger">*</span></label>
+                                    <select name="port_capacity" id="portCapacitySelect" class="form-select" required>
+                                        <option value="">Select capacity</option>
+                                        @foreach($portPricings as $nodeType => $entries)
+                                            <optgroup label="{{ ucfirst($nodeType) }} nodes">
+                                                @foreach($entries as $pricing)
+                                                    <option value="{{ $pricing->port_capacity }}" 
+                                                        data-node-type="{{ $nodeType }}"
+                                                        data-arc="{{ $pricing->price_arc }}"
+                                                        data-mrc="{{ $pricing->price_mrc }}"
+                                                        data-quarterly="{{ $pricing->price_quarterly }}"
+                                                        {{ old('port_capacity') == $pricing->port_capacity ? 'selected' : '' }}>
+                                                        {{ $pricing->port_capacity }}
+                                                    </option>
+                                                @endforeach
+                                            </optgroup>
+                                        @endforeach
+                                    </select>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">Billing Plan <span class="text-danger">*</span></label>
+                                    <div class="d-flex gap-3">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="radio" name="billing_plan" id="planArc" value="arc" 
+                                                {{ old('billing_plan') == 'arc' ? 'checked' : '' }} required>
+                                            <label class="form-check-label" for="planArc">Annual (ARC)</label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="radio" name="billing_plan" id="planMrc" value="mrc"
+                                                {{ old('billing_plan') == 'mrc' ? 'checked' : '' }} required>
+                                            <label class="form-check-label" for="planMrc">Monthly (MRC)</label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="radio" name="billing_plan" id="planQuarterly" value="quarterly"
+                                                {{ old('billing_plan') == 'quarterly' ? 'checked' : '' }} required>
+                                            <label class="form-check-label" for="planQuarterly">Quarterly</label>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            {{-- Payment Summary --}}
+                            <div id="paymentSummary" class="mt-3" style="display: none;">
+                                <div class="alert alert-info">
+                                    <h6 class="mb-2">Payment Summary</h6>
+                                    <p class="mb-1"><strong>Application Fee:</strong> ₹<span id="applicationFeeDisplay">0.00</span></p>
+                                    <p class="mb-1"><strong>GST (<span id="gstPercentageDisplay">{{ $applicationPricing->gst_percentage ?? 18 }}</span>%):</strong> ₹<span id="gstAmountDisplay">0.00</span></p>
+                                    <p class="mb-0"><strong>Total Amount:</strong> ₹<span id="totalAmountDisplay">0.00</span></p>
+                                    <p class="mb-0 mt-2 small"><strong>Billing Frequency:</strong> <span id="billingFrequencyDisplay">—</span></p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {{-- Number of Prefixes --}}
+                    <div class="card mb-4">
+                        <div class="card-header bg-primary text-white">
+                            <h5 class="mb-0">IP Prefix Information</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="row g-3">
+                                <div class="col-md-12">
+                                    <label class="form-label">Number of IP Prefixes <span class="text-danger">*</span></label>
+                                    <input type="number" name="ip_prefix_count" id="ipPrefixCount" class="form-control" 
+                                        value="{{ old('ip_prefix_count') }}" min="1" required>
                                 </div>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                {{-- Number of Prefixes --}}
-                <div class="card mb-4">
-                    <div class="card-header bg-primary text-white">
-                        <h5 class="mb-0">IP Prefix Information</h5>
-                    </div>
-                    <div class="card-body">
-                        <div class="row g-3">
-                            <div class="col-md-12">
-                                <label class="form-label">Number of IP Prefixes <span class="text-danger">*</span></label>
-                                <input type="number" name="ip_prefix_count" id="ipPrefixCount" class="form-control" 
-                                    value="{{ old('ip_prefix_count') }}" min="1" required>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                {{-- GSTIN for Billing --}}
-                <div class="card mb-4">
-                    <div class="card-header bg-primary text-white">
-                        <h5 class="mb-0">GSTIN (For Billing)</h5>
-                    </div>
-                    <div class="card-body">
-                        <div class="row g-3">
-                            <div class="col-md-12">
-                                <label class="form-label">GSTIN <span class="text-danger">*</span></label>
-                                <div class="input-group">
-                                    <input type="text" name="gstin" id="gstin" class="form-control" 
-                                        value="{{ old('gstin') }}" 
-                                        placeholder="15 character GSTIN" maxlength="15" required>
-                                    <button type="button" class="btn btn-outline-primary" id="verifyGstinBtn">Verify</button>
+                {{-- Step 2: Payment --}}
+                <div class="form-step d-none" data-step="2">
+                    <div class="row g-4">
+                        <div class="col-lg-7">
+                            <div class="card border">
+                                <div class="card-header bg-light">
+                                    <h5 class="mb-0">Application Summary</h5>
                                 </div>
-                                <div id="gstinVerifyStatus" class="mt-2"></div>
-                                <input type="hidden" name="gstin_verified" id="gstinVerified" value="0">
-                                <input type="hidden" name="gstin_verification_id" id="gstinVerificationId" value="">
+                                <div class="card-body">
+                                    <dl class="row mb-0">
+                                        <dt class="col-sm-4">Representative Name</dt>
+                                        <dd class="col-sm-8" id="summaryRepresentativeName">—</dd>
+                                        <dt class="col-sm-4">PAN</dt>
+                                        <dd class="col-sm-8" id="summaryPan">—</dd>
+                                        <dt class="col-sm-4">Email</dt>
+                                        <dd class="col-sm-8" id="summaryEmail">—</dd>
+                                        <dt class="col-sm-4">Mobile</dt>
+                                        <dd class="col-sm-8" id="summaryMobile">—</dd>
+                                        <dt class="col-sm-4">GSTIN</dt>
+                                        <dd class="col-sm-8" id="summaryGstin">—</dd>
+                                        <dt class="col-sm-4">NIXI Location</dt>
+                                        <dd class="col-sm-8" id="summaryLocation">—</dd>
+                                        <dt class="col-sm-4">Port Capacity</dt>
+                                        <dd class="col-sm-8" id="summaryCapacity">—</dd>
+                                        <dt class="col-sm-4">Billing Plan</dt>
+                                        <dd class="col-sm-8" id="summaryPlan">—</dd>
+                                        <dt class="col-sm-4">IP Prefixes</dt>
+                                        <dd class="col-sm-8" id="summaryPrefixes">—</dd>
+                                    </dl>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-lg-5">
+                            <div class="card border h-100">
+                                <div class="card-header bg-light">
+                                    <h5 class="mb-0">Payment Details</h5>
+                                </div>
+                                <div class="card-body">
+                                    <div class="alert alert-info mb-0" id="pricingInfo">
+                                        <p class="mb-1"><strong>Application Fee:</strong> ₹<span id="summaryApplicationFee">{{ number_format($applicationPricing->application_fee ?? 1000, 2) }}</span></p>
+                                        <p class="mb-1"><strong>GST (<span id="summaryGstPercentage">{{ $applicationPricing->gst_percentage ?? 18 }}</span>%):</strong> ₹<span id="summaryGstAmount">{{ number_format((($applicationPricing->application_fee ?? 1000) * ($applicationPricing->gst_percentage ?? 18)) / 100, 2) }}</span></p>
+                                        <p class="mb-1"><strong>Total Amount:</strong> ₹<span id="summaryTotalAmount">{{ number_format($applicationPricing->total_amount ?? 1180, 2) }}</span></p>
+                                        <p class="mb-0 small mt-2">You will be redirected to PayU payment gateway to complete the payment.</p>
+                                    </div>
+                                    <button type="submit" class="btn btn-success w-100 mt-3" id="submitAndPayBtn">
+                                        <i class="fas fa-credit-card"></i> Proceed to Payment
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                {{-- Documents --}}
-                <div class="card mb-4">
-                    <div class="card-header bg-primary text-white">
-                        <h5 class="mb-0">Documents</h5>
+                <div class="d-flex justify-content-between mt-4">
+                    <button type="button" class="btn btn-outline-secondary" id="prevStepBtn" disabled>Previous</button>
+                    <div class="d-flex gap-2">
+                        <button type="button" class="btn btn-primary" id="nextStepBtn">Next</button>
                     </div>
-                    <div class="card-body">
-                        <div class="row g-3">
-                            <div class="col-md-12" id="newGstDocGroup">
-                                <label class="form-label">New GST Document (required when GSTIN changes)</label>
-                                <input type="file" name="new_gst_document" id="newGstDocument" class="form-control" accept=".pdf">
-                                <small class="text-muted">Upload PDF file (max 10MB)</small>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="d-flex justify-content-end gap-2 mt-4">
-                    <a href="{{ route('user.applications.index') }}" class="btn btn-secondary">Cancel</a>
-                    <button type="submit" class="btn btn-primary" id="submitBtn">Submit Application</button>
                 </div>
             </form>
         </div>
     </div>
 </div>
+
+@push('styles')
+<style>
+.step-indicator {
+    text-align: center;
+    padding: 10px;
+    background: #f8f9fa;
+    border-radius: 8px;
+    font-weight: 500;
+    color: #6c757d;
+}
+.step-indicator.active {
+    background: #0d6efd;
+    color: white;
+}
+.form-step {
+    display: block;
+}
+.form-step.d-none {
+    display: none !important;
+}
+</style>
+@endpush
 
 @push('scripts')
 <script>
@@ -224,27 +337,185 @@ document.addEventListener('DOMContentLoaded', function() {
     let panRequestId = null;
     let gstinVerificationId = null;
     const previousGstin = document.getElementById('previousGstin')?.value?.toUpperCase() || '';
+    const kycGstin = document.getElementById('kycGstin')?.value?.toUpperCase() || '';
     const gstinInput = document.getElementById('gstin');
-    const newGstDocGroup = document.getElementById('newGstDocGroup');
+    const documentsSection = document.getElementById('documentsSection');
     const newGstDocument = document.getElementById('newGstDocument');
+    let currentStep = 1;
+    const steps = document.querySelectorAll('.form-step');
+    const indicators = document.querySelectorAll('.step-indicator');
+    const prevBtn = document.getElementById('prevStepBtn');
+    const nextBtn = document.getElementById('nextStepBtn');
+    const form = document.getElementById('newIxApplicationForm');
+    const gstState = '{{ $gstState ?? '' }}';
 
+    // Step navigation
+    function showStep(stepNumber) {
+        currentStep = stepNumber;
+        steps.forEach(step => {
+            if (Number(step.dataset.step) === currentStep) {
+                step.classList.remove('d-none');
+            } else {
+                step.classList.add('d-none');
+            }
+        });
+        indicators.forEach(indicator => {
+            if (Number(indicator.dataset.step) === currentStep) {
+                indicator.classList.add('active');
+            } else {
+                indicator.classList.remove('active');
+            }
+        });
+        prevBtn.disabled = currentStep === 1;
+        nextBtn.style.display = currentStep >= steps.length ? 'none' : 'block';
+        
+        if (currentStep === 2) {
+            updateSummary();
+        }
+    }
+
+    prevBtn.addEventListener('click', () => {
+        if (currentStep > 1) {
+            showStep(currentStep - 1);
+        }
+    });
+
+    nextBtn.addEventListener('click', () => {
+        if (validateStep1()) {
+            showStep(2);
+        }
+    });
+
+    function validateStep1() {
+        if (document.getElementById('panVerified').value !== '1') {
+            alert('Please verify PAN before proceeding.');
+            return false;
+        }
+        if (document.getElementById('emailVerified').value !== '1') {
+            alert('Please verify email before proceeding.');
+            return false;
+        }
+        if (document.getElementById('mobileVerified').value !== '1') {
+            alert('Please verify mobile number before proceeding.');
+            return false;
+        }
+        if (document.getElementById('gstinVerified').value !== '1') {
+            alert('Please verify GSTIN before proceeding.');
+            return false;
+        }
+        if (documentsSection.style.display !== 'none' && !newGstDocument.files.length) {
+            alert('Please upload GST document.');
+            return false;
+        }
+        return true;
+    }
+
+    function updateSummary() {
+        document.getElementById('summaryRepresentativeName').textContent = document.getElementById('representativeName').value || '—';
+        document.getElementById('summaryPan').textContent = document.getElementById('representativePan').value || '—';
+        document.getElementById('summaryEmail').textContent = document.getElementById('representativeEmail').value || '—';
+        document.getElementById('summaryMobile').textContent = document.getElementById('representativeMobile').value || '—';
+        document.getElementById('summaryGstin').textContent = document.getElementById('gstin').value || '—';
+        
+        const locationSelect = document.getElementById('locationSelect');
+        const selectedLocation = locationSelect.options[locationSelect.selectedIndex];
+        document.getElementById('summaryLocation').textContent = selectedLocation.text || '—';
+        
+        document.getElementById('summaryCapacity').textContent = document.getElementById('portCapacitySelect').value || '—';
+        
+        const billingPlan = document.querySelector('input[name="billing_plan"]:checked');
+        document.getElementById('summaryPlan').textContent = billingPlan ? billingPlan.nextElementSibling.textContent : '—';
+        
+        document.getElementById('summaryPrefixes').textContent = document.getElementById('ipPrefixCount').value || '—';
+    }
+
+    // Location filtering by GST state
+    if (gstState) {
+        const filterCheckbox = document.getElementById('filterByGstState');
+        const locationSelect = document.getElementById('locationSelect');
+        
+        function filterLocations() {
+            const showFiltered = filterCheckbox.checked;
+            Array.from(locationSelect.options).forEach(option => {
+                if (option.value === '') return;
+                const optionState = option.dataset.state;
+                if (showFiltered && optionState !== gstState) {
+                    option.style.display = 'none';
+                } else {
+                    option.style.display = 'block';
+                }
+            });
+        }
+        
+        filterCheckbox.addEventListener('change', filterLocations);
+        filterLocations();
+    }
+
+    // Payment summary calculation
+    const portCapacitySelect = document.getElementById('portCapacitySelect');
+    const billingPlanRadios = document.querySelectorAll('input[name="billing_plan"]');
+    const paymentSummary = document.getElementById('paymentSummary');
+    const applicationFee = {{ $applicationPricing->application_fee ?? 1000 }};
+    const gstPercentage = {{ $applicationPricing->gst_percentage ?? 18 }};
+
+    function updatePaymentSummary() {
+        const selectedOption = portCapacitySelect.options[portCapacitySelect.selectedIndex];
+        const billingPlan = document.querySelector('input[name="billing_plan"]:checked')?.value;
+        
+        if (!selectedOption.value || !billingPlan) {
+            paymentSummary.style.display = 'none';
+            return;
+        }
+
+        let portFee = 0;
+        if (billingPlan === 'arc') {
+            portFee = parseFloat(selectedOption.dataset.arc || 0);
+        } else if (billingPlan === 'mrc') {
+            portFee = parseFloat(selectedOption.dataset.mrc || 0);
+        } else if (billingPlan === 'quarterly') {
+            portFee = parseFloat(selectedOption.dataset.quarterly || 0);
+        }
+
+        const totalFee = applicationFee + portFee;
+        const gstAmount = (totalFee * gstPercentage) / 100;
+        const totalAmount = totalFee + gstAmount;
+
+        document.getElementById('applicationFeeDisplay').textContent = totalFee.toFixed(2);
+        document.getElementById('gstAmountDisplay').textContent = gstAmount.toFixed(2);
+        document.getElementById('totalAmountDisplay').textContent = totalAmount.toFixed(2);
+        
+        const frequencyMap = {
+            'arc': 'Annually',
+            'mrc': 'Monthly',
+            'quarterly': 'Quarterly'
+        };
+        document.getElementById('billingFrequencyDisplay').textContent = frequencyMap[billingPlan] || '—';
+        
+        paymentSummary.style.display = 'block';
+    }
+
+    portCapacitySelect.addEventListener('change', updatePaymentSummary);
+    billingPlanRadios.forEach(radio => {
+        radio.addEventListener('change', updatePaymentSummary);
+    });
+
+    // GST document requirement
     function toggleGstDocRequirement() {
-        if (!gstinInput || !newGstDocGroup) {
+        if (!gstinInput || !documentsSection) {
             return;
         }
         const currentGstin = gstinInput.value.trim().toUpperCase();
-        const needsDoc = !!previousGstin && !!currentGstin && currentGstin !== previousGstin;
-        newGstDocGroup.style.display = needsDoc ? 'block' : 'none';
+        const needsDoc = kycGstin && currentGstin && currentGstin !== kycGstin;
+        
         if (needsDoc) {
-            newGstDocument?.setAttribute('required', 'required');
+            documentsSection.style.display = 'block';
+            newGstDocument.setAttribute('required', 'required');
         } else {
-            newGstDocument?.removeAttribute('required');
-            if (newGstDocument) {
-                newGstDocument.value = '';
-            }
+            documentsSection.style.display = 'none';
+            newGstDocument.removeAttribute('required');
+            newGstDocument.value = '';
         }
     }
-    toggleGstDocRequirement();
     gstinInput?.addEventListener('input', toggleGstDocRequirement);
 
     // PAN Verification
@@ -338,86 +609,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // Mobile OTP (reuse registration OTP flow with master OTP support)
-    document.getElementById('sendMobileOtpBtn').addEventListener('click', function() {
-        const mobile = document.getElementById('representativeMobile').value.trim();
-        if (!mobile || mobile.length !== 10) {
-            alert('Please enter a valid 10-digit mobile number.');
-            return;
-        }
-
-        this.disabled = true;
-        this.textContent = 'Sending...';
-
-        fetch('{{ route("register.send.mobile.otp") }}', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRF-TOKEN': csrfToken
-            },
-            body: JSON.stringify({ mobile: mobile })
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                document.getElementById('mobileOtpSection').classList.remove('d-none');
-                this.textContent = 'OTP Sent';
-            } else {
-                alert(data.message);
-                this.disabled = false;
-                this.textContent = 'Send OTP';
-            }
-        })
-        .catch(error => {
-            console.error('Error:', error);
-            alert('Error sending OTP');
-            this.disabled = false;
-            this.textContent = 'Send OTP';
-        });
-    });
-
-    document.getElementById('verifyMobileOtpBtn').addEventListener('click', function() {
-        const mobile = document.getElementById('representativeMobile').value.trim();
-        const otp = document.getElementById('mobileOtp').value.trim();
-
-        if (!otp || otp.length !== 6) {
-            alert('Please enter a valid 6-digit OTP.');
-            return;
-        }
-
-        this.disabled = true;
-        this.textContent = 'Verifying...';
-
-        fetch('{{ route("register.verify.mobile.otp") }}', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRF-TOKEN': csrfToken
-            },
-            body: JSON.stringify({ mobile: mobile, otp: otp, master_otp: otp })
-        })
-        .then(response => response.json())
-        .then(data => {
-            const statusEl = document.getElementById('mobileVerifyStatus');
-            if (data.success) {
-                statusEl.innerHTML = '<span class="badge bg-success">' + data.message + '</span>';
-                document.getElementById('mobileVerified').value = '1';
-                document.getElementById('mobileOtpSection').classList.add('d-none');
-            } else {
-                statusEl.innerHTML = '<span class="badge bg-danger">' + data.message + '</span>';
-                this.disabled = false;
-                this.textContent = 'Verify OTP';
-            }
-        })
-        .catch(error => {
-            console.error('Error:', error);
-            alert('Error verifying OTP');
-            this.disabled = false;
-            this.textContent = 'Verify OTP';
-        });
-    });
-
-    // Email OTP (reuse registration OTP flow with master OTP support)
+    // Email OTP
     document.getElementById('sendEmailOtpBtn').addEventListener('click', function() {
         const email = document.getElementById('representativeEmail').value.trim();
         if (!email) {
@@ -428,7 +620,7 @@ document.addEventListener('DOMContentLoaded', function() {
         this.disabled = true;
         this.textContent = 'Sending...';
 
-        fetch('{{ route("register.send.email.otp") }}', {
+        fetch('{{ route("user.applications.ix.send-email-otp") }}', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -467,13 +659,13 @@ document.addEventListener('DOMContentLoaded', function() {
         this.disabled = true;
         this.textContent = 'Verifying...';
 
-        fetch('{{ route("register.verify.email.otp") }}', {
+        fetch('{{ route("user.applications.ix.verify-email-otp") }}', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'X-CSRF-TOKEN': csrfToken
             },
-            body: JSON.stringify({ email: email, otp: otp, master_otp: otp })
+            body: JSON.stringify({ email: email, otp: otp })
         })
         .then(response => response.json())
         .then(data => {
@@ -482,6 +674,88 @@ document.addEventListener('DOMContentLoaded', function() {
                 statusEl.innerHTML = '<span class="badge bg-success">' + data.message + '</span>';
                 document.getElementById('emailVerified').value = '1';
                 document.getElementById('emailOtpSection').classList.add('d-none');
+            } else {
+                statusEl.innerHTML = '<span class="badge bg-danger">' + data.message + '</span>';
+                this.disabled = false;
+                this.textContent = 'Verify OTP';
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Error verifying OTP');
+            this.disabled = false;
+            this.textContent = 'Verify OTP';
+        });
+    });
+
+    // Mobile OTP (show OTP on page)
+    document.getElementById('sendMobileOtpBtn').addEventListener('click', function() {
+        const mobile = document.getElementById('representativeMobile').value.trim();
+        if (!mobile || mobile.length !== 10) {
+            alert('Please enter a valid 10-digit mobile number.');
+            return;
+        }
+
+        this.disabled = true;
+        this.textContent = 'Sending...';
+
+        fetch('{{ route("user.applications.ix.send-mobile-otp") }}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': csrfToken
+            },
+            body: JSON.stringify({ mobile: mobile })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                document.getElementById('mobileOtpSection').classList.remove('d-none');
+                if (data.otp) {
+                    document.getElementById('mobileOtpDisplay').textContent = 'OTP: ' + data.otp;
+                }
+                this.textContent = 'OTP Sent';
+            } else {
+                alert(data.message);
+                this.disabled = false;
+                this.textContent = 'Send OTP';
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Error sending OTP');
+            this.disabled = false;
+            this.textContent = 'Send OTP';
+        });
+    });
+
+    document.getElementById('verifyMobileOtpBtn').addEventListener('click', function() {
+        const mobile = document.getElementById('representativeMobile').value.trim();
+        const otp = document.getElementById('mobileOtp').value.trim();
+
+        if (!otp || otp.length !== 6) {
+            alert('Please enter a valid 6-digit OTP.');
+            return;
+        }
+
+        this.disabled = true;
+        this.textContent = 'Verifying...';
+
+        fetch('{{ route("user.applications.ix.verify-mobile-otp") }}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': csrfToken
+            },
+            body: JSON.stringify({ mobile: mobile, otp: otp })
+        })
+        .then(response => response.json())
+        .then(data => {
+            const statusEl = document.getElementById('mobileVerifyStatus');
+            if (data.success) {
+                statusEl.innerHTML = '<span class="badge bg-success">' + data.message + '</span>';
+                document.getElementById('mobileVerified').value = '1';
+                document.getElementById('mobileOtpSection').classList.add('d-none');
             } else {
                 statusEl.innerHTML = '<span class="badge bg-danger">' + data.message + '</span>';
                 this.disabled = false;
@@ -562,6 +836,16 @@ document.addEventListener('DOMContentLoaded', function() {
                 document.getElementById('gstinVerified').value = '1';
                 btn.disabled = false;
                 btn.textContent = 'Verified';
+                
+                // Check if GST matches KYC GST
+                const currentGstin = document.getElementById('gstin').value.trim().toUpperCase();
+                if (kycGstin && currentGstin !== kycGstin) {
+                    documentsSection.style.display = 'block';
+                    newGstDocument.setAttribute('required', 'required');
+                } else {
+                    documentsSection.style.display = 'none';
+                    newGstDocument.removeAttribute('required');
+                }
             } else if (data.status === 'in_progress' || data.status === 'pending') {
                 setTimeout(checkGstinStatus, 2000);
             } else {
@@ -576,26 +860,20 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // Form submission validation
-    document.getElementById('newIxApplicationForm').addEventListener('submit', function(e) {
-        if (document.getElementById('panVerified').value !== '1') {
+    // Form submission
+    form.addEventListener('submit', function(e) {
+        if (currentStep === 1) {
             e.preventDefault();
-            alert('Please verify PAN before submitting.');
+            if (validateStep1()) {
+                showStep(2);
+            }
             return false;
         }
-        if (document.getElementById('mobileVerified').value !== '1') {
+        
+        // Step 2 submission - proceed to payment
+        if (!validateStep1()) {
             e.preventDefault();
-            alert('Please verify mobile number before submitting.');
-            return false;
-        }
-        if (document.getElementById('emailVerified').value !== '1') {
-            e.preventDefault();
-            alert('Please verify email before submitting.');
-            return false;
-        }
-        if (document.getElementById('gstinVerified').value !== '1') {
-            e.preventDefault();
-            alert('Please verify GSTIN before submitting.');
+            alert('Please complete all required fields and verifications.');
             return false;
         }
     });
@@ -603,4 +881,3 @@ document.addEventListener('DOMContentLoaded', function() {
 </script>
 @endpush
 @endsection
-

@@ -240,11 +240,32 @@ class IxApplicationController extends Controller
             ->get()
             ->groupBy('node_type');
 
+        // Get KYC GST information
+        $kycProfile = \App\Models\UserKycProfile::where('user_id', $userId)
+            ->where('status', 'completed')
+            ->first();
+        
+        $kycGstin = $kycProfile?->gstin;
+        $gstState = null;
+        
+        if ($kycProfile && $kycProfile->gst_verification_id) {
+            $gstVerification = \App\Models\GstVerification::find($kycProfile->gst_verification_id);
+            if ($gstVerification && $gstVerification->state) {
+                $gstState = $gstVerification->state;
+            }
+        }
+
+        // Get application pricing
+        $applicationPricing = \App\Models\IxApplicationPricing::getActive();
+
         return view('user.applications.ix.create-new', [
             'user' => $user,
             'previousData' => $previousData,
             'locations' => $locations,
             'portPricings' => $portPricings,
+            'kycGstin' => $kycGstin,
+            'gstState' => $gstState,
+            'applicationPricing' => $applicationPricing,
         ]);
     }
 
@@ -366,6 +387,21 @@ class IxApplicationController extends Controller
         // Check if this is a simplified form submission
         $isSimplifiedForm = $request->has('representative_name') || $request->has('representative_pan');
 
+        // Get previous application data for simplified form
+        $previousApplication = null;
+        $previousApplicationData = null;
+        if ($isSimplifiedForm) {
+            $previousApplication = Application::where('user_id', $userId)
+                ->where('application_type', 'IX')
+                ->whereIn('status', ['submitted', 'approved', 'payment_verified', 'processor_forwarded_legal', 'legal_forwarded_head', 'head_forwarded_ceo', 'ceo_approved', 'port_assigned', 'ip_assigned', 'invoice_pending'])
+                ->latest()
+                ->first();
+            
+            if ($previousApplication && $previousApplication->application_data) {
+                $previousApplicationData = $previousApplication->application_data;
+            }
+        }
+
         // Handle simplified form - representative person details
         if ($isSimplifiedForm) {
             $applicationData['representative'] = [
@@ -385,6 +421,43 @@ class IxApplicationController extends Controller
                 $applicationData['gstin_verified'] = $request->input('gstin_verified') === '1';
                 if ($request->has('gstin_verification_id')) {
                     $applicationData['gstin_verification_id'] = $request->input('gstin_verification_id');
+                }
+            }
+
+            // Copy other data from previous application if available
+            if ($previousApplicationData) {
+                // Copy member type
+                if (! isset($applicationData['member_type']) && isset($previousApplicationData['member_type'])) {
+                    $applicationData['member_type'] = $previousApplicationData['member_type'];
+                }
+
+                // Copy peering details
+                if (! isset($applicationData['peering']) && isset($previousApplicationData['peering'])) {
+                    $applicationData['peering'] = $previousApplicationData['peering'];
+                }
+
+                // Copy router details
+                if (! isset($applicationData['router_details']) && isset($previousApplicationData['router_details'])) {
+                    $applicationData['router_details'] = $previousApplicationData['router_details'];
+                }
+
+                // Copy documents from previous application
+                if (isset($previousApplicationData['documents'])) {
+                    foreach ($previousApplicationData['documents'] as $docKey => $docPath) {
+                        // Don't copy GST document if GST has changed
+                        if ($docKey === 'gstin_document_file' || $docKey === 'new_gst_document') {
+                            $previousGstin = strtoupper((string) ($previousApplicationData['gstin'] ?? ''));
+                            $currentGstin = strtoupper((string) ($applicationData['gstin'] ?? ''));
+                            if ($previousGstin && $currentGstin && $previousGstin !== $currentGstin) {
+                                // GST changed, don't copy GST document
+                                continue;
+                            }
+                        }
+                        // Copy all other documents
+                        if (! isset($storedDocuments[$docKey])) {
+                            $storedDocuments[$docKey] = $docPath;
+                        }
+                    }
                 }
             }
         }
@@ -459,7 +532,10 @@ class IxApplicationController extends Controller
             ];
         }
 
-        $applicationData['member_type'] = $memberType;
+        // Set member type if not already set from previous application
+        if (! isset($applicationData['member_type']) && $memberType) {
+            $applicationData['member_type'] = $memberType;
+        }
         $applicationData['documents'] = $storedDocuments;
 
         // Get application pricing from database
@@ -2219,7 +2295,10 @@ class IxApplicationController extends Controller
             ];
         }
 
-        $applicationData['member_type'] = $memberType;
+        // Set member type if not already set from previous application
+        if (! isset($applicationData['member_type']) && $memberType) {
+            $applicationData['member_type'] = $memberType;
+        }
         $applicationData['documents'] = $storedDocuments;
 
         // Get application pricing from database
@@ -2414,9 +2493,13 @@ class IxApplicationController extends Controller
             session([$sessionKey => $otp]);
             session()->save();
 
-            // Send email OTP (you can use Laravel Mail here)
-            // For now, we'll just store it in session
-            Log::info("IX Email OTP sent to: {$email}");
+            // Send email OTP using Laravel Mail
+            try {
+                \Illuminate\Support\Facades\Mail::to($email)->send(new \App\Mail\RegistrationOtpMail($otp));
+                Log::info("IX Email OTP sent to: {$email}");
+            } catch (Exception $e) {
+                Log::error('Failed to send email OTP: '.$e->getMessage());
+            }
 
             return response()->json([
                 'success' => true,
@@ -2499,11 +2582,13 @@ class IxApplicationController extends Controller
             session()->save();
 
             // Send SMS OTP (you can integrate SMS service here)
+            // For now, we show OTP on page since we don't have SMS panel
             Log::info("IX Mobile OTP sent to: {$mobile}");
 
             return response()->json([
                 'success' => true,
                 'message' => 'OTP sent to mobile successfully',
+                'otp' => config('app.debug') ? $otp : $otp, // Always show OTP on page since no SMS panel
             ]);
         } catch (\Illuminate\Validation\ValidationException $e) {
             return response()->json([

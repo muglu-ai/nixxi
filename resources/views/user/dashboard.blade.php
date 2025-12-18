@@ -316,6 +316,21 @@
                 <div class="card-body p-4">
                     <h5 class="mb-3" style="color: #2c3e50; font-weight: 600;">Quick Actions</h5>
                     <div class="d-flex flex-wrap gap-3">
+                        @if(!isset($hasIxApplication) || !$hasIxApplication)
+                            <a href="{{ route('user.applications.ix.create') }}" class="btn btn-primary px-4 py-2" style="border-radius: 10px; font-weight: 500;">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" class="me-2" viewBox="0 0 16 16">
+                                    <path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4z"/>
+                                </svg>
+                                New IX Application
+                            </a>
+                        @else
+                            <a href="{{ route('user.applications.ix.create-new') }}" class="btn btn-primary px-4 py-2" style="border-radius: 10px; font-weight: 500;">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" class="me-2" viewBox="0 0 16 16">
+                                    <path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4z"/>
+                                </svg>
+                                New IX Application
+                            </a>
+                        @endif
                         <a href="{{ route('user.applications.index') }}" class="btn btn-outline-primary px-4 py-2" style="border-radius: 10px; font-weight: 500;">
                             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" class="me-2" viewBox="0 0 16 16">
                                 <path d="M14 14V4.5L9.5 0H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2zM9.5 3A1.5 1.5 0 0 0 11 4.5h2V14a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1h5.5v2z"/>
