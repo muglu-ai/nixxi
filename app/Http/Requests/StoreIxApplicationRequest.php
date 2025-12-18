@@ -14,6 +14,27 @@ class StoreIxApplicationRequest extends FormRequest
         if ($this->has('previous_gstin') && trim((string) $this->input('previous_gstin')) === '') {
             $this->merge(['previous_gstin' => null]);
         }
+        
+        // Normalize PAN: uppercase, trim, remove spaces and special characters
+        if ($this->has('representative_pan')) {
+            $pan = strtoupper(trim((string) $this->input('representative_pan')));
+            $pan = preg_replace('/[^A-Z0-9]/', '', $pan); // Remove all non-alphanumeric
+            $this->merge(['representative_pan' => $pan]);
+        }
+        
+        // Normalize GSTIN: uppercase, trim, remove spaces and special characters
+        if ($this->has('gstin')) {
+            $gstin = strtoupper(trim((string) $this->input('gstin')));
+            $gstin = preg_replace('/[^A-Z0-9]/', '', $gstin); // Remove all non-alphanumeric
+            $this->merge(['gstin' => $gstin]);
+        }
+        
+        // Normalize mobile: remove spaces and special characters
+        if ($this->has('representative_mobile')) {
+            $mobile = trim((string) $this->input('representative_mobile'));
+            $mobile = preg_replace('/[^0-9]/', '', $mobile); // Keep only digits
+            $this->merge(['representative_mobile' => $mobile]);
+        }
     }
 
     /**
@@ -216,6 +237,19 @@ class StoreIxApplicationRequest extends FormRequest
             'authorized_rep_document_file.required' => 'Authorized representative document is required.',
             'declaration_confirmed.accepted' => 'You must accept the declaration before proceeding.',
         ];
+    }
+
+    /**
+     * Handle a failed validation attempt.
+     */
+    protected function failedValidation(Validator $validator): void
+    {
+        // If this is an AJAX request or expects JSON, return JSON response
+        if ($this->expectsJson() || $this->ajax() || $this->wantsJson()) {
+            throw new ValidationException($validator);
+        }
+
+        parent::failedValidation($validator);
     }
 
     /**

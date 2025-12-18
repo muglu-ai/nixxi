@@ -359,6 +359,21 @@ document.addEventListener('DOMContentLoaded', function() {
     const form = document.getElementById('newIxApplicationForm');
     const gstState = '{{ $gstState ?? '' }}';
 
+    // Auto-format PAN input (uppercase, remove spaces)
+    const panInput = document.getElementById('representativePan');
+    if (panInput) {
+        panInput.addEventListener('input', function() {
+            this.value = this.value.toUpperCase().replace(/\s+/g, '').replace(/[^A-Z0-9]/g, '');
+        });
+    }
+
+    // Auto-format GSTIN input (uppercase, remove spaces)
+    if (gstinInput) {
+        gstinInput.addEventListener('input', function() {
+            this.value = this.value.toUpperCase().replace(/\s+/g, '').replace(/[^A-Z0-9]/g, '');
+        });
+    }
+
     // Step navigation
     function showStep(stepNumber) {
         currentStep = stepNumber;
@@ -544,7 +559,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // PAN Verification
     document.getElementById('verifyPanBtn').addEventListener('click', function() {
-        const pan = document.getElementById('representativePan').value.trim().toUpperCase();
+        const panInput = document.getElementById('representativePan');
+        const pan = panInput.value.trim().toUpperCase().replace(/\s+/g, '');
+        panInput.value = pan; // Update input with normalized value
         const name = document.getElementById('representativeName').value.trim();
         const dob = document.getElementById('representativeDob').value;
 
@@ -851,7 +868,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // GSTIN Verification
     document.getElementById('verifyGstinBtn').addEventListener('click', function() {
-        const gstin = document.getElementById('gstin').value.trim().toUpperCase();
+        const gstinInput = document.getElementById('gstin');
+        const gstin = gstinInput.value.trim().toUpperCase().replace(/\s+/g, '');
+        gstinInput.value = gstin; // Update input with normalized value
 
         if (!gstin || gstin.length !== 15) {
             alert('Please enter a valid 15-character GSTIN.');
@@ -973,6 +992,12 @@ document.addEventListener('DOMContentLoaded', function() {
             return false;
         }
 
+        // Normalize PAN before submission (uppercase, trim, remove spaces)
+        const panInput = document.getElementById('representativePan');
+        if (panInput) {
+            panInput.value = panInput.value.trim().toUpperCase().replace(/\s+/g, '');
+        }
+
         const formData = new FormData(form);
         formData.append('is_draft', '0');
         formData.append('initiate_payment', '1');
@@ -986,30 +1011,49 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             });
 
-            if (response.ok) {
-                const data = await response.json();
-                if (data.success && data.payment_form) {
-                    // Create a form and submit to PayU
-                    const payuForm = document.createElement('form');
-                    payuForm.method = 'POST';
-                    payuForm.action = data.payment_url;
-                    
-                    Object.keys(data.payment_form).forEach(key => {
-                        const input = document.createElement('input');
-                        input.type = 'hidden';
-                        input.name = key;
-                        input.value = data.payment_form[key];
-                        payuForm.appendChild(input);
-                    });
-                    
-                    document.body.appendChild(payuForm);
-                    payuForm.submit();
-                } else {
-                    alert('Error initiating payment: ' + (data.message || 'Unknown error'));
-                }
+            // Check response status
+            const contentType = response.headers.get('content-type') || '';
+            let data;
+            
+            if (contentType.includes('application/json')) {
+                data = await response.json();
             } else {
-                const errorData = await response.json();
-                alert('Error submitting application: ' + (errorData.message || 'Please check all fields and try again.'));
+                // Server returned HTML (validation error page) - try to parse as JSON anyway
+                try {
+                    const text = await response.text();
+                    data = JSON.parse(text);
+                } catch (e) {
+                    // If parsing fails, show generic error
+                    alert('Error submitting application: Validation error. Please check all fields and ensure PAN format is correct (ABCDE1234F).');
+                    console.error('Response was not JSON:', await response.text());
+                    return;
+                }
+            }
+            
+            if (data.success && data.payment_form) {
+                // Create a form and submit to PayU
+                const payuForm = document.createElement('form');
+                payuForm.method = 'POST';
+                payuForm.action = data.payment_url;
+                
+                Object.keys(data.payment_form).forEach(key => {
+                    const input = document.createElement('input');
+                    input.type = 'hidden';
+                    input.name = key;
+                    input.value = data.payment_form[key];
+                    payuForm.appendChild(input);
+                });
+                
+                document.body.appendChild(payuForm);
+                payuForm.submit();
+            } else {
+                // Show validation errors if available
+                let errorMessage = data.message || 'Unknown error';
+                if (data.errors) {
+                    const errorList = Object.values(data.errors).flat().join(', ');
+                    errorMessage = errorList || errorMessage;
+                }
+                alert('Error submitting application: ' + errorMessage);
             }
         } catch (error) {
             alert('Error submitting application. Please try again.');

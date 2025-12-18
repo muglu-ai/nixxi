@@ -1103,119 +1103,120 @@ class IxApplicationController extends Controller
      */
     public function initiatePayment(StoreIxApplicationRequest $request): JsonResponse
     {
-        $userId = session('user_id');
-        $user = Registration::find($userId);
+        try {
+            $userId = session('user_id');
+            $user = Registration::find($userId);
 
-        if (! $user) {
-            return response()->json([
-                'success' => false,
-                'message' => 'User session expired. Please login again.',
-            ], 401);
-        }
+            if (! $user) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'User session expired. Please login again.',
+                ], 401);
+            }
 
-        // First, save the application
-        $validated = $request->validated();
-        $validated['is_draft'] = false;
-        $validated['is_preview'] = false;
+            // First, save the application
+            $validated = $request->validated();
+            $validated['is_draft'] = false;
+            $validated['is_preview'] = false;
 
-        $application = $this->saveApplicationData($validated, $user, $request);
+            $application = $this->saveApplicationData($validated, $user, $request);
 
-        if (! $application) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to save application.',
-            ], 500);
-        }
+            if (! $application) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Failed to save application.',
+                ], 500);
+            }
 
-        // Get active application pricing from database
-        $applicationPricing = IxApplicationPricing::getActive();
-        if (! $applicationPricing) {
-            // Fallback to default if no pricing is set
-            $amount = 1000.00;
-        } else {
-            $amount = (float) $applicationPricing->total_amount;
-        }
+            // Get active application pricing from database
+            $applicationPricing = IxApplicationPricing::getActive();
+            if (! $applicationPricing) {
+                // Fallback to default if no pricing is set
+                $amount = 1000.00;
+            } else {
+                $amount = (float) $applicationPricing->total_amount;
+            }
 
-        // Generate transaction ID
-        $transactionId = 'TXN'.time().rand(1000, 9999);
+            // Generate transaction ID
+            $transactionId = 'TXN'.time().rand(1000, 9999);
 
-        // Create payment transaction
-        $paymentTransaction = PaymentTransaction::create([
-            'user_id' => $userId,
-            'application_id' => $application->id,
-            'transaction_id' => $transactionId,
-            'payment_mode' => config('services.payu.mode', 'test'),
-            'payment_status' => 'pending',
-            'amount' => $amount,
-            'currency' => 'INR',
-            'product_info' => 'NIXI IX Application Fee',
-        ]);
+            // Create payment transaction
+            $paymentTransaction = PaymentTransaction::create([
+                'user_id' => $userId,
+                'application_id' => $application->id,
+                'transaction_id' => $transactionId,
+                'payment_mode' => config('services.payu.mode', 'test'),
+                'payment_status' => 'pending',
+                'amount' => $amount,
+                'currency' => 'INR',
+                'product_info' => 'NIXI IX Application Fee',
+            ]);
 
-        // Prepare payment data
-        $payuService = new PayuService;
-        $paymentData = $payuService->preparePaymentData([
-            'transaction_id' => $transactionId,
-            'amount' => $amount,
-            'product_info' => 'NIXI IX Application Fee',
-            'firstname' => $user->fullname,
-            'email' => $user->email,
-            'phone' => $user->mobile,
-            'success_url' => url(route('user.applications.ix.payment-success', [], false)),
-            'failure_url' => url(route('user.applications.ix.payment-failure', [], false)),
-            'udf1' => $application->application_id,
-            'udf2' => (string) $paymentTransaction->id,
-        ]);
+            // Prepare payment data
+            $payuService = new PayuService;
+            $paymentData = $payuService->preparePaymentData([
+                'transaction_id' => $transactionId,
+                'amount' => $amount,
+                'product_info' => 'NIXI IX Application Fee',
+                'firstname' => $user->fullname,
+                'email' => $user->email,
+                'phone' => $user->mobile,
+                'success_url' => url(route('user.applications.ix.payment-success', [], false)),
+                'failure_url' => url(route('user.applications.ix.payment-failure', [], false)),
+                'udf1' => $application->application_id,
+                'udf2' => (string) $paymentTransaction->id,
+            ]);
 
-        // Store payment details and user session data in cookies for callback
-        // Session gets cleared when PayU page opens, so we save essential data in cookies
-        $cookieData = [
-            'payment_transaction_id' => $paymentTransaction->id,
-            'transaction_id' => $transactionId,
-            'application_id' => $application->id,
-            'user_id' => $userId,
-            'amount' => $amount,
-        ];
+            // Store payment details and user session data in cookies for callback
+            // Session gets cleared when PayU page opens, so we save essential data in cookies
+            $cookieData = [
+                'payment_transaction_id' => $paymentTransaction->id,
+                'transaction_id' => $transactionId,
+                'application_id' => $application->id,
+                'user_id' => $userId,
+                'amount' => $amount,
+            ];
 
-        // Store user session data for login restoration after PayU redirect
-        $userSessionData = [
-            'user_id' => $userId,
-            'user_email' => $user->email,
-            'user_name' => $user->fullname,
-            'user_registration_id' => $user->registrationid,
-        ];
+            // Store user session data for login restoration after PayU redirect
+            $userSessionData = [
+                'user_id' => $userId,
+                'user_email' => $user->email,
+                'user_name' => $user->fullname,
+                'user_registration_id' => $user->registrationid,
+            ];
 
-        $response = response()->json([
-            'success' => true,
-            'payment_url' => $payuService->getPaymentUrl(),
-            'payment_form' => $paymentData,
-        ]);
+            $response = response()->json([
+                'success' => true,
+                'payment_url' => $payuService->getPaymentUrl(),
+                'payment_form' => $paymentData,
+            ]);
 
-        // Set cookies with payment details and user session (expires in 1 hour)
-        // Use cookie() helper with proper path and sameSite settings so cookies persist when form is submitted to PayU
-        $response->cookie(
-            'pending_payment_data',
-            json_encode($cookieData),
-            60, // minutes
-            '/', // path
-            null, // domain (null = current domain)
-            true, // secure (HTTPS only)
-            false, // httpOnly (false so JS can access if needed)
-            false, // raw
-            'lax' // sameSite
-        );
-        $response->cookie(
-            'user_session_data',
-            json_encode($userSessionData),
-            60,
-            '/',
-            null,
-            true,
-            false,
-            false,
-            'lax'
-        );
+            // Set cookies with payment details and user session (expires in 1 hour)
+            // Use cookie() helper with proper path and sameSite settings so cookies persist when form is submitted to PayU
+            $response->cookie(
+                'pending_payment_data',
+                json_encode($cookieData),
+                60, // minutes
+                '/', // path
+                null, // domain (null = current domain)
+                true, // secure (HTTPS only)
+                false, // httpOnly (false so JS can access if needed)
+                false, // raw
+                'lax' // sameSite
+            );
+            $response->cookie(
+                'user_session_data',
+                json_encode($userSessionData),
+                60,
+                '/',
+                null,
+                true,
+                false,
+                false,
+                'lax'
+            );
 
-        return $response;
+            return $response;
     }
 
     /**
