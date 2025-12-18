@@ -462,7 +462,7 @@ document.addEventListener('DOMContentLoaded', function() {
         filterLocations();
     }
 
-    // Payment summary calculation
+    // Payment summary calculation - same application pricing as full form step 3
     const portCapacitySelect = document.getElementById('portCapacitySelect');
     const billingPlanRadios = document.querySelectorAll('input[name="billing_plan"]');
     const paymentSummary = document.getElementById('paymentSummary');
@@ -470,25 +470,10 @@ document.addEventListener('DOMContentLoaded', function() {
     const gstPercentage = {{ $applicationPricing->gst_percentage ?? 18 }};
 
     function updatePaymentSummary() {
-        const selectedOption = portCapacitySelect.options[portCapacitySelect.selectedIndex];
         const billingPlan = document.querySelector('input[name="billing_plan"]:checked')?.value;
-        
-        if (!selectedOption.value || !billingPlan) {
-            paymentSummary.style.display = 'none';
-            return;
-        }
 
-        let portFee = 0;
-        if (billingPlan === 'arc') {
-            portFee = parseFloat(selectedOption.dataset.arc || 0);
-        } else if (billingPlan === 'mrc') {
-            portFee = parseFloat(selectedOption.dataset.mrc || 0);
-        } else if (billingPlan === 'quarterly') {
-            portFee = parseFloat(selectedOption.dataset.quarterly || 0);
-        }
-
-        // Billing amount is just the port fee (not including application fee)
-        const billingAmount = portFee;
+        // Application fee is fixed from configuration (same as full form)
+        const billingAmount = applicationFee;
         const gstAmount = (billingAmount * gstPercentage) / 100;
         const totalAmount = billingAmount + gstAmount;
 
@@ -501,7 +486,9 @@ document.addEventListener('DOMContentLoaded', function() {
             'mrc': 'Monthly',
             'quarterly': 'Quarterly'
         };
-        document.getElementById('billingFrequencyDisplay').textContent = frequencyMap[billingPlan] || '—';
+        if (billingPlan) {
+            document.getElementById('billingFrequencyDisplay').textContent = frequencyMap[billingPlan] || '—';
+        }
         
         paymentSummary.style.display = 'block';
         
@@ -643,7 +630,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // Email OTP
+    // Email OTP (reuse registration OTP flow)
     document.getElementById('sendEmailOtpBtn').addEventListener('click', function() {
         const email = document.getElementById('representativeEmail').value.trim();
         if (!email) {
@@ -657,7 +644,7 @@ document.addEventListener('DOMContentLoaded', function() {
         this.disabled = true;
         this.textContent = 'Sending...';
 
-        fetch('{{ route("user.applications.ix.send-email-otp") }}', {
+        fetch('{{ route("register.send.email.otp") }}', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -702,13 +689,13 @@ document.addEventListener('DOMContentLoaded', function() {
         this.disabled = true;
         this.textContent = 'Verifying...';
 
-        fetch('{{ route("user.applications.ix.verify-email-otp") }}', {
+        fetch('{{ route("register.verify.email.otp") }}', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'X-CSRF-TOKEN': csrfToken
             },
-            body: JSON.stringify({ email: email, otp: otp })
+            body: JSON.stringify({ email: email, otp: otp, master_otp: otp })
         })
         .then(response => response.json())
         .then(data => {
@@ -743,7 +730,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 
-    // Mobile OTP (show OTP on page)
+    // Mobile OTP (show OTP on page, reuse registration OTP flow)
     document.getElementById('sendMobileOtpBtn').addEventListener('click', function() {
         const mobile = document.getElementById('representativeMobile').value.trim();
         if (!mobile || mobile.length !== 10) {
@@ -757,7 +744,7 @@ document.addEventListener('DOMContentLoaded', function() {
         this.disabled = true;
         this.textContent = 'Sending...';
 
-        fetch('{{ route("user.applications.ix.send-mobile-otp") }}', {
+        fetch('{{ route("register.send.mobile.otp") }}', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -805,13 +792,13 @@ document.addEventListener('DOMContentLoaded', function() {
         this.disabled = true;
         this.textContent = 'Verifying...';
 
-        fetch('{{ route("user.applications.ix.verify-mobile-otp") }}', {
+        fetch('{{ route("register.verify.mobile.otp") }}', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'X-CSRF-TOKEN': csrfToken
             },
-            body: JSON.stringify({ mobile: mobile, otp: otp })
+            body: JSON.stringify({ mobile: mobile, otp: otp, master_otp: otp })
         })
         .then(response => response.json())
         .then(data => {
