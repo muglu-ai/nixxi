@@ -2257,6 +2257,7 @@ class IxApplicationController extends Controller
             'msme_document_file',
             'incorporation_document_file',
             'authorized_rep_document_file',
+            'new_gst_document', // For simplified form
         ];
 
         $storedDocuments = [];
@@ -2273,6 +2274,65 @@ class IxApplicationController extends Controller
             }
         }
 
+        // Check if this is a simplified form submission
+        $isSimplifiedForm = $request->has('representative_name') || $request->has('representative_pan');
+        $previousApplication = null;
+        $previousApplicationData = null;
+
+        // For simplified forms, copy documents from previous application
+        // Copy if: no existing draft OR existing draft has no documents
+        $needsDocumentCopy = $isSimplifiedForm && (! $existingDraft || empty($storedDocuments));
+        
+        if ($needsDocumentCopy) {
+            $previousApplication = Application::where('user_id', $userId)
+                ->where('application_type', 'IX')
+                ->whereIn('status', ['submitted', 'approved', 'payment_verified', 'processor_forwarded_legal', 'legal_forwarded_head', 'head_forwarded_ceo', 'ceo_approved', 'port_assigned', 'ip_assigned', 'invoice_pending'])
+                ->latest()
+                ->first();
+
+            if ($previousApplication && isset($previousApplication->application_data['documents'])) {
+                $previousApplicationData = $previousApplication->application_data;
+                
+                // Check if GST has changed
+                $previousGstin = strtoupper((string) ($previousApplicationData['gstin'] ?? ''));
+                $currentGstin = strtoupper((string) ($validated['gstin'] ?? ''));
+                $gstChanged = $previousGstin && $currentGstin && $previousGstin !== $currentGstin;
+                $hasNewGstDocument = isset($storedDocuments['new_gst_document']);
+
+                foreach ($previousApplicationData['documents'] as $docKey => $docPath) {
+                    // Handle GST documents
+                    if ($docKey === 'gstin_document_file' || $docKey === 'new_gst_document') {
+                        // If GST changed and new GST document was uploaded, skip copying old GST doc
+                        if ($gstChanged && $hasNewGstDocument) {
+                            // New GST document uploaded, skip old one
+                            continue;
+                        } elseif (! $gstChanged) {
+                            // GST not changed, copy the GST document from previous application
+                            // But only if we don't already have a new one uploaded
+                            if (! $hasNewGstDocument && ! isset($storedDocuments[$docKey])) {
+                                $storedDocuments[$docKey] = $docPath;
+                            }
+                        }
+                        // If GST changed but no new document uploaded, skip (validation should prevent this)
+                        continue;
+                    }
+
+                    // Copy all other documents (non-GST documents)
+                    if (! isset($storedDocuments[$docKey])) {
+                        $storedDocuments[$docKey] = $docPath;
+                    }
+                }
+
+                // If new GST document was uploaded and GST changed, also save it as gstin_document_file for consistency
+                if (isset($storedDocuments['new_gst_document'])) {
+                    if ($gstChanged) {
+                        // Also save as gstin_document_file for this application (so it shows in the list)
+                        $storedDocuments['gstin_document_file'] = $storedDocuments['new_gst_document'];
+                    }
+                }
+            }
+        }
+
         $memberType = null;
         if (isset($validated['member_type'])) {
             $memberType = $validated['member_type'] === 'others'
@@ -2282,6 +2342,39 @@ class IxApplicationController extends Controller
 
         // Prepare application data
         $applicationData = [];
+
+        // Handle simplified form - representative person details
+        if ($isSimplifiedForm) {
+            $applicationData['representative'] = [
+                'name' => $validated['representative_name'] ?? null,
+                'dob' => $validated['representative_dob'] ?? null,
+                'pan' => $validated['representative_pan'] ?? null,
+                'email' => $validated['representative_email'] ?? null,
+                'mobile' => $validated['representative_mobile'] ?? null,
+            ];
+
+            $applicationData['gstin'] = $validated['gstin'] ?? null;
+
+            // Copy other data from previous application if available
+            if (isset($previousApplication) && $previousApplication->application_data) {
+                $previousApplicationData = $previousApplication->application_data;
+
+                // Copy member type
+                if (! isset($applicationData['member_type']) && isset($previousApplicationData['member_type'])) {
+                    $applicationData['member_type'] = $previousApplicationData['member_type'];
+                }
+
+                // Copy peering details
+                if (! isset($applicationData['peering']) && isset($previousApplicationData['peering'])) {
+                    $applicationData['peering'] = $previousApplicationData['peering'];
+                }
+
+                // Copy router details
+                if (! isset($applicationData['router_details']) && isset($previousApplicationData['router_details'])) {
+                    $applicationData['router_details'] = $previousApplicationData['router_details'];
+                }
+            }
+        }
 
         if ($location) {
             $applicationData['location'] = [
