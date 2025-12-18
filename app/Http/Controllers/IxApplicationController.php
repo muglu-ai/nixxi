@@ -443,20 +443,45 @@ class IxApplicationController extends Controller
 
                 // Copy documents from previous application
                 if (isset($previousApplicationData['documents'])) {
+                    // Check if GST has changed
+                    $previousGstin = strtoupper((string) ($previousApplicationData['gstin'] ?? ''));
+                    $currentGstin = strtoupper((string) ($applicationData['gstin'] ?? ''));
+                    $gstChanged = $previousGstin && $currentGstin && $previousGstin !== $currentGstin;
+                    $hasNewGstDocument = isset($storedDocuments['new_gst_document']);
+                    
                     foreach ($previousApplicationData['documents'] as $docKey => $docPath) {
-                        // Don't copy GST document if GST has changed
+                        // Handle GST documents
                         if ($docKey === 'gstin_document_file' || $docKey === 'new_gst_document') {
-                            $previousGstin = strtoupper((string) ($previousApplicationData['gstin'] ?? ''));
-                            $currentGstin = strtoupper((string) ($applicationData['gstin'] ?? ''));
-                            if ($previousGstin && $currentGstin && $previousGstin !== $currentGstin) {
-                                // GST changed, don't copy GST document
+                            // If GST changed and new GST document was uploaded, skip copying old GST doc
+                            if ($gstChanged && $hasNewGstDocument) {
+                                // New GST document uploaded, skip old one
                                 continue;
+                            } elseif (! $gstChanged) {
+                                // GST not changed, copy the GST document from previous application
+                                // But only if we don't already have a new one uploaded
+                                if (! $hasNewGstDocument && ! isset($storedDocuments[$docKey])) {
+                                    $storedDocuments[$docKey] = $docPath;
+                                }
                             }
+                            // If GST changed but no new document uploaded, skip (validation should prevent this)
+                            continue;
                         }
-                        // Copy all other documents
+                        
+                        // Copy all other documents (non-GST documents)
                         if (! isset($storedDocuments[$docKey])) {
                             $storedDocuments[$docKey] = $docPath;
                         }
+                    }
+                }
+                
+                // If new GST document was uploaded and GST changed, also save it as gstin_document_file for consistency
+                if (isset($storedDocuments['new_gst_document'])) {
+                    $previousGstin = strtoupper((string) ($previousApplicationData['gstin'] ?? ''));
+                    $currentGstin = strtoupper((string) ($applicationData['gstin'] ?? ''));
+                    $gstChanged = $previousGstin && $currentGstin && $previousGstin !== $currentGstin;
+                    if ($gstChanged) {
+                        // Also save as gstin_document_file for this application (so it shows in the list)
+                        $storedDocuments['gstin_document_file'] = $storedDocuments['new_gst_document'];
                     }
                 }
             }

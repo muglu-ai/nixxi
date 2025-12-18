@@ -795,10 +795,41 @@ if ($gstVerification) {
             <div class="card-body">
                 @if(!empty($ixDocuments))
                     <ul class="list-unstyled mb-0">
-                        @foreach($ixDocuments as $key => $path)
+                        @php
+                            // Document display order and labels
+                            $documentLabels = [
+                                'agreement_file' => 'Signed Agreement',
+                                'license_isp_file' => 'ISP License',
+                                'license_vno_file' => 'VNO License',
+                                'cdn_declaration_file' => 'CDN Declaration',
+                                'general_declaration_file' => 'General Declaration',
+                                'board_resolution_file' => 'Board Resolution',
+                                'whois_details_file' => 'Whois Details',
+                                'pan_document_file' => 'PAN Document',
+                                'gstin_document_file' => 'GSTIN Document',
+                                'new_gst_document' => 'New GST Document',
+                                'msme_document_file' => 'MSME Document',
+                                'incorporation_document_file' => 'Certificate of Incorporation',
+                                'authorized_rep_document_file' => 'Authorized Representative Document',
+                            ];
+                            
+                            // If new_gst_document exists, use that and hide gstin_document_file (they're the same file)
+                            // Otherwise, show gstin_document_file from previous application
+                            $displayDocs = [];
+                            $hasNewGstDoc = isset($ixDocuments['new_gst_document']);
+                            
+                            foreach ($ixDocuments as $key => $path) {
+                                // Skip gstin_document_file if new_gst_document exists (they point to same file)
+                                if ($key === 'gstin_document_file' && $hasNewGstDoc) {
+                                    continue;
+                                }
+                                $displayDocs[$key] = $path;
+                            }
+                        @endphp
+                        @foreach($displayDocs as $key => $path)
                             <li class="mb-2">
                                 <i class="bi bi-file-earmark-text me-1 text-primary"></i>
-                                {{ ucwords(str_replace(['_', 'file'], [' ', ''], $key)) }}
+                                {{ $documentLabels[$key] ?? ucwords(str_replace(['_', 'file'], [' ', ''], $key)) }}
                                 <a href="{{ Storage::url($path) }}" target="_blank" class="ms-2 small">View</a>
                             </li>
                         @endforeach
