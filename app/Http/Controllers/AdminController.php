@@ -1513,7 +1513,7 @@ class AdminController extends Controller
             Message::create([
                 'user_id' => $application->user_id,
                 'subject' => 'Application Forwarded to Legal',
-                'message' => "Your application {$application->application_id} has been forwarded to IX Legal for verification of board resolution and agreement.",
+                'message' => "Your application {$application->application_id} has been forwarded to IX Legal for verification of agreement.",
                 'is_read' => false,
                 'sent_by' => 'admin',
             ]);

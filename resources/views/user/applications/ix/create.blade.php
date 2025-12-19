@@ -227,10 +227,6 @@
                             <input type="file" name="general_declaration_file" id="generalDeclarationFile" class="form-control" accept="application/pdf">
                         </div>
                         <div class="col-md-6">
-                            <label class="form-label">Board Resolution <span class="text-danger">*</span></label>
-                            <input type="file" name="board_resolution_file" class="form-control" accept="application/pdf" required>
-                        </div>
-                        <div class="col-md-6">
                             <label class="form-label">Whois Details <span class="text-danger">*</span></label>
                             <input type="file" name="whois_details_file" class="form-control" accept="application/pdf" required>
                         </div>
