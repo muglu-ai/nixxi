@@ -202,28 +202,29 @@ class IxApplicationController extends Controller
                 ->with('error', 'Your account must be approved before submitting an IX application.');
         }
 
-        // Get previous application data
-        $previousApplication = Application::where('user_id', $userId)
+        // Get FIRST application data (oldest submitted/approved application)
+        $firstApplication = Application::where('user_id', $userId)
             ->where('application_type', 'IX')
-            ->whereIn('status', ['submitted', 'approved', 'payment_verified'])
-            ->latest()
+            ->whereIn('status', ['submitted', 'approved', 'payment_verified', 'processor_forwarded_legal', 'legal_forwarded_head', 'head_forwarded_ceo', 'ceo_approved', 'port_assigned', 'ip_assigned', 'invoice_pending'])
+            ->oldest()
             ->first();
 
         $previousData = null;
-        if ($previousApplication && $previousApplication->application_data) {
-            $prevData = $previousApplication->application_data;
+        $firstApplicationData = null;
+        if ($firstApplication && $firstApplication->application_data) {
+            $firstApplicationData = $firstApplication->application_data;
             $previousData = [
                 'representative' => [
-                    'pan' => $prevData['representative']['pan'] ?? null,
-                    'mobile' => $prevData['representative']['mobile'] ?? null,
-                    'email' => $prevData['representative']['email'] ?? null,
-                    'name' => $prevData['representative']['name'] ?? null,
+                    'pan' => $firstApplicationData['representative']['pan'] ?? null,
+                    'mobile' => $firstApplicationData['representative']['mobile'] ?? null,
+                    'email' => $firstApplicationData['representative']['email'] ?? null,
+                    'name' => $firstApplicationData['representative']['name'] ?? null,
                 ],
-                'location_id' => $prevData['location']['id'] ?? null,
-                'port_capacity' => $prevData['port_selection']['capacity'] ?? null,
-                'billing_plan' => $prevData['port_selection']['billing_plan'] ?? null,
-                'ip_prefix_count' => $prevData['ip_prefix']['count'] ?? null,
-                'gstin' => $prevData['gstin'] ?? null,
+                'location_id' => $firstApplicationData['location']['id'] ?? null,
+                'port_capacity' => $firstApplicationData['port_selection']['capacity'] ?? null,
+                'billing_plan' => $firstApplicationData['port_selection']['billing_plan'] ?? null,
+                'ip_prefix_count' => $firstApplicationData['ip_prefix']['count'] ?? null,
+                'gstin' => $firstApplicationData['gstin'] ?? null,
             ];
         }
 
@@ -261,6 +262,8 @@ class IxApplicationController extends Controller
         return view('user.applications.ix.create-new', [
             'user' => $user,
             'previousData' => $previousData,
+            'firstApplicationData' => $firstApplicationData,
+            'firstApplication' => $firstApplication,
             'locations' => $locations,
             'portPricings' => $portPricings,
             'kycGstin' => $kycGstin,
@@ -387,14 +390,14 @@ class IxApplicationController extends Controller
         // Check if this is a simplified form submission
         $isSimplifiedForm = $request->has('representative_name') || $request->has('representative_pan');
 
-        // Get previous application data for simplified form
+        // Get FIRST application data for simplified form (oldest submitted/approved application)
         $previousApplication = null;
         $previousApplicationData = null;
         if ($isSimplifiedForm) {
             $previousApplication = Application::where('user_id', $userId)
                 ->where('application_type', 'IX')
                 ->whereIn('status', ['submitted', 'approved', 'payment_verified', 'processor_forwarded_legal', 'legal_forwarded_head', 'head_forwarded_ceo', 'ceo_approved', 'port_assigned', 'ip_assigned', 'invoice_pending'])
-                ->latest()
+                ->oldest()
                 ->first();
             
             if ($previousApplication && $previousApplication->application_data) {
@@ -2284,10 +2287,11 @@ class IxApplicationController extends Controller
         $needsDocumentCopy = $isSimplifiedForm && (! $existingDraft || empty($storedDocuments));
         
         if ($needsDocumentCopy) {
+            // Get FIRST application (oldest) to copy documents from
             $previousApplication = Application::where('user_id', $userId)
                 ->where('application_type', 'IX')
                 ->whereIn('status', ['submitted', 'approved', 'payment_verified', 'processor_forwarded_legal', 'legal_forwarded_head', 'head_forwarded_ceo', 'ceo_approved', 'port_assigned', 'ip_assigned', 'invoice_pending'])
-                ->latest()
+                ->oldest()
                 ->first();
 
             if ($previousApplication && isset($previousApplication->application_data['documents'])) {

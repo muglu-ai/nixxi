@@ -8,6 +8,11 @@
         <div>
             <h2 class="mb-1" style="color:#1f2937;">New IX Application</h2>
             <p class="text-muted mb-0">Fill in the required details to submit your new IX application.</p>
+            @if($firstApplication)
+                <div class="alert alert-info mt-2 mb-0">
+                    <small><strong>Note:</strong> Documents and other details from your first application ({{ $firstApplication->application_id }}) will be automatically copied to this new application. You only need to fill in the new details below.</small>
+                </div>
+            @endif
         </div>
         <a href="{{ route('user.applications.index') }}" class="btn btn-outline-secondary">Back to Applications</a>
     </div>
@@ -42,17 +47,18 @@
                                 <div class="col-md-6">
                                     <label class="form-label">Name as per PAN <span class="text-danger">*</span></label>
                                     <input type="text" name="representative_name" id="representativeName" class="form-control" 
-                                        value="{{ old('representative_name') }}" required>
+                                        value="{{ old('representative_name', data_get($previousData, 'representative.name')) }}" required>
                                 </div>
                                 <div class="col-md-6">
                                     <label class="form-label">DOB as per PAN <span class="text-danger">*</span></label>
-                                    <input type="date" name="representative_dob" id="representativeDob" class="form-control" required>
+                                    <input type="date" name="representative_dob" id="representativeDob" class="form-control" 
+                                        value="{{ old('representative_dob', data_get($firstApplicationData, 'representative.dob')) }}" required>
                                 </div>
                                 <div class="col-md-6">
                                     <label class="form-label">PAN Number <span class="text-danger">*</span></label>
                                     <div class="input-group">
                                         <input type="text" name="representative_pan" id="representativePan" class="form-control" 
-                                            value="{{ old('representative_pan') }}" 
+                                            value="{{ old('representative_pan', data_get($previousData, 'representative.pan')) }}" 
                                             placeholder="ABCDE1234F" maxlength="10" required>
                                         <button type="button" class="btn btn-outline-primary" id="verifyPanBtn">Verify</button>
                                     </div>
@@ -63,7 +69,7 @@
                                     <label class="form-label">Email <span class="text-danger">*</span></label>
                                     <div class="input-group">
                                         <input type="email" name="representative_email" id="representativeEmail" class="form-control" 
-                                            value="{{ old('representative_email') }}" required>
+                                            value="{{ old('representative_email', data_get($previousData, 'representative.email')) }}" required>
                                         <button type="button" class="btn btn-outline-primary" id="sendEmailOtpBtn">Send OTP</button>
                                     </div>
                                     <div id="emailOtpSection" class="mt-2 d-none">
@@ -77,7 +83,7 @@
                                     <label class="form-label">Mobile <span class="text-danger">*</span></label>
                                     <div class="input-group">
                                         <input type="text" name="representative_mobile" id="representativeMobile" class="form-control" 
-                                            value="{{ old('representative_mobile') }}" 
+                                            value="{{ old('representative_mobile', data_get($previousData, 'representative.mobile')) }}" 
                                             placeholder="10 digit mobile number" maxlength="10" required>
                                         <button type="button" class="btn btn-outline-primary" id="sendMobileOtpBtn">Send OTP</button>
                                     </div>
@@ -104,7 +110,7 @@
                                     <label class="form-label">GST Number <span class="text-danger">*</span></label>
                                     <div class="input-group">
                                         <input type="text" name="gstin" id="gstin" class="form-control" 
-                                            value="{{ old('gstin') }}" 
+                                            value="{{ old('gstin', data_get($previousData, 'gstin')) }}" 
                                             placeholder="15 character GSTIN" maxlength="15" required>
                                         <button type="button" class="btn btn-outline-primary" id="verifyGstinBtn">Verify</button>
                                     </div>
@@ -147,7 +153,7 @@
                                             <option value="{{ $location->id }}"
                                                 data-node-type="{{ $location->node_type }}"
                                                 data-state="{{ $location->state }}"
-                                                {{ old('location_id') == $location->id ? 'selected' : '' }}>
+                                                {{ old('location_id', data_get($previousData, 'location_id')) == $location->id ? 'selected' : '' }}>
                                                 {{ $location->name }} ({{ ucfirst($location->node_type) }} - {{ $location->state }})
                                             </option>
                                         @endforeach
@@ -184,7 +190,7 @@
                                                         data-arc="{{ $pricing->price_arc }}"
                                                         data-mrc="{{ $pricing->price_mrc }}"
                                                         data-quarterly="{{ $pricing->price_quarterly }}"
-                                                        {{ old('port_capacity') == $pricing->port_capacity ? 'selected' : '' }}>
+                                                        {{ old('port_capacity', data_get($previousData, 'port_capacity')) == $pricing->port_capacity ? 'selected' : '' }}>
                                                         {{ $pricing->port_capacity }}
                                                     </option>
                                                 @endforeach
@@ -197,17 +203,17 @@
                                     <div class="d-flex gap-3">
                                         <div class="form-check">
                                             <input class="form-check-input" type="radio" name="billing_plan" id="planArc" value="arc" 
-                                                {{ old('billing_plan') == 'arc' ? 'checked' : '' }} required>
+                                                {{ old('billing_plan', data_get($previousData, 'billing_plan')) == 'arc' ? 'checked' : '' }} required>
                                             <label class="form-check-label" for="planArc">Annual (ARC)</label>
                                         </div>
                                         <div class="form-check">
                                             <input class="form-check-input" type="radio" name="billing_plan" id="planMrc" value="mrc"
-                                                {{ old('billing_plan') == 'mrc' ? 'checked' : '' }} required>
+                                                {{ old('billing_plan', data_get($previousData, 'billing_plan')) == 'mrc' ? 'checked' : '' }} required>
                                             <label class="form-check-label" for="planMrc">Monthly (MRC)</label>
                                         </div>
                                         <div class="form-check">
                                             <input class="form-check-input" type="radio" name="billing_plan" id="planQuarterly" value="quarterly"
-                                                {{ old('billing_plan') == 'quarterly' ? 'checked' : '' }} required>
+                                                {{ old('billing_plan', data_get($previousData, 'billing_plan')) == 'quarterly' ? 'checked' : '' }} required>
                                             <label class="form-check-label" for="planQuarterly">Quarterly</label>
                                         </div>
                                     </div>
@@ -236,7 +242,7 @@
                                 <div class="col-md-12">
                                     <label class="form-label">Number of IP Prefixes <span class="text-danger">*</span></label>
                                     <input type="number" name="ip_prefix_count" id="ipPrefixCount" class="form-control" 
-                                        value="{{ old('ip_prefix_count') }}" min="1" required>
+                                        value="{{ old('ip_prefix_count', data_get($previousData, 'ip_prefix_count')) }}" min="1" required>
                                 </div>
                             </div>
                         </div>
