@@ -453,24 +453,20 @@ class IxApplicationController extends Controller
                     $hasNewGstDocument = isset($storedDocuments['new_gst_document']);
                     
                     foreach ($previousApplicationData['documents'] as $docKey => $docPath) {
-                        // Handle GST documents
+                        // Handle GST documents - only copy if GST hasn't changed
                         if ($docKey === 'gstin_document_file' || $docKey === 'new_gst_document') {
-                            // If GST changed and new GST document was uploaded, skip copying old GST doc
-                            if ($gstChanged && $hasNewGstDocument) {
-                                // New GST document uploaded, skip old one
+                            // If GST changed, skip copying old GST document (user must upload new one)
+                            if ($gstChanged) {
                                 continue;
-                            } elseif (! $gstChanged) {
-                                // GST not changed, copy the GST document from previous application
-                                // But only if we don't already have a new one uploaded
-                                if (! $hasNewGstDocument && ! isset($storedDocuments[$docKey])) {
-                                    $storedDocuments[$docKey] = $docPath;
-                                }
                             }
-                            // If GST changed but no new document uploaded, skip (validation should prevent this)
+                            // GST not changed, copy the GST document from first application
+                            if (! $hasNewGstDocument && ! isset($storedDocuments[$docKey])) {
+                                $storedDocuments[$docKey] = $docPath;
+                            }
                             continue;
                         }
                         
-                        // Copy all other documents (non-GST documents)
+                        // Copy all other documents (non-GST documents) from first application
                         if (! isset($storedDocuments[$docKey])) {
                             $storedDocuments[$docKey] = $docPath;
                         }
@@ -2304,24 +2300,20 @@ class IxApplicationController extends Controller
                 $hasNewGstDocument = isset($storedDocuments['new_gst_document']);
 
                 foreach ($previousApplicationData['documents'] as $docKey => $docPath) {
-                    // Handle GST documents
+                    // Handle GST documents - only copy if GST hasn't changed
                     if ($docKey === 'gstin_document_file' || $docKey === 'new_gst_document') {
-                        // If GST changed and new GST document was uploaded, skip copying old GST doc
-                        if ($gstChanged && $hasNewGstDocument) {
-                            // New GST document uploaded, skip old one
+                        // If GST changed, skip copying old GST document (user must upload new one)
+                        if ($gstChanged) {
                             continue;
-                        } elseif (! $gstChanged) {
-                            // GST not changed, copy the GST document from previous application
-                            // But only if we don't already have a new one uploaded
-                            if (! $hasNewGstDocument && ! isset($storedDocuments[$docKey])) {
-                                $storedDocuments[$docKey] = $docPath;
-                            }
                         }
-                        // If GST changed but no new document uploaded, skip (validation should prevent this)
+                        // GST not changed, copy the GST document from first application
+                        if (! $hasNewGstDocument && ! isset($storedDocuments[$docKey])) {
+                            $storedDocuments[$docKey] = $docPath;
+                        }
                         continue;
                     }
 
-                    // Copy all other documents (non-GST documents)
+                    // Copy all other documents (non-GST documents) from first application
                     if (! isset($storedDocuments[$docKey])) {
                         $storedDocuments[$docKey] = $docPath;
                     }

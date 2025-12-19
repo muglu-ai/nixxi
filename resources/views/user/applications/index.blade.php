@@ -126,24 +126,18 @@
                         </svg>
                         <p class="text-muted mb-4">No applications yet.</p>
                         <div class="d-flex gap-2 justify-content-center">
-                            <a href="{{ route('user.applications.ix.create-new') }}" class="btn btn-primary btn-lg">
-                                <i class="bi bi-plus-circle"></i> New IX Application
-                            </a>
-                            <a href="{{ route('user.applications.ix.create') }}" class="btn btn-outline-primary btn-lg">
-                                <i class="bi bi-file-earmark-text"></i> Full Application Form
+                            <a href="{{ route('user.applications.ix.create') }}" class="btn btn-primary btn-lg">
+                                <i class="bi bi-file-earmark-text"></i> IX Application
                             </a>
                         </div>
                     </div>
                 @endif
                 
-                @if($applications->count() > 0)
+                @if($applications->count() > 0 && isset($hasSubmittedIxApplication) && $hasSubmittedIxApplication)
                     <div class="mt-4 text-end">
                         <div class="d-flex gap-2 justify-content-end">
                             <a href="{{ route('user.applications.ix.create-new') }}" class="btn btn-primary">
                                 <i class="bi bi-plus-circle"></i> New IX Application
-                            </a>
-                            <a href="{{ route('user.applications.ix.create') }}" class="btn btn-outline-primary">
-                                <i class="bi bi-file-earmark-text"></i> Full Form
                             </a>
                         </div>
                     </div>

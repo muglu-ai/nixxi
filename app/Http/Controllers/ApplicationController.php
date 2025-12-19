@@ -44,7 +44,13 @@ class ApplicationController extends Controller
                 ->latest()
                 ->paginate(10);
 
-            return response()->view('user.applications.index', compact('user', 'applications'))
+            // Check if user has any submitted IX application
+            $hasSubmittedIxApplication = Application::where('user_id', $userId)
+                ->where('application_type', 'IX')
+                ->whereIn('status', ['submitted', 'approved', 'payment_verified', 'processor_forwarded_legal', 'legal_forwarded_head', 'head_forwarded_ceo', 'ceo_approved', 'port_assigned', 'ip_assigned', 'invoice_pending'])
+                ->exists();
+
+            return response()->view('user.applications.index', compact('user', 'applications', 'hasSubmittedIxApplication'))
                 ->header('Cache-Control', 'no-cache, no-store, max-age=0, must-revalidate')
                 ->header('Pragma', 'no-cache')
                 ->header('Expires', 'Fri, 01 Jan 1990 00:00:00 GMT');
