@@ -11,12 +11,17 @@
                 <h2 class="mb-1" style="color: #2c3e50; font-weight: 600;">User Details</h2>
                 <p class="text-muted mb-0">{{ $user->fullname }}</p>
             </div>
-            <a href="{{ route('superadmin.users') }}" class="btn btn-outline-secondary px-4" style="border-radius: 10px; font-weight: 500;">
-                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" class="me-2" viewBox="0 0 16 16">
-                    <path fill-rule="evenodd" d="M15 8a.5.5 0 0 0-.5-.5H2.707l3.147-3.146a.5.5 0 1 0-.708-.708l-4 4a.5.5 0 0 0 0 .708l4 4a.5.5 0 0 0 .708-.708L2.707 8.5H14.5A.5.5 0 0 0 15 8z"/>
-                </svg>
-                Back to Users
-            </a>
+            <div class="d-flex gap-2">
+                <a href="{{ route('superadmin.users') }}" class="btn btn-outline-secondary px-4" style="border-radius: 10px; font-weight: 500;">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" class="me-2" viewBox="0 0 16 16">
+                        <path fill-rule="evenodd" d="M15 8a.5.5 0 0 0-.5-.5H2.707l3.147-3.146a.5.5 0 1 0-.708-.708l-4 4a.5.5 0 0 0 0 .708l4 4a.5.5 0 0 0 .708-.708L2.707 8.5H14.5A.5.5 0 0 0 15 8z"/>
+                    </svg>
+                    Back to Users
+                </a>
+                <button type="button" class="btn btn-danger px-4" style="border-radius: 10px; font-weight: 500;" data-bs-toggle="modal" data-bs-target="#deleteUserModal">
+                    Delete User
+                </button>
+            </div>
         </div>
     </div>
 
@@ -315,6 +320,45 @@
                         </div>
                     @endif
                 </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Delete User Confirmation Modal -->
+<div class="modal fade" id="deleteUserModal" tabindex="-1" aria-labelledby="deleteUserModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title" id="deleteUserModalLabel">Delete User</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-danger">
+                    <strong>⚠️ Warning: This action cannot be undone!</strong>
+                </div>
+                <p>You are about to delete the following user and <strong>ALL</strong> their related data:</p>
+                <ul>
+                    <li><strong>User:</strong> {{ $user->fullname }} ({{ $user->registrationid }})</li>
+                    <li>All applications and application history</li>
+                    <li>All messages</li>
+                    <li>All profile update requests</li>
+                    <li>All KYC profiles</li>
+                    <li>All payment transactions</li>
+                    <li>All verifications (PAN, GST, UDYAM, MCA, ROC IEC)</li>
+                    <li>All tickets and ticket messages</li>
+                    <li>All sessions</li>
+                    <li>All admin actions related to this user</li>
+                </ul>
+                <p class="mb-0"><strong>Are you absolutely sure you want to proceed?</strong></p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <form method="POST" action="{{ route('superadmin.users.delete', $user->id) }}" class="d-inline">
+                    @csrf
+                    @method('DELETE')
+                    <button type="submit" class="btn btn-danger">Yes, Delete User</button>
+                </form>
             </div>
         </div>
     </div>

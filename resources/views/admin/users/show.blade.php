@@ -6,7 +6,51 @@
 <div class="row mb-4">
     <div class="col-12">
         <h1>Registration Details</h1>
-        <a href="{{ route('admin.users') }}" class="btn btn-secondary">Back to Registrations</a>
+        <div class="d-flex gap-2">
+            <a href="{{ route('admin.users') }}" class="btn btn-secondary">Back to Registrations</a>
+            <button type="button" class="btn btn-danger" data-bs-toggle="modal" data-bs-target="#deleteUserModal">
+                Delete User
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Delete User Confirmation Modal -->
+<div class="modal fade" id="deleteUserModal" tabindex="-1" aria-labelledby="deleteUserModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title" id="deleteUserModalLabel">Delete User</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-danger">
+                    <strong>⚠️ Warning: This action cannot be undone!</strong>
+                </div>
+                <p>You are about to delete the following user and <strong>ALL</strong> their related data:</p>
+                <ul>
+                    <li><strong>User:</strong> {{ $user->fullname }} ({{ $user->registrationid }})</li>
+                    <li>All applications and application history</li>
+                    <li>All messages</li>
+                    <li>All profile update requests</li>
+                    <li>All KYC profiles</li>
+                    <li>All payment transactions</li>
+                    <li>All verifications (PAN, GST, UDYAM, MCA, ROC IEC)</li>
+                    <li>All tickets and ticket messages</li>
+                    <li>All sessions</li>
+                    <li>All admin actions related to this user</li>
+                </ul>
+                <p class="mb-0"><strong>Are you absolutely sure you want to proceed?</strong></p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <form method="POST" action="{{ route('admin.users.delete', $user->id) }}" class="d-inline">
+                    @csrf
+                    @method('DELETE')
+                    <button type="submit" class="btn btn-danger">Yes, Delete User</button>
+                </form>
+            </div>
+        </div>
     </div>
 </div>
 

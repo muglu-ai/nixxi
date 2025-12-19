@@ -6,16 +6,26 @@ use App\Models\Admin;
 use App\Models\AdminAction;
 use App\Models\Application;
 use App\Models\ApplicationStatusHistory;
+use App\Models\GstVerification;
+use App\Models\McaVerification;
 use App\Models\Message;
+use App\Models\PanVerification;
 use App\Models\PaymentTransaction;
 use App\Models\ProfileUpdateRequest;
 use App\Models\Registration;
+use App\Models\RocIecVerification;
+use App\Models\Ticket;
+use App\Models\TicketAttachment;
+use App\Models\TicketMessage;
+use App\Models\UdyamVerification;
+use App\Models\UserKycProfile;
 use App\Models\Role;
 use App\Models\SuperAdmin;
 use Exception;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
@@ -254,6 +264,118 @@ class SuperAdminController extends Controller
 
             return redirect()->route('superadmin.users')
                 ->with('error', 'User not found.');
+        }
+    }
+
+    /**
+     * Delete user and all related data.
+     */
+    public function deleteUser($userId)
+    {
+        try {
+            $user = Registration::findOrFail($userId);
+            $userName = $user->fullname;
+            $userRegistrationId = $user->registrationid;
+            $superAdminId = session('superadmin_id');
+
+            DB::beginTransaction();
+
+            // Delete Application Status History
+            $applicationIds = Application::where('user_id', $userId)->pluck('id');
+            ApplicationStatusHistory::whereIn('application_id', $applicationIds)->delete();
+
+            // Delete Applications
+            $applications = Application::where('user_id', $userId)->get();
+            foreach ($applications as $application) {
+                // Delete application storage files if any
+                $applicationPath = storage_path("app/public/applications/{$application->application_id}");
+                if (File::exists($applicationPath)) {
+                    File::deleteDirectory($applicationPath);
+                }
+            }
+            Application::where('user_id', $userId)->delete();
+
+            // Delete User KYC Profiles
+            UserKycProfile::where('user_id', $userId)->delete();
+
+            // Delete Payment Transactions
+            PaymentTransaction::where('user_id', $userId)->delete();
+
+            // Delete Messages
+            Message::where('user_id', $userId)->delete();
+
+            // Delete Profile Update Requests
+            ProfileUpdateRequest::where('user_id', $userId)->delete();
+
+            // Delete Verifications
+            PanVerification::where('user_id', $userId)->delete();
+            GstVerification::where('user_id', $userId)->delete();
+            UdyamVerification::where('user_id', $userId)->delete();
+            McaVerification::where('user_id', $userId)->delete();
+            RocIecVerification::where('user_id', $userId)->delete();
+
+            // Delete Tickets and related data
+            $tickets = Ticket::where('user_id', $userId)->get();
+            foreach ($tickets as $ticket) {
+                // Delete ticket attachments
+                TicketAttachment::where('ticket_id', $ticket->id)->delete();
+                // Delete ticket messages
+                TicketMessage::where('ticket_id', $ticket->id)->delete();
+            }
+            Ticket::where('user_id', $userId)->delete();
+
+            // Delete Admin Actions related to this user
+            AdminAction::where('actionable_type', Registration::class)
+                ->where('actionable_id', $userId)
+                ->delete();
+
+            // Delete password reset tokens
+            DB::table('password_reset_tokens')
+                ->where('email', $user->email)
+                ->delete();
+
+            // Delete user sessions (if using database sessions)
+            if (config('session.driver') === 'database') {
+                DB::table('sessions')
+                    ->where('user_id', $userId)
+                    ->delete();
+            }
+
+            // Delete the user
+            $user->delete();
+
+            DB::commit();
+
+            // Log action
+            AdminAction::create([
+                'admin_id' => null,
+                'superadmin_id' => $superAdminId,
+                'action_type' => 'deleted_user',
+                'actionable_type' => null,
+                'actionable_id' => null,
+                'description' => "Deleted user: {$userName} (Registration ID: {$userRegistrationId})",
+                'metadata' => ['deleted_user_id' => $userId, 'deleted_user_name' => $userName],
+                'ip_address' => request()->ip(),
+                'user_agent' => request()->userAgent(),
+            ]);
+
+            return redirect()->route('superadmin.users')
+                ->with('success', "User '{$userName}' and all related data have been deleted successfully.");
+        } catch (QueryException $e) {
+            DB::rollBack();
+            Log::error('Database error deleting user: '.$e->getMessage());
+
+            return back()->with('error', 'Database connection error. Please try again later.');
+        } catch (PDOException $e) {
+            DB::rollBack();
+            Log::error('PDO error deleting user: '.$e->getMessage());
+
+            return back()->with('error', 'Database connection error. Please try again later.');
+        } catch (Exception $e) {
+            DB::rollBack();
+            Log::error('Error deleting user: '.$e->getMessage());
+
+            return back()->with('error', 'An error occurred while deleting the user. Please try again.');
         }
     }
 

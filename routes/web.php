@@ -42,6 +42,7 @@ Route::prefix('superadmin')->name('superadmin.')->middleware(['superadmin'])->gr
     // User management
     Route::get('/users', [SuperAdminController::class, 'users'])->name('users');
     Route::get('/users/{id}', [SuperAdminController::class, 'showUser'])->name('users.show');
+    Route::delete('/users/{id}', [SuperAdminController::class, 'deleteUser'])->name('users.delete');
     Route::post('/applications/{applicationId}/accept-payment', [SuperAdminController::class, 'acceptPayment'])->name('applications.accept-payment');
 
     // Admin management
@@ -120,6 +121,7 @@ Route::prefix('admin')->name('admin.')->middleware(['admin'])->group(function ()
     Route::get('/users/{id}', [AdminController::class, 'showUser'])->name('users.show');
     Route::post('/users/{id}/send-message', [AdminController::class, 'sendMessage'])->name('users.send-message');
     Route::post('/users/{id}/update-status', [AdminController::class, 'updateUserStatus'])->name('users.update-status');
+    Route::delete('/users/{id}', [AdminController::class, 'deleteUser'])->name('users.delete');
 
     // Profile update requests
     Route::get('/profile-update-requests', [AdminController::class, 'profileUpdateRequests'])->name('profile-update-requests');
