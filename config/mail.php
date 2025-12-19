@@ -39,10 +39,10 @@ return [
 
         'smtp' => [
             'transport' => 'smtp',
-            'host' => env('MAIL_HOST', 'smtp.mgovcloud.in'),
+            'host' => env('MAIL_HOST', 'mail.irinn.in'),
             'port' => env('MAIL_PORT', 465),
             'encryption' => env('MAIL_ENCRYPTION', 'ssl'),
-            'username' => env('MAIL_USERNAME', 'ix.donotreply@nixi.in'),
+            'username' => env('MAIL_USERNAME', 'ix-donotreply@irinn.in'),
             'password' => env('MAIL_PASSWORD', 'IXnixi@975'),
             'timeout' => 60,
             'local_domain' => env('MAIL_EHLO_DOMAIN', parse_url((string) env('APP_URL', 'http://localhost'), PHP_URL_HOST)),
@@ -110,7 +110,7 @@ return [
     */
 
     'from' => [
-        'address' => env('MAIL_FROM_ADDRESS', 'ix.donotreply@nixi.in'),
+        'address' => env('MAIL_FROM_ADDRESS', 'ix-donotreply@irinn.in'),
         'name' => env('MAIL_FROM_NAME', 'NIXI'),
     ],
 
