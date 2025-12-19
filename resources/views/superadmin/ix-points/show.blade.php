@@ -350,15 +350,6 @@
                                                     </div>
                                                 </div>
                                             </div>
-
-                                            <!-- Action Button -->
-                                            <div class="col-12">
-                                                <div class="d-flex justify-content-end">
-                                                    <a href="{{ route('admin.applications.show', $application->id) }}" class="btn btn-primary" target="_blank">
-                                                        <i class="bi bi-box-arrow-up-right"></i> View Full Details in Admin Panel
-                                                    </a>
-                                                </div>
-                                            </div>
                                         </div>
                                     </div>
                                 </div>
