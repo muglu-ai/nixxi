@@ -26,7 +26,6 @@
                     </div>
                 @endif
 
-                <p class="lead">Welcome to the Registration Portal</p>
                 <p>Please fill out the form below to register for an account.</p>
                 
                 <form method="POST" action="{{ route('register.store') }}" id="registrationForm">
@@ -50,7 +49,6 @@
                             </div>
                            
                         </div>
-                        <small class="form-text text-muted">Select whether you are registering as an individual or an entity (company/organization)</small>
                         @error('registration_type')
                             <div class="small mt-1" style="color: #4169E1;">{{ $message }}</div>
                         @enderror
@@ -66,7 +64,6 @@
                                    value="{{ old('fullname') }}"
                                    placeholder="Enter full name or affiliate name"
                                    required>
-                            <small class="form-text text-muted" id="fullnameHelp">Only letters, spaces, and apostrophes (') are allowed</small>
                             @error('fullname')
                                 <div class="invalid-feedback">{{ $message }}</div>
                             @enderror
@@ -80,7 +77,6 @@
                                    name="dateofbirth" 
                                    value="{{ old('dateofbirth') }}"
                                    required>
-                            <small class="form-text text-muted" id="dateofbirthHelp"></small>
                             @error('dateofbirth')
                                 <div class="invalid-feedback">{{ $message }}</div>
                             @enderror
@@ -105,7 +101,6 @@
                                 Verify PAN
                             </button>
                         </div>
-                        <small class="form-text text-muted">Format: ABCDE1234F (5 letters, 4 digits, 1 letter)</small>
                         <div id="panVerificationStatus" class="mt-2" style="display: none;"></div>
                         @error('pancardno')
                             <div class="invalid-feedback">{{ $message }}</div>
@@ -273,9 +268,7 @@
     function updateLabelsBasedOnRegistrationType() {
         const fullnameLabel = document.getElementById('fullnameLabel');
         const fullnameInput = document.getElementById('fullname');
-        const fullnameHelp = document.getElementById('fullnameHelp');
         const dateofbirthLabel = document.getElementById('dateofbirthLabel');
-        const dateofbirthHelp = document.getElementById('dateofbirthHelp');
         
         if (registrationType === 'individual') {
             if (fullnameLabel) {
@@ -284,14 +277,8 @@
             if (fullnameInput) {
                 fullnameInput.placeholder = 'Enter your full name';
             }
-            if (fullnameHelp) {
-                fullnameHelp.textContent = 'Only letters, spaces, apostrophes (\'), and hyphens (-) are allowed';
-            }
             if (dateofbirthLabel) {
                 dateofbirthLabel.innerHTML = 'Date of Birth (As per PAN) <span style="color: #4169E1;">*</span>';
-            }
-            if (dateofbirthHelp) {
-                dateofbirthHelp.textContent = 'Enter your date of birth';
             }
         } else {
             if (fullnameLabel) {
@@ -300,14 +287,8 @@
             if (fullnameInput) {
                 fullnameInput.placeholder = 'Enter entity/company name';
             }
-            if (fullnameHelp) {
-                fullnameHelp.textContent = 'Only letters, spaces, apostrophes (\'), and hyphens (-) are allowed';
-            }
             if (dateofbirthLabel) {
                 dateofbirthLabel.innerHTML = 'Date of Incorporation (As per PAN) <span style="color: #4169E1;">*</span>';
-            }
-            if (dateofbirthHelp) {
-                dateofbirthHelp.textContent = 'Enter the date of incorporation';
             }
         }
     }
@@ -547,17 +528,21 @@
                 if (data.otp) {
                     document.getElementById('emailOtpStatus').textContent += ' (Dev: ' + data.otp + ')';
                 }
+                btn.disabled = false;
+                btn.textContent = 'Resend OTP';
             } else {
                 alert(data.message || 'Failed to send OTP. Please try again.');
                 btn.disabled = false;
-                btn.textContent = 'Get OTP';
+                const otpSection = document.getElementById('emailOtpSection');
+                btn.textContent = otpSection && otpSection.style.display !== 'none' ? 'Resend OTP' : 'Get OTP';
             }
         })
         .catch(error => {
             console.error('Error:', error);
             alert('An error occurred. Please try again.');
             btn.disabled = false;
-            btn.textContent = 'Get OTP';
+            const otpSection = document.getElementById('emailOtpSection');
+            btn.textContent = otpSection && otpSection.style.display !== 'none' ? 'Resend OTP' : 'Get OTP';
         });
     }
 
@@ -596,17 +581,21 @@
                 if (data.otp) {
                     document.getElementById('mobileOtpStatus').textContent += ' (Dev: ' + data.otp + ')';
                 }
+                btn.disabled = false;
+                btn.textContent = 'Resend OTP';
             } else {
                 alert(data.message || 'Failed to send OTP. Please try again.');
                 btn.disabled = false;
-                btn.textContent = 'Get OTP';
+                const otpSection = document.getElementById('mobileOtpSection');
+                btn.textContent = otpSection && otpSection.style.display !== 'none' ? 'Resend OTP' : 'Get OTP';
             }
         })
         .catch(error => {
             console.error('Error:', error);
             alert('An error occurred. Please try again.');
             btn.disabled = false;
-            btn.textContent = 'Get OTP';
+            const otpSection = document.getElementById('mobileOtpSection');
+            btn.textContent = otpSection && otpSection.style.display !== 'none' ? 'Resend OTP' : 'Get OTP';
         });
     }
 
