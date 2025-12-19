@@ -936,15 +936,16 @@
                 otpRow.classList.remove('d-none');
                 statusEl.textContent = 'OTP sent to your email. Enter it below and click Verify.';
                 statusEl.className = 'form-text text-info';
+                this.disabled = false;
+                this.textContent = 'Resend OTP';
             })
             .catch(error => {
                 console.error(error);
                 statusEl.textContent = error.message || 'Error while sending email OTP.';
                 statusEl.className = 'form-text text-danger';
-            })
-            .finally(() => {
                 this.disabled = false;
-                this.textContent = 'Send OTP';
+                const isOtpRowVisible = !otpRow.classList.contains('d-none');
+                this.textContent = isOtpRowVisible ? 'Resend OTP' : 'Send OTP';
             });
     });
 
@@ -1040,15 +1041,16 @@
                 otpRow.classList.remove('d-none');
                 statusEl.textContent = 'OTP sent to your mobile. Enter it below and click Verify.';
                 statusEl.className = 'form-text text-info';
+                this.disabled = false;
+                this.textContent = 'Resend OTP';
             })
             .catch(error => {
                 console.error(error);
                 statusEl.textContent = error.message || 'Error while sending mobile OTP.';
                 statusEl.className = 'form-text text-danger';
-            })
-            .finally(() => {
                 this.disabled = false;
-                this.textContent = 'Send OTP';
+                const isOtpRowVisible = !otpRow.classList.contains('d-none');
+                this.textContent = isOtpRowVisible ? 'Resend OTP' : 'Send OTP';
             });
     });
 
