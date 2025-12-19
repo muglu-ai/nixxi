@@ -572,154 +572,154 @@ if ($gstVerification) {
                     </div>
                     <div class="card-body">
                         <div class="row">
-                            @if(!empty($files['network_plan_file']))
+                            @if(!empty($files['network_plan_file']) && \Illuminate\Support\Facades\Storage::disk('public')->exists($files['network_plan_file']))
                             <div class="col-md-6 mb-2">
                                 <p><strong>Network Plan:</strong></p>
-                                <a href="{{ \Illuminate\Support\Facades\Storage::url($files['network_plan_file']) }}" target="_blank" class="btn btn-sm btn-outline-primary">
+                                <a href="{{ \Illuminate\Support\Facades\Storage::disk('public')->url($files['network_plan_file']) }}" target="_blank" class="btn btn-sm btn-outline-primary">
                                     View Network Plan
                                 </a>
                             </div>
                             @endif
                             
-                            @if(!empty($files['payment_receipts_file']))
+                            @if(!empty($files['payment_receipts_file']) && \Illuminate\Support\Facades\Storage::disk('public')->exists($files['payment_receipts_file']))
                             <div class="col-md-6 mb-2">
                                 <p><strong>Payment Receipts:</strong></p>
-                                <a href="{{ \Illuminate\Support\Facades\Storage::url($files['payment_receipts_file']) }}" target="_blank" class="btn btn-sm btn-outline-primary">
+                                <a href="{{ \Illuminate\Support\Facades\Storage::disk('public')->url($files['payment_receipts_file']) }}" target="_blank" class="btn btn-sm btn-outline-primary">
                                     View Payment Receipts
                                 </a>
                             </div>
                             @endif
                             
-                            @if(!empty($files['equipment_details_file']))
+                            @if(!empty($files['equipment_details_file']) && \Illuminate\Support\Facades\Storage::disk('public')->exists($files['equipment_details_file']))
                             <div class="col-md-6 mb-2">
                                 <p><strong>Equipment Details:</strong></p>
-                                <a href="{{ \Illuminate\Support\Facades\Storage::url($files['equipment_details_file']) }}" target="_blank" class="btn btn-sm btn-outline-primary">
+                                <a href="{{ \Illuminate\Support\Facades\Storage::disk('public')->url($files['equipment_details_file']) }}" target="_blank" class="btn btn-sm btn-outline-primary">
                                     View Equipment Details
                                 </a>
                             </div>
                             @endif
                             
-                            @if(!empty($files['kyc_business_address_proof']))
+                            @if(!empty($files['kyc_business_address_proof']) && \Illuminate\Support\Facades\Storage::disk('public')->exists($files['kyc_business_address_proof']))
                             <div class="col-md-6 mb-2">
                                 <p><strong>Business Address Proof:</strong></p>
-                                <a href="{{ \Illuminate\Support\Facades\Storage::url($files['kyc_business_address_proof']) }}" target="_blank" class="btn btn-sm btn-outline-primary">
+                                <a href="{{ \Illuminate\Support\Facades\Storage::disk('public')->url($files['kyc_business_address_proof']) }}" target="_blank" class="btn btn-sm btn-outline-primary">
                                     View Document
                                 </a>
                             </div>
                             @endif
                             
-                            @if(!empty($files['kyc_authorization_doc']))
+                            @if(!empty($files['kyc_authorization_doc']) && \Illuminate\Support\Facades\Storage::disk('public')->exists($files['kyc_authorization_doc']))
                             <div class="col-md-6 mb-2">
                                 <p><strong>Authorization Document:</strong></p>
-                                <a href="{{ \Illuminate\Support\Facades\Storage::url($files['kyc_authorization_doc']) }}" target="_blank" class="btn btn-sm btn-outline-primary">
+                                <a href="{{ \Illuminate\Support\Facades\Storage::disk('public')->url($files['kyc_authorization_doc']) }}" target="_blank" class="btn btn-sm btn-outline-primary">
                                     View Document
                                 </a>
                             </div>
                             @endif
                             
-                            @if(!empty($files['kyc_signature_proof']))
+                            @if(!empty($files['kyc_signature_proof']) && \Illuminate\Support\Facades\Storage::disk('public')->exists($files['kyc_signature_proof']))
                             <div class="col-md-6 mb-2">
                                 <p><strong>Signature Proof:</strong></p>
-                                <a href="{{ \Illuminate\Support\Facades\Storage::url($files['kyc_signature_proof']) }}" target="_blank" class="btn btn-sm btn-outline-primary">
+                                <a href="{{ \Illuminate\Support\Facades\Storage::disk('public')->url($files['kyc_signature_proof']) }}" target="_blank" class="btn btn-sm btn-outline-primary">
                                     View Document
                                 </a>
                             </div>
                             @endif
                             
-                            @if(!empty($files['kyc_gst_certificate']))
+                            @if(!empty($files['kyc_gst_certificate']) && \Illuminate\Support\Facades\Storage::disk('public')->exists($files['kyc_gst_certificate']))
                             <div class="col-md-6 mb-2">
                                 <p><strong>GST Certificate:</strong></p>
-                                <a href="{{ \Illuminate\Support\Facades\Storage::url($files['kyc_gst_certificate']) }}" target="_blank" class="btn btn-sm btn-outline-primary">
+                                <a href="{{ \Illuminate\Support\Facades\Storage::disk('public')->url($files['kyc_gst_certificate']) }}" target="_blank" class="btn btn-sm btn-outline-primary">
                                     View Document
                                 </a>
                             </div>
                             @endif
                             
-                            @if(!empty($files['kyc_partnership_deed']))
+                            @if(!empty($files['kyc_partnership_deed']) && \Illuminate\Support\Facades\Storage::disk('public')->exists($files['kyc_partnership_deed']))
                             <div class="col-md-6 mb-2">
                                 <p><strong>Partnership Deed:</strong></p>
-                                <a href="{{ \Illuminate\Support\Facades\Storage::url($files['kyc_partnership_deed']) }}" target="_blank" class="btn btn-sm btn-outline-primary">
+                                <a href="{{ \Illuminate\Support\Facades\Storage::disk('public')->url($files['kyc_partnership_deed']) }}" target="_blank" class="btn btn-sm btn-outline-primary">
                                     View Document
                                 </a>
                             </div>
                             @endif
                             
-                            @if(!empty($files['kyc_partnership_entity_doc']))
+                            @if(!empty($files['kyc_partnership_entity_doc']) && \Illuminate\Support\Facades\Storage::disk('public')->exists($files['kyc_partnership_entity_doc']))
                             <div class="col-md-6 mb-2">
                                 <p><strong>Partnership Entity Document:</strong></p>
-                                <a href="{{ \Illuminate\Support\Facades\Storage::url($files['kyc_partnership_entity_doc']) }}" target="_blank" class="btn btn-sm btn-outline-primary">
+                                <a href="{{ \Illuminate\Support\Facades\Storage::disk('public')->url($files['kyc_partnership_entity_doc']) }}" target="_blank" class="btn btn-sm btn-outline-primary">
                                     View Document
                                 </a>
                             </div>
                             @endif
                             
-                            @if(!empty($files['kyc_incorporation_cert']))
+                            @if(!empty($files['kyc_incorporation_cert']) && \Illuminate\Support\Facades\Storage::disk('public')->exists($files['kyc_incorporation_cert']))
                             <div class="col-md-6 mb-2">
                                 <p><strong>Certificate of Incorporation:</strong></p>
-                                <a href="{{ \Illuminate\Support\Facades\Storage::url($files['kyc_incorporation_cert']) }}" target="_blank" class="btn btn-sm btn-outline-primary">
+                                <a href="{{ \Illuminate\Support\Facades\Storage::disk('public')->url($files['kyc_incorporation_cert']) }}" target="_blank" class="btn btn-sm btn-outline-primary">
                                     View Document
                                 </a>
                             </div>
                             @endif
                             
-                            @if(!empty($files['kyc_company_pan_gstin']))
+                            @if(!empty($files['kyc_company_pan_gstin']) && \Illuminate\Support\Facades\Storage::disk('public')->exists($files['kyc_company_pan_gstin']))
                             <div class="col-md-6 mb-2">
                                 <p><strong>Company PAN/GSTIN:</strong></p>
-                                <a href="{{ \Illuminate\Support\Facades\Storage::url($files['kyc_company_pan_gstin']) }}" target="_blank" class="btn btn-sm btn-outline-primary">
+                                <a href="{{ \Illuminate\Support\Facades\Storage::disk('public')->url($files['kyc_company_pan_gstin']) }}" target="_blank" class="btn btn-sm btn-outline-primary">
                                     View Document
                                 </a>
                             </div>
                             @endif
                             
-                            @if(!empty($files['kyc_sole_proprietorship_doc']))
+                            @if(!empty($files['kyc_sole_proprietorship_doc']) && \Illuminate\Support\Facades\Storage::disk('public')->exists($files['kyc_sole_proprietorship_doc']))
                             <div class="col-md-6 mb-2">
                                 <p><strong>Sole Proprietorship Document:</strong></p>
-                                <a href="{{ \Illuminate\Support\Facades\Storage::url($files['kyc_sole_proprietorship_doc']) }}" target="_blank" class="btn btn-sm btn-outline-primary">
+                                <a href="{{ \Illuminate\Support\Facades\Storage::disk('public')->url($files['kyc_sole_proprietorship_doc']) }}" target="_blank" class="btn btn-sm btn-outline-primary">
                                     View Document
                                 </a>
                             </div>
                             @endif
                             
-                            @if(!empty($files['kyc_udyam_cert']))
+                            @if(!empty($files['kyc_udyam_cert']) && \Illuminate\Support\Facades\Storage::disk('public')->exists($files['kyc_udyam_cert']))
                             <div class="col-md-6 mb-2">
                                 <p><strong>UDYAM Certificate:</strong></p>
-                                <a href="{{ \Illuminate\Support\Facades\Storage::url($files['kyc_udyam_cert']) }}" target="_blank" class="btn btn-sm btn-outline-primary">
+                                <a href="{{ \Illuminate\Support\Facades\Storage::disk('public')->url($files['kyc_udyam_cert']) }}" target="_blank" class="btn btn-sm btn-outline-primary">
                                     View Document
                                 </a>
                             </div>
                             @endif
                             
-                            @if(!empty($files['kyc_establishment_reg']))
+                            @if(!empty($files['kyc_establishment_reg']) && \Illuminate\Support\Facades\Storage::disk('public')->exists($files['kyc_establishment_reg']))
                             <div class="col-md-6 mb-2">
                                 <p><strong>Establishment Registration:</strong></p>
-                                <a href="{{ \Illuminate\Support\Facades\Storage::url($files['kyc_establishment_reg']) }}" target="_blank" class="btn btn-sm btn-outline-primary">
+                                <a href="{{ \Illuminate\Support\Facades\Storage::disk('public')->url($files['kyc_establishment_reg']) }}" target="_blank" class="btn btn-sm btn-outline-primary">
                                     View Document
                                 </a>
                             </div>
                             @endif
                             
-                            @if(!empty($files['kyc_school_pan_gstin']))
+                            @if(!empty($files['kyc_school_pan_gstin']) && \Illuminate\Support\Facades\Storage::disk('public')->exists($files['kyc_school_pan_gstin']))
                             <div class="col-md-6 mb-2">
                                 <p><strong>School PAN/GSTIN:</strong></p>
-                                <a href="{{ \Illuminate\Support\Facades\Storage::url($files['kyc_school_pan_gstin']) }}" target="_blank" class="btn btn-sm btn-outline-primary">
+                                <a href="{{ \Illuminate\Support\Facades\Storage::disk('public')->url($files['kyc_school_pan_gstin']) }}" target="_blank" class="btn btn-sm btn-outline-primary">
                                     View Document
                                 </a>
                             </div>
                             @endif
                             
-                            @if(!empty($files['kyc_rbi_license']))
+                            @if(!empty($files['kyc_rbi_license']) && \Illuminate\Support\Facades\Storage::disk('public')->exists($files['kyc_rbi_license']))
                             <div class="col-md-6 mb-2">
                                 <p><strong>RBI License:</strong></p>
-                                <a href="{{ \Illuminate\Support\Facades\Storage::url($files['kyc_rbi_license']) }}" target="_blank" class="btn btn-sm btn-outline-primary">
+                                <a href="{{ \Illuminate\Support\Facades\Storage::disk('public')->url($files['kyc_rbi_license']) }}" target="_blank" class="btn btn-sm btn-outline-primary">
                                     View Document
                                 </a>
                             </div>
                             @endif
                             
-                            @if(!empty($files['kyc_bank_pan_gstin']))
+                            @if(!empty($files['kyc_bank_pan_gstin']) && \Illuminate\Support\Facades\Storage::disk('public')->exists($files['kyc_bank_pan_gstin']))
                             <div class="col-md-6 mb-2">
                                 <p><strong>Bank PAN/GSTIN:</strong></p>
-                                <a href="{{ \Illuminate\Support\Facades\Storage::url($files['kyc_bank_pan_gstin']) }}" target="_blank" class="btn btn-sm btn-outline-primary">
+                                <a href="{{ \Illuminate\Support\Facades\Storage::disk('public')->url($files['kyc_bank_pan_gstin']) }}" target="_blank" class="btn btn-sm btn-outline-primary">
                                     View Document
                                 </a>
                             </div>
@@ -830,7 +830,11 @@ if ($gstVerification) {
                             <li class="mb-2">
                                 <i class="bi bi-file-earmark-text me-1 text-primary"></i>
                                 {{ $documentLabels[$key] ?? ucwords(str_replace(['_', 'file'], [' ', ''], $key)) }}
-                                <a href="{{ Storage::url($path) }}" target="_blank" class="ms-2 small">View</a>
+                                @if($path && \Illuminate\Support\Facades\Storage::disk('public')->exists($path))
+                                    <a href="{{ Storage::disk('public')->url($path) }}" target="_blank" class="ms-2 small">View</a>
+                                @else
+                                    <span class="ms-2 small text-muted">File not found</span>
+                                @endif
                             </li>
                         @endforeach
                     </ul>
