@@ -2,6 +2,22 @@
 
 @section('title', 'IX Point Details')
 
+@push('styles')
+<style>
+    .bg-purple {
+        background-color: #6f42c1 !important;
+        color: white !important;
+    }
+    .accordion-button:not(.collapsed) {
+        background-color: #f8f9fa;
+    }
+    .accordion-button:focus {
+        box-shadow: none;
+        border-color: #e0e0e0;
+    }
+</style>
+@endpush
+
 @section('content')
 <div class="container-fluid py-4">
     <div class="row mb-4">
@@ -130,50 +146,224 @@
 
                     <!-- Applications List -->
                     @if($applications->count() > 0)
-                        <div class="table-responsive">
-                            <table class="table table-hover">
-                                <thead>
-                                    <tr>
-                                        <th style="color: #2c3e50; font-weight: 600;">Application ID</th>
-                                        <th style="color: #2c3e50; font-weight: 600;">User</th>
-                                        <th style="color: #2c3e50; font-weight: 600;">Status</th>
-                                        <th style="color: #2c3e50; font-weight: 600;">Submitted</th>
-                                        <th style="color: #2c3e50; font-weight: 600;">Action</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    @foreach($applications as $application)
-                                    <tr>
-                                        <td><strong>{{ $application->application_id }}</strong></td>
-                                        <td>
-                                            <div>{{ $application->user->fullname ?? 'N/A' }}</div>
-                                            <small class="text-muted">{{ $application->user->email ?? 'N/A' }}</small>
-                                        </td>
-                                        <td>
-                                            @if($application->status === 'approved' || $application->status === 'payment_verified')
-                                                <span class="badge bg-success">Approved</span>
-                                            @elseif($application->status === 'rejected' || $application->status === 'ceo_rejected')
-                                                <span class="badge bg-danger">Rejected</span>
-                                            @else
-                                                <span class="badge bg-warning">Pending</span>
-                                            @endif
-                                        </td>
-                                        <td>
-                                            @if($application->submitted_at)
-                                                {{ $application->submitted_at->format('d M Y, h:i A') }}
-                                            @else
-                                                <span class="text-muted">Not submitted</span>
-                                            @endif
-                                        </td>
-                                        <td>
-                                            <a href="{{ route('admin.applications.show', $application->id) }}" class="btn btn-sm btn-primary" target="_blank">
-                                                View Details
-                                            </a>
-                                        </td>
-                                    </tr>
-                                    @endforeach
-                                </tbody>
-                            </table>
+                        <div class="accordion" id="applicationsAccordion">
+                            @foreach($applications as $index => $application)
+                            @php
+                                $appData = $application->application_data ?? [];
+                                $locationData = $appData['location'] ?? null;
+                                $portSelection = $appData['port_selection'] ?? null;
+                                $representative = $appData['representative'] ?? null;
+                                $gstin = $appData['gstin'] ?? null;
+                                
+                                // Determine current phase
+                                $currentPhase = 'Unknown';
+                                $phaseBadgeClass = 'bg-secondary';
+                                if($application->status === 'approved' || $application->status === 'payment_verified') {
+                                    $currentPhase = 'Completed';
+                                    $phaseBadgeClass = 'bg-success';
+                                } elseif($application->status === 'rejected' || $application->status === 'ceo_rejected') {
+                                    $currentPhase = 'Rejected';
+                                    $phaseBadgeClass = 'bg-danger';
+                                } elseif(in_array($application->status, ['submitted', 'resubmitted', 'processor_resubmission', 'legal_sent_back', 'head_sent_back'])) {
+                                    $currentPhase = 'IX Processor Review';
+                                    $phaseBadgeClass = 'bg-warning';
+                                } elseif($application->status === 'processor_forwarded_legal') {
+                                    $currentPhase = 'IX Legal Review';
+                                    $phaseBadgeClass = 'bg-info';
+                                } elseif($application->status === 'legal_forwarded_head') {
+                                    $currentPhase = 'IX Head Review';
+                                    $phaseBadgeClass = 'bg-primary';
+                                } elseif($application->status === 'head_forwarded_ceo') {
+                                    $currentPhase = 'CEO Review';
+                                    $phaseBadgeClass = 'bg-purple';
+                                } elseif($application->status === 'ceo_approved') {
+                                    $currentPhase = 'Nodal Officer Review';
+                                    $phaseBadgeClass = 'bg-info';
+                                } elseif($application->status === 'port_assigned') {
+                                    $currentPhase = 'IX Tech Team Review';
+                                    $phaseBadgeClass = 'bg-primary';
+                                } elseif(in_array($application->status, ['ip_assigned', 'invoice_pending'])) {
+                                    $currentPhase = 'IX Account Review';
+                                    $phaseBadgeClass = 'bg-warning';
+                                } else {
+                                    $currentPhase = $application->current_stage ?? 'Draft';
+                                }
+                            @endphp
+                            <div class="accordion-item mb-3" style="border-radius: 12px; overflow: hidden; border: 1px solid #e0e0e0;">
+                                <h2 class="accordion-header" id="heading{{ $index }}">
+                                    <button class="accordion-button {{ $index === 0 ? '' : 'collapsed' }}" type="button" data-bs-toggle="collapse" data-bs-target="#collapse{{ $index }}" aria-expanded="{{ $index === 0 ? 'true' : 'false' }}" aria-controls="collapse{{ $index }}">
+                                        <div class="d-flex justify-content-between align-items-center w-100 me-3">
+                                            <div class="d-flex align-items-center gap-3">
+                                                <div>
+                                                    <strong style="color: #2c3e50;">{{ $application->application_id }}</strong>
+                                                    <div class="small text-muted">{{ $application->user->fullname ?? 'N/A' }}</div>
+                                                </div>
+                                                <div>
+                                                    <span class="badge {{ $phaseBadgeClass }}">{{ $currentPhase }}</span>
+                                                </div>
+                                            </div>
+                                            <div class="text-end">
+                                                <small class="text-muted">
+                                                    @if($application->submitted_at)
+                                                        {{ $application->submitted_at->format('d M Y') }}
+                                                    @else
+                                                        Not submitted
+                                                    @endif
+                                                </small>
+                                            </div>
+                                        </div>
+                                    </button>
+                                </h2>
+                                <div id="collapse{{ $index }}" class="accordion-collapse collapse {{ $index === 0 ? 'show' : '' }}" aria-labelledby="heading{{ $index }}" data-bs-parent="#applicationsAccordion">
+                                    <div class="accordion-body">
+                                        <div class="row g-3">
+                                            <!-- User Information -->
+                                            <div class="col-md-6">
+                                                <div class="card bg-light">
+                                                    <div class="card-body p-3">
+                                                        <h6 class="mb-3" style="color: #2c3e50; font-weight: 600;">User Information</h6>
+                                                        <table class="table table-sm table-borderless mb-0">
+                                                            <tr>
+                                                                <td class="text-muted" width="40%">Name:</td>
+                                                                <td><strong>{{ $application->user->fullname ?? 'N/A' }}</strong></td>
+                                                            </tr>
+                                                            <tr>
+                                                                <td class="text-muted">Email:</td>
+                                                                <td>{{ $application->user->email ?? 'N/A' }}</td>
+                                                            </tr>
+                                                            <tr>
+                                                                <td class="text-muted">Registration ID:</td>
+                                                                <td>{{ $application->user->registrationid ?? 'N/A' }}</td>
+                                                            </tr>
+                                                            @if($representative)
+                                                            <tr>
+                                                                <td class="text-muted">Representative:</td>
+                                                                <td>{{ $representative['name'] ?? 'N/A' }}</td>
+                                                            </tr>
+                                                            @endif
+                                                        </table>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <!-- Application Details -->
+                                            <div class="col-md-6">
+                                                <div class="card bg-light">
+                                                    <div class="card-body p-3">
+                                                        <h6 class="mb-3" style="color: #2c3e50; font-weight: 600;">Application Details</h6>
+                                                        <table class="table table-sm table-borderless mb-0">
+                                                            <tr>
+                                                                <td class="text-muted" width="40%">Application ID:</td>
+                                                                <td><strong>{{ $application->application_id }}</strong></td>
+                                                            </tr>
+                                                            <tr>
+                                                                <td class="text-muted">Status:</td>
+                                                                <td>
+                                                                    @if($application->status === 'approved' || $application->status === 'payment_verified')
+                                                                        <span class="badge bg-success">Approved</span>
+                                                                    @elseif($application->status === 'rejected' || $application->status === 'ceo_rejected')
+                                                                        <span class="badge bg-danger">Rejected</span>
+                                                                    @else
+                                                                        <span class="badge bg-warning">Pending</span>
+                                                                    @endif
+                                                                </td>
+                                                            </tr>
+                                                            <tr>
+                                                                <td class="text-muted">Current Phase:</td>
+                                                                <td><span class="badge {{ $phaseBadgeClass }}">{{ $currentPhase }}</span></td>
+                                                            </tr>
+                                                            @if($portSelection)
+                                                            <tr>
+                                                                <td class="text-muted">Port Capacity:</td>
+                                                                <td>{{ $portSelection['capacity'] ?? 'N/A' }}</td>
+                                                            </tr>
+                                                            <tr>
+                                                                <td class="text-muted">Billing Plan:</td>
+                                                                <td>{{ ucfirst($portSelection['billing_plan'] ?? 'N/A') }}</td>
+                                                            </tr>
+                                                            @endif
+                                                            @if($application->assigned_port_capacity)
+                                                            <tr>
+                                                                <td class="text-muted">Assigned Port:</td>
+                                                                <td><strong>{{ $application->assigned_port_capacity }}</strong></td>
+                                                            </tr>
+                                                            @endif
+                                                            @if($application->assigned_port_number)
+                                                            <tr>
+                                                                <td class="text-muted">Port Number:</td>
+                                                                <td><strong>{{ $application->assigned_port_number }}</strong></td>
+                                                            </tr>
+                                                            @endif
+                                                            @if($application->assigned_ip)
+                                                            <tr>
+                                                                <td class="text-muted">Assigned IP:</td>
+                                                                <td><strong>{{ $application->assigned_ip }}</strong></td>
+                                                            </tr>
+                                                            @endif
+                                                            @if($application->customer_id)
+                                                            <tr>
+                                                                <td class="text-muted">Customer ID:</td>
+                                                                <td><strong>{{ $application->customer_id }}</strong></td>
+                                                            </tr>
+                                                            @endif
+                                                            @if($application->membership_id)
+                                                            <tr>
+                                                                <td class="text-muted">Membership ID:</td>
+                                                                <td><strong>{{ $application->membership_id }}</strong></td>
+                                                            </tr>
+                                                            @endif
+                                                            @if($gstin)
+                                                            <tr>
+                                                                <td class="text-muted">GSTIN:</td>
+                                                                <td>{{ $gstin }}</td>
+                                                            </tr>
+                                                            @endif
+                                                            <tr>
+                                                                <td class="text-muted">Submitted:</td>
+                                                                <td>
+                                                                    @if($application->submitted_at)
+                                                                        {{ $application->submitted_at->format('d M Y, h:i A') }}
+                                                                    @else
+                                                                        <span class="text-muted">Not submitted</span>
+                                                                    @endif
+                                                                </td>
+                                                            </tr>
+                                                            @if($application->approved_at)
+                                                            <tr>
+                                                                <td class="text-muted">Approved:</td>
+                                                                <td>{{ $application->approved_at->format('d M Y, h:i A') }}</td>
+                                                            </tr>
+                                                            @endif
+                                                            @if($application->rejection_reason)
+                                                            <tr>
+                                                                <td class="text-muted">Rejection Reason:</td>
+                                                                <td class="text-danger">{{ $application->rejection_reason }}</td>
+                                                            </tr>
+                                                            @endif
+                                                            @if($application->resubmission_query)
+                                                            <tr>
+                                                                <td class="text-muted">Resubmission Query:</td>
+                                                                <td class="text-warning">{{ $application->resubmission_query }}</td>
+                                                            </tr>
+                                                            @endif
+                                                        </table>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <!-- Action Button -->
+                                            <div class="col-12">
+                                                <div class="d-flex justify-content-end">
+                                                    <a href="{{ route('admin.applications.show', $application->id) }}" class="btn btn-primary" target="_blank">
+                                                        <i class="bi bi-box-arrow-up-right"></i> View Full Details in Admin Panel
+                                                    </a>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            @endforeach
                         </div>
                     @else
                         <div class="text-center py-5">
