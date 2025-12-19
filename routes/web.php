@@ -137,6 +137,7 @@ Route::prefix('admin')->name('admin.')->middleware(['admin'])->group(function ()
 
     // Application management routes
     Route::get('/applications', [AdminController::class, 'applications'])->name('applications');
+    Route::get('/applications/{id}/document', [AdminController::class, 'serveDocument'])->name('applications.document');
     Route::get('/applications/{id}', [AdminController::class, 'showApplication'])->name('applications.show');
 
     // Legacy Processor routes (for backward compatibility)
@@ -300,6 +301,7 @@ Route::prefix('user')->name('user.')->middleware(['user.auth'])->group(function 
         // PDF download routes (must be before {id} route)
         Route::get('/{id}/download-application-pdf', [ApplicationController::class, 'downloadApplicationPdf'])->name('download-application-pdf');
         Route::get('/{id}/download-invoice-pdf', [ApplicationController::class, 'downloadInvoicePdf'])->name('download-invoice-pdf');
+        Route::get('/{id}/document', [ApplicationController::class, 'serveDocument'])->name('document');
 
         // Show application (must be last)
         Route::get('/{id}', [ApplicationController::class, 'show'])->name('show');

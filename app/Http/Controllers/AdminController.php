@@ -855,6 +855,54 @@ class AdminController extends Controller
     }
 
     /**
+     * Serve application document securely.
+     */
+    public function serveDocument($id, Request $request)
+    {
+        try {
+            $documentKey = $request->input('doc');
+            
+            if (!$documentKey) {
+                abort(400, 'Document key is required.');
+            }
+
+            $application = Application::findOrFail($id);
+            $applicationData = $application->application_data ?? [];
+            $documents = $applicationData['documents'] ?? [];
+            $pdfs = $applicationData['pdfs'] ?? [];
+            
+            // Check if it's a PDF or a document
+            $filePath = null;
+            if (isset($pdfs[$documentKey])) {
+                $filePath = $pdfs[$documentKey];
+            } elseif (isset($documents[$documentKey])) {
+                $filePath = $documents[$documentKey];
+            }
+            
+            if (!$filePath) {
+                abort(404, 'Document not found.');
+            }
+            
+            if (!Storage::disk('public')->exists($filePath)) {
+                abort(404, 'File not found on server.');
+            }
+
+            $fullPath = Storage::disk('public')->path($filePath);
+            $fileName = basename($filePath);
+            
+            return response()->file($fullPath, [
+                'Content-Type' => Storage::disk('public')->mimeType($filePath),
+                'Content-Disposition' => 'inline; filename="'.$fileName.'"',
+            ]);
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            abort(404, 'Application not found.');
+        } catch (Exception $e) {
+            Log::error('Error serving document: '.$e->getMessage());
+            abort(500, 'Unable to serve document.');
+        }
+    }
+
+    /**
      * Processor: Approve application to Finance.
      */
     public function approveToFinance(Request $request, $id)
