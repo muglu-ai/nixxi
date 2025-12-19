@@ -7,6 +7,7 @@ use App\Models\AdminAction;
 use App\Models\Application;
 use App\Models\ApplicationStatusHistory;
 use App\Models\GstVerification;
+use App\Models\IxLocation;
 use App\Models\McaVerification;
 use App\Models\Message;
 use App\Models\PanVerification;
@@ -133,6 +134,11 @@ class SuperAdminController extends Controller
                 ->whereIn('status', ['ip_assigned', 'invoice_pending'])
                 ->count();
 
+            // IX Points Statistics
+            $totalIxPoints = IxLocation::where('is_active', true)->count();
+            $edgeIxPoints = IxLocation::where('is_active', true)->where('node_type', 'edge')->count();
+            $metroIxPoints = IxLocation::where('is_active', true)->where('node_type', 'metro')->count();
+
             return view('superadmin.dashboard', compact(
                 'superAdmin',
                 'recentLoggedInUsers',
@@ -158,7 +164,11 @@ class SuperAdminController extends Controller
                 'ixTechTeamApproved',
                 'ixTechTeamPending',
                 'ixAccountApproved',
-                'ixAccountPending'
+                'ixAccountPending',
+                // IX Points
+                'totalIxPoints',
+                'edgeIxPoints',
+                'metroIxPoints'
             ));
         } catch (QueryException $e) {
             Log::error('Database error loading SuperAdmin dashboard: '.$e->getMessage());
@@ -169,6 +179,81 @@ class SuperAdminController extends Controller
         } catch (Exception $e) {
             Log::error('Error loading SuperAdmin dashboard: '.$e->getMessage());
             abort(500, 'Unable to load dashboard. Please try again later.');
+        }
+    }
+
+    /**
+     * Display IX points grid view.
+     */
+    public function ixPoints(Request $request)
+    {
+        try {
+            $nodeType = $request->get('node_type'); // 'edge', 'metro', or null for all
+            
+            $query = IxLocation::where('is_active', true);
+            
+            if ($nodeType && in_array($nodeType, ['edge', 'metro'])) {
+                $query->where('node_type', $nodeType);
+            }
+            
+            $locations = $query->orderBy('node_type')
+                ->orderBy('state')
+                ->orderBy('name')
+                ->get();
+            
+            // Get application counts for each location
+            $locationStats = [];
+            foreach ($locations as $location) {
+                // Count applications for this location using JSON path
+                $applications = Application::where('application_type', 'IX')
+                    ->whereRaw('JSON_EXTRACT(application_data, "$.location.id") = ?', [$location->id])
+                    ->get();
+                
+                $locationStats[$location->id] = [
+                    'total_applications' => $applications->count(),
+                    'approved_applications' => $applications->whereIn('status', ['approved', 'payment_verified'])->count(),
+                    'pending_applications' => $applications->whereNotIn('status', ['approved', 'rejected', 'ceo_rejected', 'payment_verified'])->count(),
+                    'rejected_applications' => $applications->whereIn('status', ['rejected', 'ceo_rejected'])->count(),
+                ];
+            }
+            
+            return view('superadmin.ix-points.index', compact('locations', 'nodeType', 'locationStats'));
+        } catch (Exception $e) {
+            Log::error('Error loading IX points: '.$e->getMessage());
+            
+            return redirect()->route('superadmin.dashboard')
+                ->with('error', 'Unable to load IX points right now.');
+        }
+    }
+
+    /**
+     * Display IX point details with applications.
+     */
+    public function showIxPoint($id)
+    {
+        try {
+            $location = IxLocation::findOrFail($id);
+            
+            // Get all applications for this location
+            $applications = Application::where('application_type', 'IX')
+                ->whereRaw('JSON_EXTRACT(application_data, "$.location.id") = ?', [$location->id])
+                ->with('user')
+                ->orderBy('created_at', 'desc')
+                ->get();
+            
+            // Group applications by status
+            $applicationsByStatus = [
+                'approved' => $applications->whereIn('status', ['approved', 'payment_verified']),
+                'pending' => $applications->whereNotIn('status', ['approved', 'rejected', 'ceo_rejected', 'payment_verified']),
+                'rejected' => $applications->whereIn('status', ['rejected', 'ceo_rejected']),
+            ];
+            
+            return view('superadmin.ix-points.show', compact('location', 'applications', 'applicationsByStatus'));
+        } catch (Exception $e) {
+            Log::error('Error loading IX point details: '.$e->getMessage());
+            
+            return redirect()->route('superadmin.ix-points')
+                ->with('error', 'Unable to load IX point details.');
         }
     }
 

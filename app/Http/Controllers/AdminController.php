@@ -151,11 +151,6 @@ class AdminController extends Controller
 
             $recentUsers = Registration::latest()->take(10)->get();
 
-            // IX Points Statistics
-            $totalIxPoints = IxLocation::where('is_active', true)->count();
-            $edgeIxPoints = IxLocation::where('is_active', true)->where('node_type', 'edge')->count();
-            $metroIxPoints = IxLocation::where('is_active', true)->where('node_type', 'metro')->count();
-
             return view('admin.dashboard', compact(
                 'admin',
                 'totalUsers',
@@ -163,10 +158,7 @@ class AdminController extends Controller
                 'approvedApplications',
                 'pendingApplications',
                 'selectedRole',
-                'recentUsers',
-                'totalIxPoints',
-                'edgeIxPoints',
-                'metroIxPoints'
+                'recentUsers'
             ));
         } catch (QueryException $e) {
             Log::error('Database error loading Admin dashboard: '.$e->getMessage());

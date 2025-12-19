@@ -11,6 +11,84 @@
         <div class="accent-line"></div>
     </div>
 
+    <!-- IX Points Visibility Section -->
+    <div class="row g-4 mb-4">
+        <div class="col-12">
+            <div class="card border-0 shadow-sm" style="border-radius: 16px;">
+                <div class="card-header bg-primary text-white" style="border-radius: 16px 16px 0 0;">
+                    <h5 class="mb-0" style="font-weight: 600;">IX Points Visibility</h5>
+                </div>
+                <div class="card-body p-4">
+                    <div class="row g-4">
+                        <div class="col-md-4">
+                            <a href="{{ route('superadmin.ix-points') }}" class="text-decoration-none">
+                                <div class="card border-0 shadow-sm" style="border-radius: 12px; transition: transform 0.2s, box-shadow 0.2s; cursor: pointer;" 
+                                     onmouseover="this.style.transform='translateY(-5px)'; this.style.boxShadow='0 4px 12px rgba(0,0,0,0.15)'"
+                                     onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 2px 8px rgba(0,0,0,0.1)'">
+                                    <div class="card-body p-4">
+                                        <div class="d-flex align-items-center justify-content-between">
+                                            <div>
+                                                <h6 class="text-muted mb-2" style="font-size: 0.875rem; font-weight: 500;">Total IX Points</h6>
+                                                <h2 class="mb-0" style="color: #2c3e50; font-weight: 700;">{{ $totalIxPoints }}</h2>
+                                            </div>
+                                            <div class="bg-primary bg-opacity-10 rounded-circle p-3">
+                                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="#0d6efd" viewBox="0 0 16 16">
+                                                    <path d="M8 16s6-5.686 6-10A6 6 0 0 0 2 6c0 4.314 6 10 6 10zm0-7a3 3 0 1 1 0-6 3 3 0 0 1 0 6z"/>
+                                                </svg>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </a>
+                        </div>
+                        <div class="col-md-4">
+                            <a href="{{ route('superadmin.ix-points', ['node_type' => 'edge']) }}" class="text-decoration-none">
+                                <div class="card border-0 shadow-sm" style="border-radius: 12px; transition: transform 0.2s, box-shadow 0.2s; cursor: pointer;" 
+                                     onmouseover="this.style.transform='translateY(-5px)'; this.style.boxShadow='0 4px 12px rgba(0,0,0,0.15)'"
+                                     onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 2px 8px rgba(0,0,0,0.1)'">
+                                    <div class="card-body p-4">
+                                        <div class="d-flex align-items-center justify-content-between">
+                                            <div>
+                                                <h6 class="text-muted mb-2" style="font-size: 0.875rem; font-weight: 500;">Edge IX Points</h6>
+                                                <h2 class="mb-0" style="color: #2c3e50; font-weight: 700;">{{ $edgeIxPoints }}</h2>
+                                            </div>
+                                            <div class="bg-info bg-opacity-10 rounded-circle p-3">
+                                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="#0dcaf0" viewBox="0 0 16 16">
+                                                    <path d="M8 16s6-5.686 6-10A6 6 0 0 0 2 6c0 4.314 6 10 6 10zm0-7a3 3 0 1 1 0-6 3 3 0 0 1 0 6z"/>
+                                                </svg>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </a>
+                        </div>
+                        <div class="col-md-4">
+                            <a href="{{ route('superadmin.ix-points', ['node_type' => 'metro']) }}" class="text-decoration-none">
+                                <div class="card border-0 shadow-sm" style="border-radius: 12px; transition: transform 0.2s, box-shadow 0.2s; cursor: pointer;" 
+                                     onmouseover="this.style.transform='translateY(-5px)'; this.style.boxShadow='0 4px 12px rgba(0,0,0,0.15)'"
+                                     onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 2px 8px rgba(0,0,0,0.1)'">
+                                    <div class="card-body p-4">
+                                        <div class="d-flex align-items-center justify-content-between">
+                                            <div>
+                                                <h6 class="text-muted mb-2" style="font-size: 0.875rem; font-weight: 500;">Metro IX Points</h6>
+                                                <h2 class="mb-0" style="color: #2c3e50; font-weight: 700;">{{ $metroIxPoints }}</h2>
+                                            </div>
+                                            <div class="bg-success bg-opacity-10 rounded-circle p-3">
+                                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="#198754" viewBox="0 0 16 16">
+                                                    <path d="M8 16s6-5.686 6-10A6 6 0 0 0 2 6c0 4.314 6 10 6 10zm0-7a3 3 0 1 1 0-6 3 3 0 0 1 0 6z"/>
+                                                </svg>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div class="row g-4">
         <!-- SuperAdmin Details -->
         <div class="col-md-12">

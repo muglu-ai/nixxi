@@ -39,6 +39,10 @@ Route::prefix('superadmin')->name('superadmin.')->group(function () {
 Route::prefix('superadmin')->name('superadmin.')->middleware(['superadmin'])->group(function () {
     Route::get('/dashboard', [SuperAdminController::class, 'index'])->name('dashboard');
 
+    // IX Points management
+    Route::get('/ix-points', [SuperAdminController::class, 'ixPoints'])->name('ix-points');
+    Route::get('/ix-points/{id}', [SuperAdminController::class, 'showIxPoint'])->name('ix-points.show');
+
     // User management
     Route::get('/users', [SuperAdminController::class, 'users'])->name('users');
     Route::get('/users/{id}', [SuperAdminController::class, 'showUser'])->name('users.show');
@@ -134,9 +138,6 @@ Route::prefix('admin')->name('admin.')->middleware(['admin'])->group(function ()
 
     // Requests and Messages combined page
     Route::get('/requests-messages', [AdminController::class, 'requestsAndMessages'])->name('requests-messages');
-
-    // IX Points routes
-    Route::get('/ix-points', [AdminController::class, 'ixPoints'])->name('ix-points');
 
     // Application management routes
     Route::get('/applications', [AdminController::class, 'applications'])->name('applications');
