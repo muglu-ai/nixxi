@@ -588,19 +588,18 @@ class AdminController extends Controller
                     ->delete();
             }
 
+            // Log action before deleting the user
+            AdminAction::logAdminActivity(
+                $adminId,
+                'deleted_user',
+                "Deleted user: {$userName} (Registration ID: {$userRegistrationId})",
+                ['deleted_user_id' => $userId, 'deleted_user_name' => $userName, 'deleted_registration_id' => $userRegistrationId]
+            );
+
             // Delete the user
             $user->delete();
 
             DB::commit();
-
-            // Log action
-            AdminAction::log(
-                $adminId,
-                'deleted_user',
-                null,
-                "Deleted user: {$userName} (Registration ID: {$userRegistrationId})",
-                ['deleted_user_id' => $userId, 'deleted_user_name' => $userName]
-            );
 
             return redirect()->route('admin.users')
                 ->with('success', "User '{$userName}' and all related data have been deleted successfully.");

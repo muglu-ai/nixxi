@@ -341,12 +341,7 @@ class SuperAdminController extends Controller
                     ->delete();
             }
 
-            // Delete the user
-            $user->delete();
-
-            DB::commit();
-
-            // Log action
+            // Log action before deleting the user
             AdminAction::create([
                 'admin_id' => null,
                 'superadmin_id' => $superAdminId,
@@ -354,10 +349,15 @@ class SuperAdminController extends Controller
                 'actionable_type' => null,
                 'actionable_id' => null,
                 'description' => "Deleted user: {$userName} (Registration ID: {$userRegistrationId})",
-                'metadata' => ['deleted_user_id' => $userId, 'deleted_user_name' => $userName],
+                'metadata' => ['deleted_user_id' => $userId, 'deleted_user_name' => $userName, 'deleted_registration_id' => $userRegistrationId],
                 'ip_address' => request()->ip(),
                 'user_agent' => request()->userAgent(),
             ]);
+
+            // Delete the user
+            $user->delete();
+
+            DB::commit();
 
             return redirect()->route('superadmin.users')
                 ->with('success', "User '{$userName}' and all related data have been deleted successfully.");
