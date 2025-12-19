@@ -2585,4 +2585,150 @@ class AdminController extends Controller
             return back()->with('error', 'An error occurred. Please try again.');
         }
     }
+
+    /**
+     * Show update application form.
+     */
+    public function editApplication($id)
+    {
+        try {
+            $application = Application::with(['user'])->findOrFail($id);
+            $applicationData = $application->application_data ?? [];
+            $documents = $applicationData['documents'] ?? [];
+
+            return view('admin.applications.edit', compact('application', 'applicationData', 'documents'));
+        } catch (Exception $e) {
+            Log::error('Error loading application edit page: '.$e->getMessage());
+
+            return redirect()->route('admin.applications')
+                ->with('error', 'Application not found.');
+        }
+    }
+
+    /**
+     * Update application documents and details.
+     */
+    public function updateApplication(Request $request, $id)
+    {
+        try {
+            $application = Application::findOrFail($id);
+            $applicationData = $application->application_data ?? [];
+            $existingDocuments = $applicationData['documents'] ?? [];
+
+            // Validate document uploads
+            $request->validate([
+                'agreement_file' => 'nullable|file|mimes:pdf|max:10240',
+                'license_isp_file' => 'nullable|file|mimes:pdf|max:10240',
+                'license_vno_file' => 'nullable|file|mimes:pdf|max:10240',
+                'cdn_declaration_file' => 'nullable|file|mimes:pdf|max:10240',
+                'general_declaration_file' => 'nullable|file|mimes:pdf|max:10240',
+                'whois_details_file' => 'nullable|file|mimes:pdf|max:10240',
+                'pan_document_file' => 'nullable|file|mimes:pdf|max:10240',
+                'gstin_document_file' => 'nullable|file|mimes:pdf|max:10240',
+                'msme_document_file' => 'nullable|file|mimes:pdf|max:10240',
+                'incorporation_document_file' => 'nullable|file|mimes:pdf|max:10240',
+                'authorized_rep_document_file' => 'nullable|file|mimes:pdf|max:10240',
+                // Allow updating application details
+                'representative_name' => 'nullable|string|max:255',
+                'representative_email' => 'nullable|email|max:255',
+                'representative_mobile' => 'nullable|string|size:10|regex:/^[0-9]{10}$/',
+                'gstin' => 'nullable|string|size:15|regex:/^[0-9A-Z]{15}$/',
+                'port_capacity' => 'nullable|string|max:50',
+                'billing_plan' => 'nullable|string|in:arc,mrc,quarterly',
+                'ip_prefix_count' => 'nullable|integer|min:1|max:500',
+            ]);
+
+            $documentFields = [
+                'agreement_file',
+                'license_isp_file',
+                'license_vno_file',
+                'cdn_declaration_file',
+                'general_declaration_file',
+                'whois_details_file',
+                'pan_document_file',
+                'gstin_document_file',
+                'msme_document_file',
+                'incorporation_document_file',
+                'authorized_rep_document_file',
+            ];
+
+            $updatedDocuments = $existingDocuments;
+            $storagePrefix = 'applications/'.$application->user_id.'/ix/'.now()->format('YmdHis');
+
+            // Handle file uploads
+            foreach ($documentFields as $field) {
+                if ($request->hasFile($field)) {
+                    $updatedDocuments[$field] = $request->file($field)
+                        ->store($storagePrefix, 'public');
+                }
+            }
+
+            // Update application data
+            $updatedData = $applicationData;
+
+            // Update documents
+            $updatedData['documents'] = $updatedDocuments;
+
+            // Update application details if provided
+            if ($request->filled('representative_name')) {
+                if (!isset($updatedData['representative'])) {
+                    $updatedData['representative'] = [];
+                }
+                $updatedData['representative']['name'] = $request->input('representative_name');
+            }
+
+            if ($request->filled('representative_email')) {
+                if (!isset($updatedData['representative'])) {
+                    $updatedData['representative'] = [];
+                }
+                $updatedData['representative']['email'] = $request->input('representative_email');
+            }
+
+            if ($request->filled('representative_mobile')) {
+                if (!isset($updatedData['representative'])) {
+                    $updatedData['representative'] = [];
+                }
+                $updatedData['representative']['mobile'] = $request->input('representative_mobile');
+            }
+
+            if ($request->filled('gstin')) {
+                $updatedData['gstin'] = strtoupper(preg_replace('/[^A-Z0-9]/', '', $request->input('gstin')));
+            }
+
+            if ($request->filled('port_capacity')) {
+                if (!isset($updatedData['port_selection'])) {
+                    $updatedData['port_selection'] = [];
+                }
+                $updatedData['port_selection']['capacity'] = $request->input('port_capacity');
+            }
+
+            if ($request->filled('billing_plan')) {
+                if (!isset($updatedData['port_selection'])) {
+                    $updatedData['port_selection'] = [];
+                }
+                $updatedData['port_selection']['billing_plan'] = $request->input('billing_plan');
+            }
+
+            if ($request->filled('ip_prefix_count')) {
+                if (!isset($updatedData['ip_prefix'])) {
+                    $updatedData['ip_prefix'] = [];
+                }
+                $updatedData['ip_prefix']['count'] = $request->input('ip_prefix_count');
+            }
+
+            // Update application
+            $application->update([
+                'application_data' => $updatedData,
+            ]);
+
+            return redirect()->route('admin.applications.show', $id)
+                ->with('success', 'Application updated successfully!');
+        } catch (ValidationException $e) {
+            return back()->withErrors($e->errors())->withInput();
+        } catch (Exception $e) {
+            Log::error('Error updating application: '.$e->getMessage());
+
+            return back()->with('error', 'An error occurred while updating the application.');
+        }
+    }
 }

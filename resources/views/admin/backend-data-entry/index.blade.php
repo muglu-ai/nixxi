@@ -313,48 +313,48 @@
 
                     <!-- Documents -->
                     <div class="col-12">
-                        <h6 class="mb-3 text-primary mt-3">Required Documents</h6>
-                        <p class="text-muted small">Upload clear PDF copies. Maximum size per document is 10 MB.</p>
+                        <h6 class="mb-3 text-primary mt-3">Documents (Optional)</h6>
+                        <p class="text-muted small">Upload clear PDF copies. Maximum size per document is 10 MB. Documents can be uploaded later through the application update module.</p>
                     </div>
 
                     <div class="col-md-6">
-                        <label class="form-label">Signed Agreement with NIXI <span class="text-danger">*</span></label>
-                        <input type="file" name="agreement_file" class="form-control" accept="application/pdf" required>
+                        <label class="form-label">Signed Agreement with NIXI</label>
+                        <input type="file" name="agreement_file" class="form-control" accept="application/pdf">
                     </div>
 
                     <div class="col-md-6" id="ispLicenseContainer" style="display: none;">
-                        <label class="form-label">ISP License <span class="text-danger">*</span></label>
+                        <label class="form-label">ISP License</label>
                         <input type="file" name="license_isp_file" id="licenseIspFile" class="form-control" accept="application/pdf">
                     </div>
 
                     <div class="col-md-6" id="vnoLicenseContainer" style="display: none;">
-                        <label class="form-label">VNO License <span class="text-danger">*</span></label>
+                        <label class="form-label">VNO License</label>
                         <input type="file" name="license_vno_file" id="licenseVnoFile" class="form-control" accept="application/pdf">
                     </div>
 
                     <div class="col-md-6" id="cdnDeclarationContainer" style="display: none;">
-                        <label class="form-label">CDN Declaration <span class="text-danger">*</span></label>
+                        <label class="form-label">CDN Declaration</label>
                         <input type="file" name="cdn_declaration_file" id="cdnDeclarationFile" class="form-control" accept="application/pdf">
                     </div>
 
                     <div class="col-md-6" id="generalDeclarationContainer" style="display: none;">
-                        <label class="form-label">General Declaration <span class="text-danger">*</span></label>
+                        <label class="form-label">General Declaration</label>
                         <input type="file" name="general_declaration_file" id="generalDeclarationFile" class="form-control" accept="application/pdf">
                     </div>
 
                     <div class="col-md-6">
-                        <label class="form-label">Whois Details <span class="text-danger">*</span></label>
-                        <input type="file" name="whois_details_file" class="form-control" accept="application/pdf" required>
+                        <label class="form-label">Whois Details</label>
+                        <input type="file" name="whois_details_file" class="form-control" accept="application/pdf">
                     </div>
 
                     <div class="col-md-6">
-                        <label class="form-label">PAN Document <span class="text-danger">*</span></label>
-                        <input type="file" name="pan_document_file" class="form-control" accept="application/pdf" required>
+                        <label class="form-label">PAN Document</label>
+                        <input type="file" name="pan_document_file" class="form-control" accept="application/pdf">
                     </div>
 
                     <div class="col-md-6">
-                        <label class="form-label">GSTIN Document <span class="text-danger">*</span></label>
-                        <input type="file" name="gstin_document_file" class="form-control" accept="application/pdf" required>
+                        <label class="form-label">GSTIN Document</label>
+                        <input type="file" name="gstin_document_file" class="form-control" accept="application/pdf">
                     </div>
 
                     <div class="col-md-6">
@@ -363,13 +363,13 @@
                     </div>
 
                     <div class="col-md-6">
-                        <label class="form-label">Certificate of Incorporation <span class="text-danger">*</span></label>
-                        <input type="file" name="incorporation_document_file" class="form-control" accept="application/pdf" required>
+                        <label class="form-label">Certificate of Incorporation</label>
+                        <input type="file" name="incorporation_document_file" class="form-control" accept="application/pdf">
                     </div>
 
                     <div class="col-md-6">
-                        <label class="form-label">Authorized Representative Document <span class="text-danger">*</span></label>
-                        <input type="file" name="authorized_rep_document_file" class="form-control" accept="application/pdf" required>
+                        <label class="form-label">Authorized Representative Document</label>
+                        <input type="file" name="authorized_rep_document_file" class="form-control" accept="application/pdf">
                     </div>
                 </div>
             </div>

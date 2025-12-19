@@ -1306,8 +1306,11 @@ $files = $data['files'] ?? [];
 
                     <!-- Uploaded Documents -->
                     <div class="card mb-3">
-                        <div class="card-header bg-light">
+                        <div class="card-header bg-light d-flex justify-content-between align-items-center">
                             <h6 class="mb-0">Uploaded Documents</h6>
+                            <a href="{{ route('admin.applications.edit', $application->id) }}" class="btn btn-sm btn-primary">
+                                <i class="bi bi-pencil"></i> Update Documents & Details
+                            </a>
                         </div>
                         <div class="card-body">
                             <div class="row">

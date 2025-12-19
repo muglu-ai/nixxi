@@ -152,6 +152,8 @@ Route::prefix('admin')->name('admin.')->middleware(['admin'])->group(function ()
     // Application management routes
     Route::get('/applications', [AdminController::class, 'applications'])->name('applications');
     Route::get('/applications/{id}/document', [AdminController::class, 'serveDocument'])->name('applications.document');
+    Route::get('/applications/{id}/edit', [AdminController::class, 'editApplication'])->name('applications.edit');
+    Route::post('/applications/{id}/update', [AdminController::class, 'updateApplication'])->name('applications.update');
     Route::get('/applications/{id}', [AdminController::class, 'showApplication'])->name('applications.show');
 
     // Legacy Processor routes (for backward compatibility)

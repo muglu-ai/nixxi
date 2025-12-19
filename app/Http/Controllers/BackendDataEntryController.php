@@ -138,18 +138,18 @@ class BackendDataEntryController extends Controller
                 'router_height_u' => 'nullable|integer|min:1|max:50',
                 'router_make_model' => 'nullable|string|max:255',
                 'router_serial_number' => 'nullable|string|max:255',
-                // Document files
-                'agreement_file' => 'required|file|mimes:pdf|max:10240',
-                'license_isp_file' => 'nullable|required_if:member_type,isp|file|mimes:pdf|max:10240',
-                'license_vno_file' => 'nullable|required_if:member_type,vno|file|mimes:pdf|max:10240',
-                'cdn_declaration_file' => 'nullable|required_if:member_type,cdn|file|mimes:pdf|max:10240',
-                'general_declaration_file' => 'nullable|required_unless:member_type,isp,vno,cdn|file|mimes:pdf|max:10240',
-                'whois_details_file' => 'required|file|mimes:pdf|max:10240',
-                'pan_document_file' => 'required|file|mimes:pdf|max:10240',
-                'gstin_document_file' => 'required|file|mimes:pdf|max:10240',
+                // Document files (all optional for backend entry)
+                'agreement_file' => 'nullable|file|mimes:pdf|max:10240',
+                'license_isp_file' => 'nullable|file|mimes:pdf|max:10240',
+                'license_vno_file' => 'nullable|file|mimes:pdf|max:10240',
+                'cdn_declaration_file' => 'nullable|file|mimes:pdf|max:10240',
+                'general_declaration_file' => 'nullable|file|mimes:pdf|max:10240',
+                'whois_details_file' => 'nullable|file|mimes:pdf|max:10240',
+                'pan_document_file' => 'nullable|file|mimes:pdf|max:10240',
+                'gstin_document_file' => 'nullable|file|mimes:pdf|max:10240',
                 'msme_document_file' => 'nullable|file|mimes:pdf|max:10240',
-                'incorporation_document_file' => 'required|file|mimes:pdf|max:10240',
-                'authorized_rep_document_file' => 'required|file|mimes:pdf|max:10240',
+                'incorporation_document_file' => 'nullable|file|mimes:pdf|max:10240',
+                'authorized_rep_document_file' => 'nullable|file|mimes:pdf|max:10240',
             ];
 
             $validated = $request->validate(array_merge($registrationRules, $applicationRules));
