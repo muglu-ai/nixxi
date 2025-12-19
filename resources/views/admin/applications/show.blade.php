@@ -512,6 +512,11 @@
                                 <div class="modal-content">
                                     <form method="POST" action="{{ route('admin.applications.nodal-officer.assign-port', $application->id) }}">
                                         @csrf
+                                        @php
+                                            $appData = $application->application_data ?? [];
+                                            $portSelection = $appData['port_selection'] ?? [];
+                                            $userSelectedPortCapacity = $portSelection['capacity'] ?? '';
+                                        @endphp
                                         <div class="modal-header">
                                             <h5 class="modal-title">Assign Port</h5>
                                             <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
@@ -519,11 +524,14 @@
                                         <div class="modal-body">
                                             <div class="mb-3">
                                                 <label for="assigned_port_capacity" class="form-label">Port Capacity <span class="text-danger">*</span></label>
-                                                <input type="text" class="form-control" id="assigned_port_capacity" name="assigned_port_capacity" required>
+                                                <input type="text" class="form-control" id="assigned_port_capacity" name="assigned_port_capacity" value="{{ $userSelectedPortCapacity }}" required readonly style="background-color: #e9ecef;">
+                                                @if($userSelectedPortCapacity)
+                                                    <small class="text-muted">Pre-filled from user's application</small>
+                                                @endif
                                             </div>
                                             <div class="mb-3">
                                                 <label for="assigned_port_number" class="form-label">Port Number</label>
-                                                <input type="text" class="form-control" id="assigned_port_number" name="assigned_port_number">
+                                                <input type="text" class="form-control" id="assigned_port_number" name="assigned_port_number" placeholder="Enter port number">
                                             </div>
                                         </div>
                                         <div class="modal-footer">
@@ -626,15 +634,17 @@
                                         <div class="modal-body">
                                             <div class="mb-3">
                                                 <label for="assigned_ip" class="form-label">Assigned IP <span class="text-danger">*</span></label>
-                                                <input type="text" class="form-control" id="assigned_ip" name="assigned_ip" required>
+                                                <input type="text" class="form-control" id="assigned_ip" name="assigned_ip" placeholder="Enter IP address" required>
                                             </div>
                                             <div class="mb-3">
                                                 <label for="customer_id" class="form-label">Customer ID <span class="text-danger">*</span></label>
-                                                <input type="text" class="form-control" id="customer_id" name="customer_id" required>
+                                                <input type="text" class="form-control" id="customer_id" name="customer_id" value="{{ $application->user->registrationid ?? '' }}" required readonly style="background-color: #e9ecef;">
+                                                <small class="text-muted">Auto-filled from user's registration ID</small>
                                             </div>
                                             <div class="mb-3">
                                                 <label for="membership_id" class="form-label">Membership ID <span class="text-danger">*</span></label>
-                                                <input type="text" class="form-control" id="membership_id" name="membership_id" required>
+                                                <input type="text" class="form-control" id="membership_id" name="membership_id" value="{{ $application->application_id }}" required readonly style="background-color: #e9ecef;">
+                                                <small class="text-muted">Auto-filled from application ID</small>
                                             </div>
                                         </div>
                                         <div class="modal-footer">
