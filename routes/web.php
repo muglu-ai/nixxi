@@ -135,6 +135,9 @@ Route::prefix('admin')->name('admin.')->middleware(['admin'])->group(function ()
     // Requests and Messages combined page
     Route::get('/requests-messages', [AdminController::class, 'requestsAndMessages'])->name('requests-messages');
 
+    // IX Points routes
+    Route::get('/ix-points', [AdminController::class, 'ixPoints'])->name('ix-points');
+
     // Application management routes
     Route::get('/applications', [AdminController::class, 'applications'])->name('applications');
     Route::get('/applications/{id}/document', [AdminController::class, 'serveDocument'])->name('applications.document');

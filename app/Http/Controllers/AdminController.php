@@ -10,6 +10,7 @@ use App\Models\Application;
 use App\Models\ApplicationStatusHistory;
 use App\Models\GstVerification;
 use App\Models\IxApplicationPricing;
+use App\Models\IxLocation;
 use App\Models\McaVerification;
 use App\Models\Message;
 use App\Models\PanVerification;
@@ -150,6 +151,11 @@ class AdminController extends Controller
 
             $recentUsers = Registration::latest()->take(10)->get();
 
+            // IX Points Statistics
+            $totalIxPoints = IxLocation::where('is_active', true)->count();
+            $edgeIxPoints = IxLocation::where('is_active', true)->where('node_type', 'edge')->count();
+            $metroIxPoints = IxLocation::where('is_active', true)->where('node_type', 'metro')->count();
+
             return view('admin.dashboard', compact(
                 'admin',
                 'totalUsers',
@@ -157,7 +163,10 @@ class AdminController extends Controller
                 'approvedApplications',
                 'pendingApplications',
                 'selectedRole',
-                'recentUsers'
+                'recentUsers',
+                'totalIxPoints',
+                'edgeIxPoints',
+                'metroIxPoints'
             ));
         } catch (QueryException $e) {
             Log::error('Database error loading Admin dashboard: '.$e->getMessage());
@@ -618,6 +627,49 @@ class AdminController extends Controller
             Log::error('Error deleting user: '.$e->getMessage());
 
             return back()->with('error', 'An error occurred while deleting the user. Please try again.');
+        }
+    }
+
+    /**
+     * Display IX points listing.
+     */
+    public function ixPoints(Request $request)
+    {
+        try {
+            $nodeType = $request->get('node_type'); // 'edge', 'metro', or null for all
+            
+            $query = IxLocation::where('is_active', true);
+            
+            if ($nodeType && in_array($nodeType, ['edge', 'metro'])) {
+                $query->where('node_type', $nodeType);
+            }
+            
+            $locations = $query->orderBy('node_type')
+                ->orderBy('state')
+                ->orderBy('name')
+                ->get();
+            
+            // Get application counts for each location
+            $locationStats = [];
+            foreach ($locations as $location) {
+                // Count applications for this location using JSON path
+                $applications = Application::where('application_type', 'IX')
+                    ->whereRaw('JSON_EXTRACT(application_data, "$.location.id") = ?', [$location->id])
+                    ->get();
+                
+                $locationStats[$location->id] = [
+                    'total_applications' => $applications->count(),
+                    'approved_applications' => $applications->whereIn('status', ['approved', 'payment_verified'])->count(),
+                    'pending_applications' => $applications->whereNotIn('status', ['approved', 'rejected', 'ceo_rejected', 'payment_verified'])->count(),
+                ];
+            }
+            
+            return view('admin.ix-points.index', compact('locations', 'nodeType', 'locationStats'));
+        } catch (Exception $e) {
+            Log::error('Error loading IX points: '.$e->getMessage());
+            
+            return redirect()->route('admin.dashboard')
+                ->with('error', 'Unable to load IX points right now.');
         }
     }
 
