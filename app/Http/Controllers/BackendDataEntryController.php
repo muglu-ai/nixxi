@@ -380,7 +380,7 @@ class BackendDataEntryController extends Controller
                 session()->forget('pan_verification_data');
 
                 // Return success with credentials
-                return redirect()->route('admin.backend-data-entry.index')
+                return redirect()->route('admin.backend-data-entry')
                     ->with('success', 'User registered and application created successfully!')
                     ->with('credentials', [
                         'registration_id' => $registrationId,
