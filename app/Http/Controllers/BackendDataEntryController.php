@@ -383,12 +383,13 @@ class BackendDataEntryController extends Controller
                 ]);
 
                 // Create payment transaction record
+                // Note: Using 'test' for now. After running migration 2025_12_20_180000, change to 'backend_entry'
                 $paymentTransaction = PaymentTransaction::create([
                     'user_id' => $registration->id,
                     'application_id' => $application->id,
                     'transaction_id' => $transactionId,
                     'payment_status' => 'success',
-                    'payment_mode' => 'backend_entry',
+                    'payment_mode' => 'test', // TODO: Change to 'backend_entry' after running migration
                     'amount' => $applicationFee,
                     'currency' => 'INR',
                     'product_info' => 'IX Application Fee',
