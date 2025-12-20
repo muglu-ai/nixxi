@@ -529,16 +529,12 @@
         // Show relevant fields
         if (memberType === 'isp') {
             ispContainer.style.display = 'block';
-            document.getElementById('licenseIspFile').required = true;
         } else if (memberType === 'vno') {
             vnoContainer.style.display = 'block';
-            document.getElementById('licenseVnoFile').required = true;
         } else if (memberType === 'cdn') {
             cdnContainer.style.display = 'block';
-            document.getElementById('cdnDeclarationFile').required = true;
         } else if (memberType !== 'isp' && memberType !== 'vno' && memberType !== 'cdn') {
             generalContainer.style.display = 'block';
-            document.getElementById('generalDeclarationFile').required = true;
         }
 
         if (memberType === 'others') {
