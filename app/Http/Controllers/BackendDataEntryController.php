@@ -3,11 +3,13 @@
 namespace App\Http\Controllers;
 
 use App\Models\Application;
+use App\Models\ApplicationStatusHistory;
 use App\Models\GstVerification;
 use App\Models\IxApplicationPricing;
 use App\Models\IxLocation;
 use App\Models\IxPortPricing;
 use App\Models\PanVerification;
+use App\Models\PaymentTransaction;
 use App\Models\Registration;
 use App\Models\UserKycProfile;
 use App\Services\IdfyPanService;
@@ -351,6 +353,9 @@ class BackendDataEntryController extends Controller
                 $applicationPricing = IxApplicationPricing::getActive();
                 $applicationFee = $applicationPricing ? (float) $applicationPricing->total_amount : 1000.00;
 
+                // Generate transaction ID for backend entry
+                $transactionId = 'BACKEND-'.now()->format('YmdHis').'-'.strtoupper(Str::random(8));
+                
                 $applicationData['payment'] = [
                     'status' => 'pending',
                     'plan' => $validated['billing_plan'],
@@ -360,19 +365,48 @@ class BackendDataEntryController extends Controller
                     'total_amount' => $applicationFee,
                     'currency' => 'INR',
                     'declaration_confirmed_at' => now('Asia/Kolkata')->toDateTimeString(),
+                    'transaction_id' => $transactionId,
+                    'payment_mode' => 'backend_entry',
+                    'completed_at' => now('Asia/Kolkata')->toDateTimeString(),
                 ];
 
-                // Create application
+                // Create application with submitted status (payment is already completed in backend entry)
                 $application = Application::create([
                     'user_id' => $registration->id,
                     'pan_card_no' => $panNo,
                     'application_id' => Application::generateApplicationId(),
                     'application_type' => 'IX',
-                    'status' => 'draft', // Will be submitted after payment
+                    'status' => 'submitted', // Directly submitted since payment is completed
                     'application_data' => $applicationData,
                     'gst_verification_id' => $gstVerification->id,
-                    'submitted_at' => null,
+                    'submitted_at' => now('Asia/Kolkata'),
                 ]);
+
+                // Create payment transaction record
+                $paymentTransaction = PaymentTransaction::create([
+                    'user_id' => $registration->id,
+                    'application_id' => $application->id,
+                    'transaction_id' => $transactionId,
+                    'payment_status' => 'success',
+                    'payment_mode' => 'backend_entry',
+                    'amount' => $applicationFee,
+                    'currency' => 'INR',
+                    'product_info' => 'IX Application Fee',
+                    'response_message' => 'Payment completed via backend data entry',
+                ]);
+
+                // Log status change - determine if admin or superadmin
+                $changedById = session('admin_id') ?? session('superadmin_id') ?? null;
+                $changedByType = session('admin_id') ? 'admin' : (session('superadmin_id') ? 'superadmin' : 'system');
+                
+                ApplicationStatusHistory::log(
+                    $application->id,
+                    null,
+                    'submitted',
+                    $changedByType,
+                    $changedById ?? 0,
+                    'Application created and submitted via backend data entry - Payment completed'
+                );
 
                 DB::commit();
 
