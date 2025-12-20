@@ -239,21 +239,28 @@ class BackendDataEntryController extends Controller
                     ->first();
 
                 if (! $gstVerification) {
+                    // Generate a unique request_id for backend entry
+                    $backendRequestId = 'BACKEND-'.now()->format('YmdHis').'-'.strtoupper(Str::random(8));
+                    
+                    // Ensure uniqueness
+                    while (GstVerification::where('request_id', $backendRequestId)->exists()) {
+                        $backendRequestId = 'BACKEND-'.now()->format('YmdHis').'-'.strtoupper(Str::random(8));
+                    }
+                    
                     // Create GST verification (auto-verified in backend)
                     $gstVerification = GstVerification::create([
                         'user_id' => $registration->id,
                         'gstin' => $gstin,
+                        'request_id' => $backendRequestId,
                         'is_verified' => true,
                         'status' => 'completed',
                         'verification_data' => ['backend_entry' => true],
-                        'verified_at' => now('Asia/Kolkata'),
                     ]);
                 } else {
                     // Update existing to verified
                     $gstVerification->update([
                         'is_verified' => true,
                         'status' => 'completed',
-                        'verified_at' => now('Asia/Kolkata'),
                     ]);
                 }
 
@@ -385,25 +392,83 @@ class BackendDataEntryController extends Controller
                     ]);
             } catch (Exception $e) {
                 DB::rollBack();
-                Log::error('Error in backend data entry: '.$e->getMessage());
+                Log::error('Error in backend data entry transaction: '.$e->getMessage(), [
+                    'exception' => $e,
+                    'trace' => $e->getTraceAsString(),
+                    'file' => $e->getFile(),
+                    'line' => $e->getLine(),
+                ]);
                 throw $e;
             }
         } catch (ValidationException $e) {
             return back()->withErrors($e->errors())->withInput();
         } catch (QueryException $e) {
-            Log::error('Database error in backend data entry: '.$e->getMessage());
+            $errorCode = $e->getCode();
+            $errorMessage = $e->getMessage();
+            $sqlState = $e->errorInfo[0] ?? null;
+            $sqlErrorCode = $e->errorInfo[1] ?? null;
+            $sqlErrorMessage = $e->errorInfo[2] ?? null;
 
-            return back()->with('error', 'Database connection error. Please try again later.')
+            Log::error('Database QueryException in backend data entry', [
+                'message' => $errorMessage,
+                'code' => $errorCode,
+                'sql_state' => $sqlState,
+                'sql_error_code' => $sqlErrorCode,
+                'sql_error_message' => $sqlErrorMessage,
+                'sql' => $e->getSql() ?? null,
+                'bindings' => $e->getBindings() ?? null,
+                'trace' => $e->getTraceAsString(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ]);
+
+            // Check if it's actually a connection error
+            $isConnectionError = str_contains($errorMessage, 'Connection') ||
+                                 str_contains($errorMessage, 'No connection could be made') ||
+                                 in_array($sqlErrorCode, ['2002', '1045', '2006', 'HY000']) ||
+                                 str_contains($sqlState ?? '', 'HY000');
+
+            if ($isConnectionError) {
+                return back()->with('error', 'Database connection error. Please try again later.')
+                    ->withInput();
+            }
+
+            // For other database errors, show a more helpful message
+            return back()->with('error', 'Database error occurred. Please check the logs for details or contact support.')
                 ->withInput();
         } catch (PDOException $e) {
-            Log::error('PDO error in backend data entry: '.$e->getMessage());
+            $errorCode = $e->getCode();
+            $errorMessage = $e->getMessage();
 
-            return back()->with('error', 'Database connection error. Please try again later.')
+            Log::error('PDO Exception in backend data entry', [
+                'message' => $errorMessage,
+                'code' => $errorCode,
+                'trace' => $e->getTraceAsString(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ]);
+
+            $isConnectionError = str_contains($errorMessage, 'Connection') ||
+                                 str_contains($errorMessage, 'No connection could be made') ||
+                                 str_contains($errorMessage, 'SQLSTATE[HY000]');
+
+            if ($isConnectionError) {
+                return back()->with('error', 'Database connection error. Please try again later.')
+                    ->withInput();
+            }
+
+            return back()->with('error', 'Database error occurred. Please check the logs for details or contact support.')
                 ->withInput();
         } catch (Exception $e) {
-            Log::error('Error in backend data entry: '.$e->getMessage());
+            Log::error('General Exception in backend data entry', [
+                'message' => $e->getMessage(),
+                'code' => $e->getCode(),
+                'trace' => $e->getTraceAsString(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ]);
 
-            return back()->with('error', 'An error occurred. Please try again.')
+            return back()->with('error', 'An error occurred: '.$e->getMessage().'. Please try again or contact support.')
                 ->withInput();
         }
     }
