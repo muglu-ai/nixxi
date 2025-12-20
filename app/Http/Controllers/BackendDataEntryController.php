@@ -73,12 +73,24 @@ class BackendDataEntryController extends Controller
             $result = $idfyService->verifyPan($panNo, $fullName, $dateOfBirth);
 
             if ($result['success']) {
-                session(['pan_verification_data' => $result['data']]);
+                // Structure session data to match what the store method expects
+                $panVerificationData = [
+                    'request_id' => $result['request_id'] ?? null,
+                    'status' => $result['status'] ?? 'completed',
+                    'pan_status' => $result['pan_status'] ?? null,
+                    'name_match' => $result['name_match'] ?? false,
+                    'dob_match' => $result['dob_match'] ?? false,
+                    'is_verified' => true,
+                    'source_output' => $result['source_output'] ?? null,
+                    'full_result' => $result['full_result'] ?? null,
+                ];
+
+                session(['pan_verification_data' => $panVerificationData]);
 
                 return response()->json([
                     'success' => true,
                     'message' => 'PAN verified successfully!',
-                    'data' => $result['data'],
+                    'data' => $panVerificationData,
                 ]);
             }
 
@@ -92,11 +104,14 @@ class BackendDataEntryController extends Controller
                 'message' => $e->getMessage(),
             ], 422);
         } catch (Exception $e) {
-            Log::error('Error verifying PAN in backend data entry: '.$e->getMessage());
+            Log::error('Error verifying PAN in backend data entry: '.$e->getMessage(), [
+                'exception' => $e,
+                'trace' => $e->getTraceAsString(),
+            ]);
 
             return response()->json([
                 'success' => false,
-                'message' => 'An error occurred during PAN verification.',
+                'message' => 'An error occurred during PAN verification: '.$e->getMessage(),
             ], 500);
         }
     }

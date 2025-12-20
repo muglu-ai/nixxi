@@ -163,6 +163,7 @@ class IdfyPanService
 
                 return [
                     'success' => $isValid,
+                    'request_id' => $requestId,
                     'pan_status' => $panStatus,
                     'name_match' => $nameMatch,
                     'dob_match' => $dobMatch,
@@ -171,6 +172,7 @@ class IdfyPanService
                         ? 'PAN verified successfully'
                         : 'PAN verification failed: '.($panStatus ?: 'Invalid PAN or details mismatch'),
                     'source_output' => $sourceOutput,
+                    'full_result' => $statusResult['task'] ?? null,
                 ];
             } elseif ($statusResult['status'] === 'failed') {
                 throw new Exception('PAN verification task failed');
