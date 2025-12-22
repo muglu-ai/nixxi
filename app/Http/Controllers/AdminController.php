@@ -2636,9 +2636,26 @@ class AdminController extends Controller
                 
                 // Due date is the billing end date
                 $dueDate = $billingEndDate;
+                
+                Log::info("Billing period calculation for application {$application->id}: billingPlan='{$billingPlan}', startDate={$billingStartDate->format('Y-m-d')}, endDate={$billingEndDate->format('Y-m-d')}, dueDate={$dueDate->format('Y-m-d')}, billingPeriod='{$billingPeriod}'");
             } else {
-                // Fallback: 1 month from current date if no service activation date
-                $dueDate = now('Asia/Kolkata')->addMonth();
+                // Fallback: Calculate based on billing plan if no service activation date
+                $fallbackStartDate = now('Asia/Kolkata');
+                switch ($billingPlan) {
+                    case 'annual':
+                    case 'arc':
+                        $dueDate = $fallbackStartDate->copy()->addYear();
+                        break;
+                    case 'quarterly':
+                        $dueDate = $fallbackStartDate->copy()->addMonths(3);
+                        break;
+                    case 'monthly':
+                    case 'mrc':
+                    default:
+                        $dueDate = $fallbackStartDate->copy()->addMonth();
+                        break;
+                }
+                Log::warning("No service_activation_date for application {$application->id}, using fallback due date calculation: {$dueDate->format('Y-m-d')} for billing plan '{$billingPlan}'");
             }
             // Check for plan change requests (pending or approved with future effective_from)
             $pendingPlanChange = \App\Models\PlanChangeRequest::where('application_id', $application->id)
@@ -2878,12 +2895,17 @@ class AdminController extends Controller
                 'udf3' => $invoiceNumber,
             ]);
             
+            // Ensure due_date is properly formatted as date string
+            $dueDateFormatted = $dueDate instanceof \Carbon\Carbon ? $dueDate->format('Y-m-d') : $dueDate;
+            
+            Log::info("Creating invoice for application {$application->id}: invoiceNumber='{$invoiceNumber}', invoiceDate=" . now('Asia/Kolkata')->format('Y-m-d') . ", dueDate={$dueDateFormatted}, billingPeriod='{$billingPeriod}', billingPlan='{$billingPlan}'");
+            
             // Create invoice record
             $invoice = Invoice::create([
                 'application_id' => $application->id,
                 'invoice_number' => $invoiceNumber,
                 'invoice_date' => now('Asia/Kolkata'),
-                'due_date' => $dueDate,
+                'due_date' => $dueDateFormatted,
                 'billing_period' => $billingPeriod,
                 'amount' => $amount,
                 'gst_amount' => $gstAmount,
@@ -2893,6 +2915,8 @@ class AdminController extends Controller
                 'payu_payment_link' => json_encode($paymentData), // Store full payment data
                 'generated_by' => $admin->id,
             ]);
+            
+            Log::info("Invoice created successfully: ID={$invoice->id}, due_date={$invoice->due_date}");
             
             // Update service_activation_date to billing end date for next billing cycle
             if ($billingEndDate && $application->service_activation_date) {
@@ -3278,6 +3302,75 @@ class AdminController extends Controller
             'gst_amount' => $gstAmount,
             'total_amount' => $totalAmount,
         ];
+    }
+
+    /**
+     * Recalculate invoice due date using latest calculation logic.
+     * This ensures old invoices show correct due dates after fixes.
+     */
+    private function recalculateInvoiceDueDate(Application $application, ?Invoice $invoice = null): \Carbon\Carbon
+    {
+        $applicationData = $application->application_data ?? [];
+        
+        // Get billing cycle
+        $billingPlanRaw = $application->billing_cycle ?? ($applicationData['port_selection']['billing_plan'] ?? 'monthly');
+        $billingPlan = strtolower(trim($billingPlanRaw));
+        if (in_array($billingPlan, ['arc', 'annual'])) {
+            $billingPlan = 'annual';
+        } elseif (in_array($billingPlan, ['mrc', 'monthly'])) {
+            $billingPlan = 'monthly';
+        } elseif ($billingPlan === 'quarterly') {
+            $billingPlan = 'quarterly';
+        } else {
+            $billingPlan = 'monthly';
+        }
+        
+        // Determine start date
+        $startDate = null;
+        
+        if ($invoice) {
+            // Check for previous paid invoices to determine start date
+            $lastPaidInvoice = Invoice::where('application_id', $application->id)
+                ->where('status', 'paid')
+                ->where('id', '<', $invoice->id)
+                ->latest('invoice_date')
+                ->first();
+            
+            if ($lastPaidInvoice && $lastPaidInvoice->due_date) {
+                // Subsequent invoice: start from last invoice's due date
+                $startDate = \Carbon\Carbon::parse($lastPaidInvoice->due_date);
+            } elseif ($application->service_activation_date) {
+                // First invoice: start from service activation date
+                $startDate = \Carbon\Carbon::parse($application->service_activation_date);
+            } else {
+                // Fallback: use invoice date
+                $startDate = \Carbon\Carbon::parse($invoice->invoice_date);
+            }
+        } elseif ($application->service_activation_date) {
+            // No invoice yet, use service activation date
+            $startDate = \Carbon\Carbon::parse($application->service_activation_date);
+        } else {
+            // Fallback: use current date
+            $startDate = now('Asia/Kolkata');
+        }
+        
+        // Calculate end date (due date) based on billing cycle
+        switch ($billingPlan) {
+            case 'annual':
+            case 'arc':
+                $dueDate = $startDate->copy()->addYear();
+                break;
+            case 'quarterly':
+                $dueDate = $startDate->copy()->addMonths(3);
+                break;
+            case 'monthly':
+            case 'mrc':
+            default:
+                $dueDate = $startDate->copy()->addMonth();
+                break;
+        }
+        
+        return $dueDate;
     }
 
     /**
