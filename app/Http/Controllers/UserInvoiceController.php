@@ -106,6 +106,24 @@ class UserInvoiceController extends Controller
                         'company_status' => $gstVerification->company_status,
                         'primary_address' => $gstVerification->primary_address,
                     ];
+                    
+                    // Parse primary address if it's a JSON string
+                    if ($gstVerification->verification_data) {
+                        $verificationData = is_string($gstVerification->verification_data)
+                            ? json_decode($gstVerification->verification_data, true)
+                            : $gstVerification->verification_data;
+                        
+                        if (isset($verificationData['result']['source_output']['principal_place_of_business_fields']['principal_place_of_business_address'])) {
+                            $address = $verificationData['result']['source_output']['principal_place_of_business_fields']['principal_place_of_business_address'];
+                            $companyDetails['pradr'] = [
+                                'addr' => trim(($address['door_number'] ?? '').' '.($address['building_name'] ?? '').' '.($address['street'] ?? '').' '.($address['location'] ?? '').' '.($address['dst'] ?? '').' '.($address['city'] ?? '').' '.($address['state_name'] ?? '').' '.($address['pincode'] ?? '')),
+                                'state_name' => $address['state_name'] ?? null,
+                            ];
+                            $companyDetails['state_info'] = [
+                                'name' => $address['state_name'] ?? $gstVerification->state,
+                            ];
+                        }
+                    }
                 }
                 
                 $applicationPricing = \App\Models\IxApplicationPricing::getActive();
@@ -120,6 +138,7 @@ class UserInvoiceController extends Controller
                     'invoiceDate' => $invoice->invoice_date->format('d/m/Y'),
                     'dueDate' => $invoice->due_date->format('d/m/Y'),
                     'invoice' => $invoice,
+                    'gstVerification' => $gstVerification,
                 ])->setPaper('a4', 'portrait')
                     ->setOption('enable-local-file-access', true);
                 

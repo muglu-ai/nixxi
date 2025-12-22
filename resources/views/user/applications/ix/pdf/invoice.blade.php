@@ -3,7 +3,6 @@
 <head>
     <meta charset="utf-8">
     <title>Tax Invoice - {{ $invoiceNumber }}</title>
-    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700&display=swap" rel="stylesheet">
     <style>
         * {
             margin: 0;
@@ -15,435 +14,466 @@
             margin: 6mm;
         }
         body {
-            font-family: 'Nunito', 'Trebuchet MS', 'Lucida Sans Unicode', 'Lucida Grande', sans-serif;
+            font-family: Arial, sans-serif;
             font-size: 10px;
             line-height: 1.3;
-            color: #2c3e50;
-            padding: 6px;
-            background: linear-gradient(to bottom, #f8f9fa 0%, #ffffff 100%);
+            color: #000;
+            background: #fff;
         }
-        .invoice-container {
-            background: #ffffff;
-            border-radius: 12px;
-            padding: 15px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-        }
-        .invoice-header {
-            text-align: center;
-            margin-bottom: 15px;
-            border-bottom: 3px solid #3498db;
-            padding-bottom: 12px;
-            border-radius: 8px 8px 0 0;
-        }
-        .invoice-header h1 {
-            font-size: 20px;
-            font-weight: 700;
-            margin-bottom: 4px;
-            color: #2c3e50;
-        }
-        .invoice-header h2 {
-            font-size: 11px;
-            font-weight: 600;
-            margin-bottom: 4px;
-            color: #7f8c8d;
-        }
-        .nixi-logo {
-            text-align: right;
-            margin-bottom: 8px;
-            font-size: 16px;
-            font-weight: 700;
-            color: #27ae60;
-        }
-        .two-column {
+        .header-section {
             display: table;
             width: 100%;
-            margin-bottom: 12px;
+            margin-bottom: 8px;
         }
-        .column {
+        .header-left {
+            display: table-cell;
+            width: 70%;
+            vertical-align: top;
+        }
+        .header-right {
+            display: table-cell;
+            width: 30%;
+            vertical-align: top;
+            text-align: right;
+            font-size: 9px;
+            font-weight: bold;
+        }
+        .nixi-logo {
+            font-size: 24px;
+            font-weight: bold;
+            color: #0066cc;
+            margin-bottom: 2px;
+        }
+        .nixi-subtitle {
+            font-size: 8px;
+            color: #666;
+            text-transform: lowercase;
+        }
+        .tax-invoice-title {
+            font-size: 16px;
+            font-weight: bold;
+            margin-top: 8px;
+        }
+        .buyer-seller-section {
+            display: table;
+            width: 100%;
+            margin-bottom: 8px;
+            border: 1px solid #000;
+        }
+        .buyer-column {
             display: table-cell;
             width: 50%;
             vertical-align: top;
-            padding: 10px;
-            font-size: 10px;
-            background: #f8f9fa;
-            border-radius: 8px;
-            margin: 0 5px;
-        }
-        .column:first-child {
-            margin-right: 5px;
-        }
-        .column:last-child {
-            margin-left: 5px;
-        }
-        .section-title {
-            font-weight: 700;
-            font-size: 12px;
-            margin-bottom: 8px;
-            color: #2c3e50;
-            padding-bottom: 5px;
-            border-bottom: 2px solid #3498db;
-        }
-        .row {
-            margin-bottom: 4px;
-            font-size: 9px;
-        }
-        .label {
-            font-weight: 700;
-            display: inline-block;
-            width: 100px;
-            color: #34495e;
-        }
-        .invoice-details {
-            margin-bottom: 12px;
-        }
-        .invoice-details table {
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 9px;
-            border-radius: 8px;
-            overflow: hidden;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-        .invoice-details td {
             padding: 6px;
-            border: 1px solid #dee2e6;
+            border-right: 1px solid #000;
+        }
+        .seller-column {
+            display: table-cell;
+            width: 50%;
+            vertical-align: top;
+            padding: 6px;
+        }
+        .section-label {
+            font-weight: bold;
+            font-size: 10px;
+            margin-bottom: 4px;
+        }
+        .detail-row {
             font-size: 9px;
-            background: #ffffff;
-            font-weight: 600;
+            margin-bottom: 3px;
+            line-height: 1.4;
         }
-        .invoice-details td:first-child {
-            font-weight: 700;
-            width: 35%;
-            background: #e9ecef;
+        .detail-label {
+            font-weight: bold;
+            display: inline-block;
+            min-width: 80px;
         }
-        .description-table {
+        .invoice-info-table {
             width: 100%;
             border-collapse: collapse;
-            margin-bottom: 12px;
-            font-size: 10px;
-            border-radius: 8px;
-            overflow: hidden;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-        .description-table th,
-        .description-table td {
-            border: 1px solid #dee2e6;
-            padding: 7px;
-            text-align: left;
+            margin-bottom: 8px;
             font-size: 9px;
-            font-weight: 600;
         }
-        .description-table th {
-            background: linear-gradient(to bottom, #3498db, #2980b9);
-            color: #ffffff;
-            font-weight: 700;
+        .invoice-info-table td {
+            padding: 4px;
+            border: 1px solid #000;
         }
-        .description-table td {
-            background: #ffffff;
-            font-weight: 600;
+        .invoice-info-table td:first-child {
+            font-weight: bold;
+            width: 25%;
         }
-        .text-right {
+        .particulars-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 8px;
+            font-size: 9px;
+        }
+        .particulars-table th,
+        .particulars-table td {
+            padding: 5px;
+            border: 1px solid #000;
+            text-align: left;
+        }
+        .particulars-table th {
+            background-color: #f0f0f0;
+            font-weight: bold;
+            text-align: center;
+        }
+        .particulars-table td {
+            text-align: center;
+        }
+        .particulars-table td:nth-child(5),
+        .particulars-table td:nth-child(6) {
             text-align: right;
         }
-        .amount-section {
-            margin-top: 10px;
-            font-size: 10px;
-            background: #f8f9fa;
-            padding: 8px;
-            border-radius: 8px;
+        .amount-summary {
+            width: 100%;
+            margin-bottom: 8px;
+            font-size: 9px;
         }
         .amount-row {
             display: table;
             width: 100%;
-            margin-bottom: 4px;
+            margin-bottom: 2px;
         }
         .amount-label {
             display: table-cell;
-            width: 70%;
+            width: 80%;
             text-align: right;
-            padding-right: 8px;
-            font-weight: 700;
-            color: #2c3e50;
+            padding-right: 10px;
+            font-weight: bold;
         }
         .amount-value {
             display: table-cell;
-            width: 30%;
+            width: 20%;
             text-align: right;
-            color: #27ae60;
-            font-weight: 700;
+            font-weight: bold;
         }
         .total-row {
-            border-top: 3px solid #3498db;
-            border-bottom: 3px solid #3498db;
-            padding: 8px 0;
-            font-weight: 700;
-            font-size: 12px;
-            background: #e8f4f8;
+            border-top: 2px solid #000;
+            border-bottom: 2px solid #000;
+            padding: 4px 0;
+            font-size: 10px;
         }
-        .bank-details {
-            margin-top: 10px;
+        .amount-in-words {
+            font-size: 9px;
+            font-style: italic;
+            margin-bottom: 8px;
+            text-align: right;
+        }
+        .payment-section {
             display: table;
             width: 100%;
+            margin-bottom: 8px;
         }
-        .bank-left {
+        .payment-left {
             display: table-cell;
             width: 50%;
             vertical-align: top;
-            padding-right: 6px;
+            padding-right: 5px;
         }
-        .bank-right {
+        .payment-right {
             display: table-cell;
             width: 50%;
             vertical-align: top;
-            padding-left: 6px;
+            padding-left: 5px;
         }
-        .bank-box {
-            border: 2px solid #27ae60;
-            padding: 8px;
-            font-size: 8px;
-            border-radius: 8px;
-            background: #f0f8f4;
-        }
-        .bank-box .row {
-            font-weight: 600;
-        }
-        .terms {
-            margin-top: 10px;
+        .payment-box {
+            border: 1px solid #000;
+            padding: 6px;
             font-size: 8px;
             line-height: 1.4;
-            background: #fff9e6;
-            padding: 8px;
-            border-radius: 8px;
-            border-left: 4px solid #f39c12;
         }
-        .terms ol {
-            margin-left: 20px;
-        }
-        .terms li {
+        .payment-title {
+            font-weight: bold;
             margin-bottom: 4px;
         }
-        .purchase-details {
-            background: #f0f8ff;
-            padding: 10px;
-            border-radius: 8px;
-            margin-bottom: 12px;
-            border-left: 4px solid #3498db;
+        .or-separator {
+            text-align: center;
+            font-weight: bold;
+            margin: 4px 0;
         }
-        .purchase-details .row {
-            margin-bottom: 6px;
+        .terms-section {
+            margin-bottom: 8px;
+            font-size: 8px;
+            line-height: 1.4;
+        }
+        .terms-title {
+            font-weight: bold;
+            margin-bottom: 4px;
+        }
+        .terms-list {
+            margin-left: 15px;
+        }
+        .terms-list li {
+            margin-bottom: 2px;
+        }
+        .signature-section {
+            margin-top: 8px;
+            font-size: 8px;
+            text-align: center;
+        }
+        .signature-row {
+            margin-bottom: 3px;
+        }
+        .promo-banner {
+            background-color: #0066cc;
+            color: #fff;
+            padding: 8px;
+            margin: 8px 0;
+            text-align: center;
+            font-size: 8px;
+            font-weight: bold;
+        }
+        .text-right {
+            text-align: right;
         }
     </style>
 </head>
 <body>
-    <div class="invoice-container">
-        <div class="nixi-logo">
-            <div>nixi</div>
-            <div style="font-size: 9px; color: #7f8c8d;">Empowering Netizens</div>
+    <!-- Header Section -->
+    <div class="header-section">
+        <div class="header-left">
+            <div class="nixi-logo">nixi</div>
+            <div class="nixi-subtitle">national internet exchange of india</div>
+            <div class="tax-invoice-title">Tax Invoice</div>
         </div>
-
-        <div class="invoice-header">
-            <h1>Tax Invoice</h1>
-            <h2>Invoice for Internet Exchange (IX) Services (ORIGINAL FOR RECIPIENT)</h2>
+        <div class="header-right">
+            ORIGINAL FOR RECEIPIENT
         </div>
+    </div>
 
-        <div class="two-column">
-            <div class="column">
-                <div class="section-title">BUYER</div>
-                <div class="row"><span class="label">Name:</span> {{ $companyDetails['legal_name'] ?? $companyDetails['trade_name'] ?? $user->fullname ?? 'N/A' }}</div>
-                <div class="row"><span class="label">Address:</span> {{ $companyDetails['pradr']['addr'] ?? $companyDetails['primary_address'] ?? 'N/A' }}</div>
-                <div class="row"><span class="label">Attn:</span> {{ $companyDetails['legal_name'] ?? $companyDetails['trade_name'] ?? $user->fullname ?? 'N/A' }}</div>
-                <div class="row"><span class="label">GSTIN:</span> {{ $data['gstin'] ?? 'N/A' }}</div>
-                <div class="row"><span class="label">PAN:</span> {{ $companyDetails['pan'] ?? $user->pancardno ?? 'N/A' }}</div>
+    <!-- Buyer and Seller Section -->
+    <div class="buyer-seller-section">
+        <div class="buyer-column">
+            <div class="section-label">Buyer:</div>
+            <div class="detail-row">
+                <span class="detail-label">Buyer:</span>
+                {{ $companyDetails['legal_name'] ?? $companyDetails['trade_name'] ?? $user->fullname ?? 'N/A' }}
             </div>
-            <div class="column">
-                <div class="section-title">SELLER</div>
-                <div class="row"><span class="label">Name:</span> NATIONAL INTERNET EXCHANGE OF INDIA</div>
-                <div class="row"><span class="label">Address:</span> B-901, 9TH FLOOR TOWER B, World Trade Centre, NAUROJI NAGAR, New Delhi, Delhi, 110029</div>
-                <div class="row"><span class="label">PAN:</span> AABCN9308A</div>
-                <div class="row"><span class="label">CIN:</span> U72900DL2003NPL120999</div>
-                <div class="row"><span class="label">GSTIN:</span> 07AABCN9308A1ZT</div>
-                <div class="row"><span class="label">HSN:</span> 998319</div>
-                <div class="row"><span class="label">Category:</span> Other IT Services N.E.C</div>
+            <div class="detail-row">
+                <span class="detail-label">Address:</span>
+                {{ $companyDetails['pradr']['addr'] ?? $companyDetails['primary_address'] ?? ($user->address ?? 'N/A') }}
+            </div>
+            <div class="detail-row">
+                <span class="detail-label">Phone:</span>
+                {{ $user->mobile ?? 'N/A' }}
+            </div>
+            <div class="detail-row">
+                <span class="detail-label">GSTIN/UIN:</span>
+                {{ $data['gstin'] ?? ($gstVerification->gstin ?? 'N/A') }}
+            </div>
+            <div class="detail-row">
+                <span class="detail-label">PAN:</span>
+                {{ $companyDetails['pan'] ?? $user->pancardno ?? 'N/A' }}
+            </div>
+            <div class="detail-row">
+                <span class="detail-label">Attn:</span>
+                {{ $companyDetails['legal_name'] ?? $companyDetails['trade_name'] ?? $user->fullname ?? 'N/A' }}
+            </div>
+            <div class="detail-row">
+                <span class="detail-label">Place of Supply:</span>
+                {{ $companyDetails['state_info']['name'] ?? $companyDetails['state'] ?? ($gstVerification->state ?? 'N/A') }}
             </div>
         </div>
-
-        <div class="invoice-details">
-            <table>
-                <tr>
-                    <td>Invoice No.</td>
-                    <td>{{ $invoiceNumber }}</td>
-                    <td>Application ID</td>
-                    <td>{{ $application->application_id ?? 'N/A' }}</td>
-                </tr>
-                <tr>
-                    <td>Invoice Date</td>
-                    <td>{{ $invoiceDate }}</td>
-                    <td>Due Date</td>
-                    <td>{{ $dueDate }}</td>
-                </tr>
-                <tr>
-                    <td>Place of Supply</td>
-                    <td>{{ $companyDetails['state_info']['name'] ?? $companyDetails['state'] ?? 'N/A' }}</td>
-                    <td>Reverse Charge Applicable</td>
-                    <td>NO</td>
-                </tr>
-            </table>
+        <div class="seller-column">
+            <div class="section-label">Seller:</div>
+            <div class="detail-row">
+                <span class="detail-label">Seller:</span>
+                National Internet Exchange of India
+            </div>
+            <div class="detail-row">
+                <span class="detail-label">PAN:</span>
+                AABCN9308A
+            </div>
+            <div class="detail-row">
+                <span class="detail-label">CIN:</span>
+                U72900DL2003NPL120999
+            </div>
+            <div class="detail-row">
+                <span class="detail-label">GSTIN:</span>
+                09AABCN9308A1ZP
+            </div>
+            <div class="detail-row">
+                <span class="detail-label">HSN CODE:</span>
+                998319
+            </div>
+            <div class="detail-row">
+                <span class="detail-label">Category of Service:</span>
+                Other Information Technology Services N.E.C.
+            </div>
         </div>
+    </div>
 
-        <div class="purchase-details">
-            <div class="section-title">Purchase Details</div>
-            @if(!empty($data['port_selection']))
-                <div class="row"><span class="label">Port Capacity:</span> {{ $data['port_selection']['capacity'] ?? 'N/A' }}</div>
-                @if(!empty($data['port_selection']['billing_plan']))
-                    @php
-                        $billingPlan = $data['port_selection']['billing_plan'];
-                        $planName = match($billingPlan) {
-                            'arc' => 'Annual (ARC)',
-                            'mrc' => 'Monthly (MRC)',
-                            'quarterly' => 'Quarterly',
-                            default => ucfirst($billingPlan)
-                        };
-                    @endphp
-                    <div class="row"><span class="label">Billing Plan:</span> {{ $planName }}</div>
-                @endif
-            @endif
-            @if(!empty($application->assigned_port_capacity))
-                <div class="row"><span class="label">Assigned Port:</span> {{ $application->assigned_port_capacity }}@if($application->assigned_port_number) (Port #{{ $application->assigned_port_number }})@endif</div>
-            @endif
-            @if(!empty($application->assigned_ip))
-                <div class="row"><span class="label">Assigned IP:</span> {{ $application->assigned_ip }}</div>
-            @endif
-            @if(!empty($data['ip_prefix']['count']))
-                <div class="row"><span class="label">No. of IP Prefixes:</span> {{ $data['ip_prefix']['count'] }}</div>
-            @endif
-            @if(!empty($data['location']['name']))
-                <div class="row"><span class="label">NIXI Location:</span> {{ $data['location']['name'] }}@if(!empty($data['location']['state'])), {{ $data['location']['state'] }}@endif</div>
-            @endif
+    <!-- Invoice Information Table -->
+    <table class="invoice-info-table">
+        <tr>
+            <td>Invoice No:</td>
+            <td>{{ $invoiceNumber }}</td>
+            <td>Customer Id:</td>
+            <td>{{ $application->customer_id ?? $application->membership_id ?? $application->application_id ?? 'N/A' }}</td>
+        </tr>
+        <tr>
+            <td>Invoice Date (dd/mm/yyyy):</td>
+            <td>{{ $invoiceDate }}</td>
+            <td>Invoice Due Date (dd/mm/yyyy):</td>
+            <td>{{ $dueDate }}</td>
+        </tr>
+    </table>
+
+    <!-- Particulars Table -->
+    @php
+        // Get invoice amounts
+        $amount = $invoice ? (float)$invoice->amount : 0;
+        $gstAmount = $invoice ? (float)$invoice->gst_amount : 0;
+        $totalAmount = $invoice ? (float)$invoice->total_amount : 0;
+        
+        // Get billing period from invoice or calculate from application
+        $billingPeriod = $invoice->billing_period ?? '';
+        if (!$billingPeriod && $invoice && $invoice->invoice_date && $invoice->due_date) {
+            $startDate = \Carbon\Carbon::parse($invoice->invoice_date);
+            $endDate = \Carbon\Carbon::parse($invoice->due_date);
+            $billingPeriod = $startDate->format('d/m/Y') . ' to ' . $endDate->format('d/m/Y');
+        }
+        
+        // Get port capacity
+        $portCapacity = $application->assigned_port_capacity ?? ($data['port_selection']['capacity'] ?? 'N/A');
+        
+        // Format port capacity for display (e.g., "1000 Mbps")
+        if (strpos($portCapacity, 'Gig') !== false) {
+            $portCapacity = str_replace('Gig', ' Gbps', $portCapacity);
+        } elseif (strpos($portCapacity, 'Mbps') === false && is_numeric(str_replace([' ', 'Mbps', 'Gbps'], '', $portCapacity))) {
+            $portCapacity = $portCapacity . ' Mbps';
+        }
+    @endphp
+
+    <table class="particulars-table">
+        <thead>
+            <tr>
+                <th>S.N.o.</th>
+                <th>Particulars</th>
+                <th>Quantity</th>
+                <th>Peering Capacity</th>
+                <th>Peering Charges</th>
+                <th>Amount()</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td>1</td>
+                <td>Port Charges For {{ $billingPeriod ?: ($invoiceDate . ' to ' . $dueDate) }}</td>
+                <td>1</td>
+                <td>{{ $portCapacity }}</td>
+                <td>{{ number_format($amount, 2) }}</td>
+                <td>{{ number_format($amount, 2) }}</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <!-- Amount Summary -->
+    <div class="amount-summary">
+        <div class="amount-row">
+            <div class="amount-label">IGST(18%):</div>
+            <div class="amount-value">{{ number_format($gstAmount, 2) }}</div>
         </div>
+        <div class="amount-row total-row">
+            <div class="amount-label">Total Amount Due:</div>
+            <div class="amount-value">{{ number_format($totalAmount, 2) }}</div>
+        </div>
+    </div>
 
+    <!-- Amount in Words -->
+    <div class="amount-in-words">
         @php
-            // Calculate amounts
-            $portAmount = (float) ($data['port_selection']['amount'] ?? 0);
-            $applicationFee = (float) ($data['payment']['application_fee'] ?? $applicationPricing->application_fee ?? 1000.00);
-            $gstPercentage = (float) ($data['payment']['gst_percentage'] ?? $applicationPricing->gst_percentage ?? 18.00);
+            $ones = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
+            $tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
             
-            // Calculate GST on application fee only (port fee may already include GST or be separate)
-            $gstAmount = ($applicationFee * $gstPercentage) / 100;
-            $subTotal = $portAmount + $applicationFee;
-            $totalWithGst = $subTotal + $gstAmount;
+            function convertToWords($num, $ones, $tens) {
+                if ($num < 20) return $ones[$num];
+                if ($num < 100) return $tens[floor($num / 10)] . ($num % 10 ? ' ' . $ones[$num % 10] : '');
+                if ($num < 1000) return $ones[floor($num / 100)] . ' Hundred' . ($num % 100 ? ' ' . convertToWords($num % 100, $ones, $tens) : '');
+                if ($num < 100000) return convertToWords(floor($num / 1000), $ones, $tens) . ' Thousand' . ($num % 1000 ? ' ' . convertToWords($num % 1000, $ones, $tens) : '');
+                if ($num < 10000000) return convertToWords(floor($num / 100000), $ones, $tens) . ' Lakh' . ($num % 100000 ? ' ' . convertToWords($num % 100000, $ones, $tens) : '');
+                return convertToWords(floor($num / 10000000), $ones, $tens) . ' Crore' . ($num % 10000000 ? ' ' . convertToWords($num % 10000000, $ones, $tens) : '');
+            }
             
-            // Round total
-            $totalAmount = round($totalWithGst, 2);
+            $amountInWords = '';
+            if ($totalAmount > 0) {
+                $amountInWords = convertToWords((int)$totalAmount, $ones, $tens);
+                // Handle decimal part
+                $decimalPart = round(($totalAmount - (int)$totalAmount) * 100);
+                if ($decimalPart > 0) {
+                    $amountInWords .= ' and ' . convertToWords($decimalPart, $ones, $tens) . ' Paise';
+                }
+            }
         @endphp
+        <strong>Rupees: {{ ucwords($amountInWords ?: 'Zero') }} Only</strong>
+    </div>
 
-        <table class="description-table">
-            <thead>
-                <tr>
-                    <th>Description</th>
-                    <th class="text-right">Amount (Rs.)</th>
-                </tr>
-            </thead>
-            <tbody>
-                @if($portAmount > 0)
-                <tr>
-                    <td>
-                        Port Connectivity Service - {{ $data['port_selection']['capacity'] ?? 'N/A' }}
-                        @if(!empty($data['port_selection']['billing_plan']))
-                            ({{ match($data['port_selection']['billing_plan']) {
-                                'arc' => 'Annual',
-                                'mrc' => 'Monthly',
-                                'quarterly' => 'Quarterly',
-                                default => ucfirst($data['port_selection']['billing_plan'])
-                            } }})
-                        @endif
-                    </td>
-                    <td class="text-right">{{ number_format($portAmount, 2) }}</td>
-                </tr>
-                @endif
-                <tr>
-                    <td>IX Application Fee</td>
-                    <td class="text-right">{{ number_format($applicationFee, 2) }}</td>
-                </tr>
-                <tr>
-                    <td><strong>Subtotal</strong></td>
-                    <td class="text-right"><strong>{{ number_format($subTotal, 2) }}</strong></td>
-                </tr>
-                <tr>
-                    <td>IGST ({{ number_format($gstPercentage, 2) }}%)</td>
-                    <td class="text-right">{{ number_format($gstAmount, 2) }}</td>
-                </tr>
-                <tr>
-                    <td>Round(+-)</td>
-                    <td class="text-right">{{ number_format($totalAmount - $totalWithGst, 2) }}</td>
-                </tr>
-                <tr class="total-row">
-                    <td><strong>Total Amount</strong></td>
-                    <td class="text-right"><strong>{{ number_format($totalAmount, 2) }}</strong></td>
-                </tr>
-            </tbody>
-        </table>
+    <!-- Promotional Banner -->
+    <div class="promo-banner">
+        BUILD YOUR DIGITAL IDENTITY WITH .IN TRUSTED BY 3 MILLION USERS Get a global reach with .IN
+    </div>
 
-        <div class="amount-section">
-            <div class="amount-row">
-                <div class="amount-label">Total Amount in Words:</div>
-                <div class="amount-value"></div>
-            </div>
-            <div style="text-align: right; font-style: italic; margin-top: 4px; font-size: 9px; font-weight: 600;">
-                @php
-                    $amountInWords = '';
-                    if ($totalAmount > 0) {
-                        $ones = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
-                        $tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
-                        
-                        function convertToWords($num, $ones, $tens) {
-                            if ($num < 20) return $ones[$num];
-                            if ($num < 100) return $tens[floor($num / 10)] . ($num % 10 ? ' ' . $ones[$num % 10] : '');
-                            if ($num < 1000) return $ones[floor($num / 100)] . ' Hundred' . ($num % 100 ? ' ' . convertToWords($num % 100, $ones, $tens) : '');
-                            if ($num < 100000) return convertToWords(floor($num / 1000), $ones, $tens) . ' Thousand' . ($num % 1000 ? ' ' . convertToWords($num % 1000, $ones, $tens) : '');
-                            if ($num < 10000000) return convertToWords(floor($num / 100000), $ones, $tens) . ' Lakh' . ($num % 100000 ? ' ' . convertToWords($num % 100000, $ones, $tens) : '');
-                            return convertToWords(floor($num / 10000000), $ones, $tens) . ' Crore' . ($num % 10000000 ? ' ' . convertToWords($num % 10000000, $ones, $tens) : '');
-                        }
-                        $amountInWords = convertToWords($totalAmount, $ones, $tens);
-                    }
-                @endphp
-                (Rupees {{ ucwords($amountInWords ?: 'Zero') }} Only)
+    <!-- Payment Instructions -->
+    <div class="payment-section">
+        <div class="payment-left">
+            <div class="payment-box">
+                <div class="payment-title">Please pay as per following instructions:</div>
+                <div style="margin-bottom: 4px;">Online Payment/Internet Banking/Credit Card/Debit Card.</div>
+                <div class="detail-row"><span class="detail-label">Bank Name:</span> AXIS Bank Ltd.</div>
+                <div class="detail-row"><span class="detail-label">IFSC Code:</span> UTIB0000007</div>
+                <div class="detail-row"><span class="detail-label">MICR No:</span> 110211002</div>
+                <div class="detail-row"><span class="detail-label">Account Name:</span> National Internet Exchange of India.</div>
+                <div class="detail-row"><span class="detail-label">Account Type:</span> Savings Bank Account</div>
+                <div class="detail-row"><span class="detail-label">Account Number:</span> 922010006414634</div>
+                <div class="detail-row"><span class="detail-label">Branch:</span> Statesman House, 148, Barakhamba Road, New Delhi-110001 (India)</div>
             </div>
         </div>
-
-        <div class="bank-details">
-            <div class="bank-left">
-                <div class="bank-box">
-                    <div class="section-title">Bank Details</div>
-                    <div class="row"><span class="label">Account Name:</span> National Internet Exchange Of India</div>
-                    <div class="row"><span class="label">Bank Name:</span> HDFC Bank</div>
-                    <div class="row"><span class="label">Account Type:</span> Current</div>
-                    <div class="row"><span class="label">Account Number:</span> 02712320001421</div>
-                    <div class="row"><span class="label">IFSC Code:</span> HDFC0000271</div>
-                    <div class="row"><span class="label">Branch:</span> Kalkaji, New Delhi - 110019 (India)</div>
-                </div>
-            </div>
-            <div class="bank-right">
-                <div class="bank-box">
-                    <div class="section-title">Payment Instructions</div>
-                    <div style="font-size: 8px; line-height: 1.5;">
-                        Please make payment via Cheque / D.D in favour of <strong>National Internet Exchange Of India</strong>, payable at New Delhi.<br><br>
-                        Deposit at nearest HDFC branch and acknowledge payment detail to <strong>"billing@nixi.in"</strong>.<br><br>
-                        <strong>Note:</strong> Payment must be completed within the due date to avoid service interruption.
-                    </div>
-                </div>
+        <div class="payment-right">
+            <div class="or-separator">OR</div>
+            <div class="payment-box">
+                <div style="margin-bottom: 4px;">Make Cheque/Online PG / D.D in Favour of</div>
+                <div style="font-weight: bold; margin-bottom: 4px;">National Internet Exchange of India</div>
+                <div style="margin-bottom: 4px;">Payable to New Delhi and deposit it in your nearest ICICI branch and acknowledge the payment detail to 'ixbilling@nixi.in'.</div>
+                <div style="margin-top: 4px;">Pay through online portal via link</div>
+                <div style="color: #0066cc; margin-top: 2px;">https://payonline.nixi.in/online-payment</div>
             </div>
         </div>
+    </div>
 
-        <div class="terms">
-            <div class="section-title">Terms & Conditions</div>
-            <ol>
-                <li>Please Note that the date of receipt of payment in NIXI Bank account shall be treated as the date of payment.</li>
-                <li>Payment should be made as per NIXI billing procedure available at www.nixi.in</li>
-                <li>Any dispute subject to jurisdiction under the "Delhi Courts only".</li>
-                <li>Service will be activated only after successful payment verification.</li>
-            </ol>
+    <!-- Terms & Conditions -->
+    <div class="terms-section">
+        <div class="terms-title">Terms & Conditions:-</div>
+        <ol class="terms-list">
+            <li>Please Note that the date of receipt of payment in NIXI Bank account shall be treated as the date of payment.</li>
+            <li>Payment should be made as per NIXI Exchange billing procedure.</li>
+            <li>Any dispute subject to jurisdiction under the 'Delhi Courts only'.</li>
+        </ol>
+    </div>
+
+    <!-- Digital Signature Section -->
+    <div class="signature-section">
+        <div class="signature-row">
+            <div style="display: inline-block; width: 48%; text-align: left;">
+                <div style="margin-bottom: 20px;">[QR Code Placeholder]</div>
+            </div>
+            <div style="display: inline-block; width: 48%; text-align: right;">
+                <div style="margin-bottom: 20px;">[eSign Logo Placeholder]</div>
+            </div>
+        </div>
+        <div class="signature-row">
+            <div><strong>Digitally Signed by NIC-IRP on:</strong> {{ $invoice->created_at ? $invoice->created_at->format('Y-m-d\TH:i') : now('Asia/Kolkata')->format('Y-m-d\TH:i') }}</div>
+        </div>
+        <div class="signature-row">
+            <div><strong>IRN Number:</strong> {{ strtoupper(substr(md5($invoiceNumber . $invoice->id . $invoice->created_at), 0, 64)) }}</div>
+        </div>
+        <div class="signature-row">
+            <div><strong>Acknowledge Number:</strong> {{ $invoice->id . str_pad($invoice->application_id, 10, '0', STR_PAD_LEFT) }}</div>
+        </div>
+        <div class="signature-row" style="margin-top: 8px;">
+            <div><strong>Seller's Address:</strong> National Internet Exchange of India, H-223, Sector-63, Nodia, Gautam Buddha Nagar, Uttar Pradesh, 201301 India</div>
         </div>
     </div>
 </body>
 </html>
-

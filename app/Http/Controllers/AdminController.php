@@ -2773,6 +2773,7 @@ class AdminController extends Controller
             'invoiceDate' => $invoiceDate,
             'dueDate' => $dueDate,
             'invoice' => $invoice,
+            'gstVerification' => $gstVerification,
         ])->setPaper('a4', 'portrait')
             ->setOption('margin-top', 6)
             ->setOption('margin-bottom', 6)
