@@ -124,6 +124,18 @@
                             <td><strong>{{ $application->assigned_ip }}</strong></td>
                         </tr>
                         @endif
+                        @if($application->service_activation_date)
+                        <tr>
+                            <th>Service Activation Date:</th>
+                            <td><strong>{{ \Carbon\Carbon::parse($application->service_activation_date)->format('d M Y') }}</strong></td>
+                        </tr>
+                        @endif
+                        @if($application->billing_cycle)
+                        <tr>
+                            <th>Billing Cycle:</th>
+                            <td><strong>{{ ucfirst($application->billing_cycle) }}</strong></td>
+                        </tr>
+                        @endif
                         @if($application->resubmission_query)
                         <tr>
                             <th>Resubmission Query:</th>
@@ -665,6 +677,11 @@
                                                 <input type="text" class="form-control" id="membership_id" name="membership_id" value="{{ $application->application_id }}" required readonly style="background-color: #e9ecef;">
                                                 <small class="text-muted">Auto-filled from application ID</small>
                                             </div>
+                                            <div class="mb-3">
+                                                <label for="service_activation_date" class="form-label">Service Activation Date <span class="text-danger">*</span></label>
+                                                <input type="date" class="form-control" id="service_activation_date" name="service_activation_date" value="{{ old('service_activation_date', date('Y-m-d')) }}" required>
+                                                <small class="text-muted">This date will be used to calculate billing cycle and payment reminders</small>
+                                            </div>
                                         </div>
                                         <div class="modal-footer">
                                             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
@@ -678,18 +695,104 @@
 
                     {{-- IX Account Actions --}}
                     @if($roleToUse === 'ix_account' && $application->isVisibleToIxAccount())
-                        <form method="POST" action="{{ route('admin.applications.ix-account.generate-invoice', $application->id) }}" class="mb-3">
-                            @csrf
-                            <button type="submit" class="btn btn-primary w-100" onclick="return confirm('Generate invoice for this application?')">
-                                Generate Invoice
-                            </button>
-                        </form>
-                        <form method="POST" action="{{ route('admin.applications.ix-account.verify-payment', $application->id) }}" class="mb-3">
-                            @csrf
-                            <button type="submit" class="btn btn-success w-100" onclick="return confirm('Verify payment for this application?')">
-                                Verify Payment
-                            </button>
-                        </form>
+                        @if($application->is_active)
+                            {{-- Generate Invoice - Always available for LIVE applications --}}
+                            <form method="POST" action="{{ route('admin.applications.ix-account.generate-invoice', $application->id) }}" class="mb-3">
+                                @csrf
+                                <button type="submit" class="btn btn-primary w-100" onclick="return confirm('Generate invoice for this application?')">
+                                    Generate Invoice
+                                </button>
+                            </form>
+                            
+                            {{-- Verify Payment - Only show if not already verified for current period --}}
+                            @if(isset($canVerifyPayment) && $canVerifyPayment)
+                                <form method="POST" action="{{ route('admin.applications.ix-account.verify-payment', $application->id) }}" class="mb-3">
+                                    @csrf
+                                    <div class="mb-2">
+                                        <label for="verification_notes" class="form-label small">Notes (Optional):</label>
+                                        <textarea name="notes" id="verification_notes" class="form-control form-control-sm" rows="2" placeholder="Add any notes about this payment verification..."></textarea>
+                                    </div>
+                                    <button type="submit" class="btn btn-success w-100" onclick="return confirm('Verify payment for this application?')">
+                                        Verify Payment
+                                    </button>
+                                </form>
+                            @elseif(isset($paymentVerificationMessage))
+                                <div class="alert alert-info mb-3">
+                                    <small>{{ $paymentVerificationMessage }}</small>
+                                </div>
+                            @endif
+                            
+                            {{-- Payment Verification History --}}
+                            @php
+                                $verificationLogs = $application->paymentVerificationLogs()->with('verifiedBy')->latest()->take(5)->get();
+                            @endphp
+                            @if($verificationLogs->count() > 0)
+                                <div class="mt-3">
+                                    <h6 class="small mb-2">Recent Payment Verifications:</h6>
+                                    <div class="list-group list-group-flush">
+                                        @foreach($verificationLogs as $log)
+                                        <div class="list-group-item px-0 py-2 small">
+                                            <div class="d-flex justify-content-between">
+                                                <span>
+                                                    <strong>{{ $log->verification_type === 'initial' ? 'Initial' : 'Recurring' }}</strong>
+                                                    @if($log->billing_period)
+                                                        - {{ $log->billing_period }}
+                                                    @endif
+                                                </span>
+                                                <span class="text-muted">{{ $log->verified_at->format('d M Y') }}</span>
+                                            </div>
+                                            <div class="text-muted">
+                                                ₹{{ number_format($log->amount, 2) }} 
+                                                @if($log->verifiedBy)
+                                                    by {{ $log->verifiedBy->name }}
+                                                @else
+                                                    (Auto-verified via PayU)
+                                                @endif
+                                            </div>
+                                        </div>
+                                        @endforeach
+                                    </div>
+                                </div>
+                            @endif
+                            
+                            {{-- Invoices History --}}
+                            @php
+                                $invoices = $application->invoices()->with('generatedBy')->latest()->take(5)->get();
+                            @endphp
+                            @if($invoices->count() > 0)
+                                <div class="mt-3">
+                                    <h6 class="small mb-2">Recent Invoices:</h6>
+                                    <div class="list-group list-group-flush">
+                                        @foreach($invoices as $invoice)
+                                        <div class="list-group-item px-0 py-2 small">
+                                            <div class="d-flex justify-content-between">
+                                                <span>
+                                                    <strong>{{ $invoice->invoice_number }}</strong>
+                                                    @if($invoice->billing_period)
+                                                        - {{ $invoice->billing_period }}
+                                                    @endif
+                                                </span>
+                                                <span class="badge bg-{{ $invoice->status === 'paid' ? 'success' : ($invoice->status === 'overdue' ? 'danger' : 'warning') }}">
+                                                    {{ ucfirst($invoice->status) }}
+                                                </span>
+                                            </div>
+                                            <div class="text-muted">
+                                                ₹{{ number_format($invoice->total_amount, 2) }} 
+                                                | Due: {{ $invoice->due_date->format('d M Y') }}
+                                                @if($invoice->generatedBy)
+                                                    | Generated by {{ $invoice->generatedBy->name }}
+                                                @endif
+                                            </div>
+                                        </div>
+                                        @endforeach
+                                    </div>
+                                </div>
+                            @endif
+                        @else
+                            <div class="alert alert-warning mb-3">
+                                <small>Actions are only available for LIVE applications.</small>
+                            </div>
+                        @endif
                     @endif
                 @endif
 

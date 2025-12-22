@@ -6,10 +6,13 @@ use App\Http\Requests\StoreIxApplicationRequest;
 use App\Models\Application;
 use App\Models\ApplicationStatusHistory;
 use App\Models\GstVerification;
+use App\Models\Invoice;
 use App\Models\IxApplicationPricing;
 use App\Models\IxLocation;
 use App\Models\IxPortPricing;
+use App\Models\Message;
 use App\Models\PaymentTransaction;
+use App\Models\PaymentVerificationLog;
 use App\Models\Registration;
 use App\Models\UserKycProfile;
 use App\Services\PayuService;
@@ -2042,6 +2045,8 @@ class IxApplicationController extends Controller
             // Find payment transaction
             $transactionId = $payuResponseFields['txnid'] ?? null;
             $paymentTransactionId = $payuResponseFields['udf2'] ?? null;
+            $invoiceNumber = $payuResponseFields['udf3'] ?? null;
+            $isInvoicePayment = $invoiceNumber !== null;
             
             $paymentTransaction = null;
             if ($paymentTransactionId) {
@@ -2132,42 +2137,104 @@ class IxApplicationController extends Controller
                 'hash' => $payuResponseFields['hash'] ?? null,
             ]);
 
-            // If payment is successful, update application status
+            // isInvoicePayment and invoiceNumber already set above
+
+            // If payment is successful, handle invoice payment or application payment
             if ($paymentStatus === 'success' && $paymentTransaction->application_id) {
                 $application = Application::find($paymentTransaction->application_id);
-                if ($application && $application->status !== 'submitted') {
-                    $newStatus = $application->application_type === 'IX' ? 'submitted' : 'pending';
+                
+                if ($application) {
+                    // Handle invoice payment (check udf3 for invoice number)
+                    if ($isInvoicePayment && $invoiceNumber) {
+                        $invoice = \App\Models\Invoice::where('invoice_number', $invoiceNumber)
+                            ->where('application_id', $application->id)
+                            ->first();
+                        
+                        if ($invoice && $invoice->status === 'pending') {
+                            // Mark invoice as paid
+                            $invoice->update([
+                                'status' => 'paid',
+                                'paid_at' => now('Asia/Kolkata'),
+                            ]);
 
-                    $application->update([
-                        'status' => $newStatus,
-                        'submitted_at' => $application->submitted_at ?? now('Asia/Kolkata'),
-                    ]);
+                            // Automatically verify payment for this billing period
+                            if ($invoice->billing_period) {
+                                // Check if already verified
+                                $existingVerification = \App\Models\PaymentVerificationLog::where('application_id', $application->id)
+                                    ->where('billing_period', $invoice->billing_period)
+                                    ->first();
 
-                    ApplicationStatusHistory::log(
-                        $application->id,
-                        null,
-                        $newStatus,
-                        'system',
-                        null,
-                        'IX application submitted via PayU S2S webhook'
-                    );
+                                if (!$existingVerification) {
+                                    \App\Models\PaymentVerificationLog::create([
+                                        'application_id' => $application->id,
+                                        'verified_by' => null, // System verified
+                                        'verification_type' => 'recurring',
+                                        'billing_period' => $invoice->billing_period,
+                                        'amount' => $invoice->total_amount,
+                                        'currency' => $invoice->currency,
+                                        'payment_method' => 'payu',
+                                        'notes' => 'Payment verified automatically via PayU for invoice '.$invoiceNumber,
+                                        'verified_at' => now('Asia/Kolkata'),
+                                    ]);
 
-                    // Update application data with payment info
-                    $applicationData = $application->application_data;
-                    $applicationData['payment'] = array_merge($applicationData['payment'] ?? [], [
-                        'transaction_id' => $transactionId,
-                        'payment_id' => $payuPaymentId ?? $paymentTransaction->payment_id,
-                        'status' => 'success',
-                        'paid_at' => now('Asia/Kolkata')->toDateTimeString(),
-                        'bank_ref_num' => $bankRefNum,
-                        'mode' => $mode,
-                        'unmappedstatus' => $unmappedStatus,
-                        'card_type' => $payuResponseFields['card_type'] ?? null,
-                        'pg_type' => $payuResponseFields['pg_type'] ?? null,
-                        'webhook_confirmed' => true,
-                        'webhook_source' => 's2s',
-                    ]);
-                    $application->update(['application_data' => $applicationData]);
+                                    // Log status change
+                                    \App\Models\ApplicationStatusHistory::log(
+                                        $application->id,
+                                        $application->status,
+                                        $application->status, // Keep same status
+                                        'system',
+                                        null,
+                                        "Payment automatically verified via PayU for billing period {$invoice->billing_period}"
+                                    );
+
+                                    // Send message to user
+                                    \App\Models\Message::create([
+                                        'user_id' => $application->user_id,
+                                        'subject' => 'Payment Verified',
+                                        'message' => "Payment for invoice {$invoiceNumber} has been received and verified automatically. Thank you for your payment.",
+                                        'is_read' => false,
+                                        'sent_by' => 'system',
+                                    ]);
+                                }
+                            }
+                        }
+                    } else {
+                        // Handle initial application payment
+                        if ($application->status !== 'submitted') {
+                            $newStatus = $application->application_type === 'IX' ? 'submitted' : 'pending';
+
+                            $application->update([
+                                'status' => $newStatus,
+                                'submitted_at' => $application->submitted_at ?? now('Asia/Kolkata'),
+                            ]);
+
+                            ApplicationStatusHistory::log(
+                                $application->id,
+                                null,
+                                $newStatus,
+                                'system',
+                                null,
+                                'IX application submitted via PayU S2S webhook'
+                            );
+                        }
+
+                        // Update application data with payment info
+                        $applicationData = $application->application_data ?? [];
+                        $applicationData['payment'] = array_merge($applicationData['payment'] ?? [], [
+                            'transaction_id' => $transactionId,
+                            'payment_id' => $payuPaymentId ?? $paymentTransaction->payment_id,
+                            'status' => 'success',
+                            'paid_at' => now('Asia/Kolkata')->toDateTimeString(),
+                            'bank_ref_num' => $bankRefNum,
+                            'mode' => $mode,
+                            'unmappedstatus' => $unmappedStatus,
+                            'card_type' => $payuResponseFields['card_type'] ?? null,
+                            'pg_type' => $payuResponseFields['pg_type'] ?? null,
+                            'webhook_confirmed' => true,
+                            'webhook_source' => 's2s',
+                        ]);
+                        $application->update(['application_data' => $applicationData]);
+                    }
                 }
             }
 

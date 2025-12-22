@@ -14,7 +14,9 @@ use App\Models\IxLocation;
 use App\Models\McaVerification;
 use App\Models\Message;
 use App\Models\PanVerification;
+use App\Models\Invoice;
 use App\Models\PaymentTransaction;
+use App\Models\PaymentVerificationLog;
 use App\Models\ProfileUpdateRequest;
 use App\Models\Registration;
 use App\Models\RocIecVerification;
@@ -957,7 +959,7 @@ class AdminController extends Controller
     {
         try {
             $admin = $this->getCurrentAdmin();
-            $application = Application::with(['user', 'processor', 'finance', 'technical', 'statusHistory'])
+            $application = Application::with(['user', 'processor', 'finance', 'technical', 'statusHistory', 'paymentVerificationLogs', 'invoices'])
                 ->findOrFail($id);
 
             // Get selected role from query parameter or session
@@ -988,8 +990,29 @@ class AdminController extends Controller
                 session(['admin_selected_role' => $selectedRole]);
             }
 
+            // Get payment verification status for IX Account
+            $canVerifyPayment = false;
+            $paymentVerificationMessage = null;
+            $currentBillingPeriod = null;
+            
+            if ($selectedRole === 'ix_account' && $application->is_active && $application->isVisibleToIxAccount()) {
+                if ($application->service_activation_date && $application->billing_cycle) {
+                    $currentBillingPeriod = $this->getCurrentBillingPeriod($application);
+                    if ($currentBillingPeriod) {
+                        $canVerifyPayment = !$this->isPaymentVerifiedForPeriod($application, $currentBillingPeriod);
+                        if (!$canVerifyPayment) {
+                            $periodLabel = $this->getBillingPeriodLabel($application->billing_cycle, $currentBillingPeriod);
+                            $paymentVerificationMessage = "Payment for this {$periodLabel} has already been verified.";
+                        }
+                    }
+                } else {
+                    // Initial payment - check if any verification exists
+                    $canVerifyPayment = !$application->paymentVerificationLogs()->exists();
+                }
+            }
+
             // Admin can view all applications, but can only take actions on applications for their selected role
-            return view('admin.applications.show', compact('application', 'admin', 'selectedRole'));
+            return view('admin.applications.show', compact('application', 'admin', 'selectedRole', 'canVerifyPayment', 'paymentVerificationMessage', 'currentBillingPeriod'));
         } catch (QueryException $e) {
             Log::error('Database error loading application: '.$e->getMessage());
             abort(503, 'Database connection error. Please try again later.');
@@ -2187,8 +2210,8 @@ class AdminController extends Controller
 
             Message::create([
                 'user_id' => $application->user_id,
-                'subject' => 'Port Assigned',
-                'message' => "Port has been assigned for your application {$application->application_id}. Port Capacity: {$validated['assigned_port_capacity']}",
+                'subject' => 'IP Assigned - Service Activated',
+                'message' => "IP has been assigned for your application {$application->application_id}. Your service is now LIVE. Service Activation Date: {$validated['service_activation_date']}. IP Address: {$validated['assigned_ip']}, Customer ID: {$validated['customer_id']}, Membership ID: {$validated['membership_id']}",
                 'is_read' => false,
                 'sent_by' => 'admin',
             ]);
@@ -2428,6 +2451,7 @@ class AdminController extends Controller
                 'assigned_ip' => 'required|string',
                 'customer_id' => 'required|string',
                 'membership_id' => 'required|string',
+                'service_activation_date' => 'required|date',
             ]);
 
             $application = Application::with('user')->where('application_type', 'IX')->findOrFail($id);
@@ -2436,13 +2460,21 @@ class AdminController extends Controller
                 return back()->with('error', 'This application is not available for Tech Team review.');
             }
 
+            // Get billing cycle from application data
+            $applicationData = $application->application_data ?? [];
+            $billingCycle = $applicationData['billing']['plan'] ?? 'monthly'; // monthly, quarterly, annual
+
             $oldStatus = $application->status;
             $application->update([
                 'status' => 'ip_assigned',
                 'assigned_ip' => $validated['assigned_ip'],
                 'customer_id' => $validated['customer_id'],
                 'membership_id' => $validated['membership_id'],
+                'service_activation_date' => $validated['service_activation_date'],
+                'billing_cycle' => $billingCycle,
+                'is_active' => true, // Make it live
                 'current_ix_tech_team_id' => $admin->id,
+                'current_ix_account_id' => null, // Reset so IX Account can see it
             ]);
 
             ApplicationStatusHistory::log(
@@ -2451,7 +2483,7 @@ class AdminController extends Controller
                 'ip_assigned',
                 'admin',
                 $admin->id,
-                "IP assigned: {$validated['assigned_ip']}, Customer ID: {$validated['customer_id']}, Membership ID: {$validated['membership_id']}"
+                "IP assigned: {$validated['assigned_ip']}, Customer ID: {$validated['customer_id']}, Membership ID: {$validated['membership_id']}, Service Activation: {$validated['service_activation_date']}"
             );
 
             // Generate membership and IX invoice (TODO: Implement invoice generation)
@@ -2462,7 +2494,8 @@ class AdminController extends Controller
                         $application,
                         $validated['assigned_ip'],
                         $validated['customer_id'],
-                        $validated['membership_id']
+                        $validated['membership_id'],
+                        $validated['service_activation_date']
                     )
                 );
             } catch (Exception $e) {
@@ -2486,7 +2519,7 @@ class AdminController extends Controller
     }
 
     /**
-     * IX Account: Generate Invoice.
+     * IX Account: Generate Invoice (supports recurring invoices).
      */
     public function ixAccountGenerateInvoice(Request $request, $id)
     {
@@ -2499,72 +2532,139 @@ class AdminController extends Controller
 
             $application = Application::with('user')->where('application_type', 'IX')->findOrFail($id);
 
+            // Only allow invoice generation for LIVE applications
+            if (!$application->is_active) {
+                return back()->with('error', 'Invoice can only be generated for LIVE applications.');
+            }
+
             if (! $application->isVisibleToIxAccount()) {
                 return back()->with('error', 'This application is not available for Account review.');
             }
 
-            $oldStatus = $application->status;
-            $application->update([
-                'status' => 'invoice_pending',
-                'current_ix_account_id' => $admin->id,
+            // Get billing period
+            $billingPeriod = null;
+            $isInitialInvoice = !$application->service_activation_date;
+            
+            if (!$isInitialInvoice) {
+                $billingPeriod = $this->getCurrentBillingPeriod($application);
+            }
+
+            // Calculate due date (1 month from service activation or current date)
+            $dueDate = $application->service_activation_date 
+                ? \Carbon\Carbon::parse($application->service_activation_date)->addMonth()
+                : now('Asia/Kolkata')->addMonth();
+
+            // Get payment amount
+            $applicationData = $application->application_data ?? [];
+            $portAmount = (float) ($applicationData['port_selection']['amount'] ?? 0);
+            $applicationFee = (float) ($applicationData['payment']['application_fee'] ?? 1000.00);
+            $gstPercentage = (float) ($applicationData['payment']['gst_percentage'] ?? 18.00);
+            $gstAmount = ($applicationFee * $gstPercentage) / 100;
+            $amount = $applicationFee;
+            $totalAmount = round($portAmount + $applicationFee + $gstAmount, 2);
+
+            // Generate invoice number
+            $invoiceNumber = 'NIXI-IX-'.date('y').'-'.(date('y') + 1).'/'.str_pad($application->id, 4, '0', STR_PAD_LEFT);
+            if ($billingPeriod) {
+                $invoiceNumber .= '-'.$billingPeriod;
+            }
+
+            // Generate PayU payment link
+            $payuService = new \App\Services\PayuService();
+            $transactionId = 'INV-'.time().'-'.strtoupper(\Illuminate\Support\Str::random(8));
+            
+            // Create PaymentTransaction for invoice payment
+            $paymentTransaction = PaymentTransaction::create([
+                'user_id' => $application->user_id,
+                'application_id' => $application->id,
+                'transaction_id' => $transactionId,
+                'payment_status' => 'pending',
+                'payment_mode' => 'live',
+                'amount' => $totalAmount,
+                'currency' => 'INR',
+                'product_info' => 'NIXI IX Service Invoice - '.$invoiceNumber,
+                'response_message' => 'Invoice payment pending',
+            ]);
+            
+            $paymentData = $payuService->preparePaymentData([
+                'transaction_id' => $transactionId,
+                'amount' => $totalAmount,
+                'product_info' => 'NIXI IX Service Invoice - '.$invoiceNumber,
+                'firstname' => $application->user->fullname,
+                'email' => $application->user->email,
+                'phone' => $application->user->mobile,
+                'success_url' => url(route('user.applications.ix.payment-success', [], false)),
+                'failure_url' => url(route('user.applications.ix.payment-failure', [], false)),
+                'udf1' => $application->application_id,
+                'udf2' => (string) $paymentTransaction->id, // Store payment transaction ID
+                'udf3' => $invoiceNumber,
             ]);
 
-            ApplicationStatusHistory::log(
-                $application->id,
-                $oldStatus,
-                'invoice_pending',
-                'admin',
-                $admin->id,
-                'Invoice generated by IX Account'
-            );
+            // Create invoice record
+            $invoice = Invoice::create([
+                'application_id' => $application->id,
+                'invoice_number' => $invoiceNumber,
+                'invoice_date' => now('Asia/Kolkata'),
+                'due_date' => $dueDate,
+                'billing_period' => $billingPeriod,
+                'amount' => $amount,
+                'gst_amount' => $gstAmount,
+                'total_amount' => $totalAmount,
+                'currency' => 'INR',
+                'status' => 'pending',
+                'payu_payment_link' => json_encode($paymentData), // Store full payment data
+                'generated_by' => $admin->id,
+            ]);
 
             // Generate invoice PDF
             try {
-                $invoicePdf = $this->generateIxInvoicePdf($application);
-                $invoicePdfPath = 'applications/'.$application->user_id.'/ix/'.$application->application_id.'_invoice.pdf';
+                $invoicePdf = $this->generateIxInvoicePdf($application, $invoice);
+                $invoicePdfPath = 'applications/'.$application->user_id.'/ix/'.$invoiceNumber.'_invoice.pdf';
 
                 Storage::disk('public')->put($invoicePdfPath, $invoicePdf->output());
+            } catch (Exception $e) {
+                Log::error('Error generating IX invoice PDF: '.$e->getMessage());
+            }
 
-                // Update application data with invoice PDF path
-                $applicationData = $application->application_data ?? [];
-                if (! isset($applicationData['pdfs'])) {
-                    $applicationData['pdfs'] = [];
-                }
-                $applicationData['pdfs']['invoice_pdf'] = $invoicePdfPath;
-                $application->update(['application_data' => $applicationData]);
+            // Log invoice generation
+            ApplicationStatusHistory::log(
+                $application->id,
+                $application->status,
+                $application->status, // Keep same status
+                'admin',
+                $admin->id,
+                'Invoice generated by IX Account - '.$invoiceNumber
+            );
 
-                // Send invoice email to user
-                $invoiceNumber = 'NIXI-IX-'.date('y').'-'.(date('y') + 1).'/'.str_pad($application->id, 4, '0', STR_PAD_LEFT);
-                $portAmount = (float) ($applicationData['port_selection']['amount'] ?? 0);
-                $applicationFee = (float) ($applicationData['payment']['application_fee'] ?? 1000.00);
-                $gstPercentage = (float) ($applicationData['payment']['gst_percentage'] ?? 18.00);
-                $gstAmount = ($applicationFee * $gstPercentage) / 100;
-                $totalAmount = round($portAmount + $applicationFee + $gstAmount, 2);
-
+            // Send invoice email with PayU link
+            try {
                 Mail::to($application->user->email)->send(new IxApplicationInvoiceMail(
                     $application->user->fullname,
                     $application->application_id,
                     $invoiceNumber,
                     $totalAmount,
                     $application->status,
-                    $invoicePdfPath
+                    $invoicePdfPath ?? null,
+                    $payuService->getPaymentUrl(),
+                    $paymentData
                 ));
 
+                $invoice->update(['sent_at' => now('Asia/Kolkata')]);
                 Log::info("IX invoice email sent to {$application->user->email} for application {$application->application_id}");
             } catch (Exception $e) {
-                Log::error('Error generating IX invoice PDF or sending email: '.$e->getMessage());
-                // Continue even if PDF generation or email sending fails
+                Log::error('Error sending invoice email: '.$e->getMessage());
             }
 
             Message::create([
                 'user_id' => $application->user_id,
                 'subject' => 'Invoice Generated',
-                'message' => "Invoice has been generated for your application {$application->application_id}. Please complete the payment. The invoice PDF has been sent to your email.",
+                'message' => "Invoice {$invoiceNumber} has been generated for your application {$application->application_id}. Please complete the payment using the PayU link sent to your email.",
                 'is_read' => false,
                 'sent_by' => 'admin',
             ]);
 
-            return back()->with('success', 'Invoice generated and sent to user!');
+            $periodLabel = $billingPeriod ? ' ('.$this->getBillingPeriodLabel($application->billing_cycle, $billingPeriod).')' : '';
+            return back()->with('success', "Invoice generated and sent to user{$periodLabel}!");
         } catch (Exception $e) {
             Log::error('Error generating invoice: '.$e->getMessage());
 
@@ -2575,7 +2675,7 @@ class AdminController extends Controller
     /**
      * Generate IX Invoice PDF.
      */
-    private function generateIxInvoicePdf(Application $application)
+    private function generateIxInvoicePdf(Application $application, ?Invoice $invoice = null)
     {
         $data = $application->application_data ?? [];
         $user = $application->user;
@@ -2621,8 +2721,10 @@ class AdminController extends Controller
         // Get application pricing for fallback
         $applicationPricing = IxApplicationPricing::getActive();
 
-        // Calculate invoice number (format: NIXI-IX-25-26/XXXX)
-        $invoiceNumber = 'NIXI-IX-'.date('y').'-'.(date('y') + 1).'/'.str_pad($application->id, 4, '0', STR_PAD_LEFT);
+        // Use invoice number from invoice record if provided
+        $invoiceNumber = $invoice ? $invoice->invoice_number : 'NIXI-IX-'.date('y').'-'.(date('y') + 1).'/'.str_pad($application->id, 4, '0', STR_PAD_LEFT);
+        $invoiceDate = $invoice ? $invoice->invoice_date->format('d/m/Y') : now('Asia/Kolkata')->format('d/m/Y');
+        $dueDate = $invoice ? $invoice->due_date->format('d/m/Y') : now('Asia/Kolkata')->addDays(28)->format('d/m/Y');
 
         $pdf = Pdf::loadView('user.applications.ix.pdf.invoice', [
             'application' => $application,
@@ -2631,8 +2733,9 @@ class AdminController extends Controller
             'companyDetails' => $companyDetails,
             'applicationPricing' => $applicationPricing,
             'invoiceNumber' => $invoiceNumber,
-            'invoiceDate' => now('Asia/Kolkata')->format('d/m/Y'),
-            'dueDate' => now('Asia/Kolkata')->addDays(28)->format('d/m/Y'),
+            'invoiceDate' => $invoiceDate,
+            'dueDate' => $dueDate,
+            'invoice' => $invoice,
         ])->setPaper('a4', 'portrait')
             ->setOption('margin-top', 6)
             ->setOption('margin-bottom', 6)
@@ -2644,7 +2747,51 @@ class AdminController extends Controller
     }
 
     /**
-     * IX Account: Verify Payment.
+     * Get current billing period based on billing cycle and service activation date.
+     */
+    private function getCurrentBillingPeriod(Application $application): ?string
+    {
+        if (!$application->service_activation_date || !$application->billing_cycle) {
+            return null;
+        }
+
+        $activationDate = \Carbon\Carbon::parse($application->service_activation_date);
+        $now = now('Asia/Kolkata');
+
+        switch ($application->billing_cycle) {
+            case 'monthly':
+                $monthsSinceActivation = $activationDate->diffInMonths($now);
+                $periodDate = $activationDate->copy()->addMonths($monthsSinceActivation);
+                return $periodDate->format('Y-m');
+            
+            case 'quarterly':
+                $quartersSinceActivation = floor($activationDate->diffInMonths($now) / 3);
+                $periodDate = $activationDate->copy()->addMonths($quartersSinceActivation * 3);
+                $quarter = ceil($periodDate->month / 3);
+                return $periodDate->format('Y').'-Q'.$quarter;
+            
+            case 'annual':
+                $yearsSinceActivation = $activationDate->diffInYears($now);
+                $periodDate = $activationDate->copy()->addYears($yearsSinceActivation);
+                return $periodDate->format('Y');
+            
+            default:
+                return null;
+        }
+    }
+
+    /**
+     * Check if payment is already verified for current billing period.
+     */
+    private function isPaymentVerifiedForPeriod(Application $application, string $billingPeriod): bool
+    {
+        return \App\Models\PaymentVerificationLog::where('application_id', $application->id)
+            ->where('billing_period', $billingPeriod)
+            ->exists();
+    }
+
+    /**
+     * IX Account: Verify Payment (supports recurring payments).
      */
     public function ixAccountVerifyPayment(Request $request, $id)
     {
@@ -2657,61 +2804,99 @@ class AdminController extends Controller
 
             $application = Application::with('user')->where('application_type', 'IX')->findOrFail($id);
 
+            // Only allow verification for LIVE applications
+            if (!$application->is_active) {
+                return back()->with('error', 'Payment can only be verified for LIVE applications.');
+            }
+
             if (! $application->isVisibleToIxAccount()) {
                 return back()->with('error', 'This application is not available for Account review.');
             }
 
-            $oldStatus = $application->status;
+            // Check if this is initial or recurring payment
+            $isInitialPayment = !$application->service_activation_date;
+            $billingPeriod = null;
+            $verificationType = 'initial';
+
+            if (!$isInitialPayment) {
+                $billingPeriod = $this->getCurrentBillingPeriod($application);
+                if ($billingPeriod) {
+                    $verificationType = 'recurring';
+                    
+                    // Check if already verified for this period
+                    if ($this->isPaymentVerifiedForPeriod($application, $billingPeriod)) {
+                        $periodLabel = $this->getBillingPeriodLabel($application->billing_cycle, $billingPeriod);
+                        return back()->with('error', "Payment for this {$periodLabel} has already been verified.");
+                    }
+                }
+            }
+
+            // Get payment amount
+            $applicationData = $application->application_data ?? [];
+            $amount = $applicationData['payment']['total_amount'] ?? $applicationData['payment']['amount'] ?? 0;
             
-            // Update application status
-            $application->update([
-                'status' => 'payment_verified',
-                'current_ix_account_id' => $admin->id,
+            // Create payment verification log
+            $verificationLog = \App\Models\PaymentVerificationLog::create([
+                'application_id' => $application->id,
+                'verified_by' => $admin->id,
+                'verification_type' => $verificationType,
+                'billing_period' => $billingPeriod,
+                'amount' => $amount,
+                'currency' => 'INR',
+                'payment_method' => 'manual',
+                'notes' => $request->input('notes'),
+                'verified_at' => now('Asia/Kolkata'),
             ]);
 
-            // Update payment status in application_data
-            $applicationData = $application->application_data ?? [];
-            if (isset($applicationData['payment'])) {
-                $applicationData['payment']['status'] = 'verified';
-                $applicationData['payment']['verified_at'] = now('Asia/Kolkata')->toDateTimeString();
-                $applicationData['payment']['verified_by'] = $admin->id;
-                $application->update(['application_data' => $applicationData]);
-            }
-
-            // Update payment transaction status if exists
-            $paymentTransaction = PaymentTransaction::where('application_id', $application->id)
-                ->latest()
-                ->first();
-            
-            if ($paymentTransaction && $paymentTransaction->payment_status !== 'success') {
-                $paymentTransaction->update([
-                    'payment_status' => 'success',
-                    'response_message' => 'Payment verified by IX Account - '.now('Asia/Kolkata')->format('Y-m-d H:i:s'),
-                ]);
-            }
-
+            // Log status change
             ApplicationStatusHistory::log(
                 $application->id,
-                $oldStatus,
-                'payment_verified',
+                $application->status,
+                $application->status, // Keep same status, don't change application status
                 'admin',
                 $admin->id,
-                'Payment verified by IX Account - Status changed from pending to verified'
+                $verificationType === 'initial' 
+                    ? 'Initial payment verified by IX Account'
+                    : "Recurring payment verified for {$billingPeriod} by IX Account"
             );
 
+            // Send message to user
+            $periodLabel = $billingPeriod ? $this->getBillingPeriodLabel($application->billing_cycle, $billingPeriod) : 'initial';
             Message::create([
                 'user_id' => $application->user_id,
                 'subject' => 'Payment Verified',
-                'message' => "Payment has been verified for your application {$application->application_id}. Your application is now complete.",
+                'message' => "Payment has been verified for your application {$application->application_id} ({$periodLabel} payment).",
                 'is_read' => false,
                 'sent_by' => 'admin',
             ]);
 
-            return back()->with('success', 'Payment verified successfully! Application status updated to verified.');
+            $periodLabel = $billingPeriod ? $this->getBillingPeriodLabel($application->billing_cycle, $billingPeriod) : 'initial';
+            return back()->with('success', "Payment verified successfully for {$periodLabel} period!");
         } catch (Exception $e) {
             Log::error('Error verifying payment: '.$e->getMessage());
 
             return back()->with('error', 'An error occurred. Please try again.');
+        }
+    }
+
+    /**
+     * Get billing period label for display.
+     */
+    private function getBillingPeriodLabel(string $billingCycle, string $billingPeriod): string
+    {
+        switch ($billingCycle) {
+            case 'monthly':
+                $date = \Carbon\Carbon::createFromFormat('Y-m', $billingPeriod);
+                return $date->format('F Y');
+            
+            case 'quarterly':
+                return str_replace('-Q', ' Q', $billingPeriod);
+            
+            case 'annual':
+                return $billingPeriod;
+            
+            default:
+                return $billingPeriod;
         }
     }
 

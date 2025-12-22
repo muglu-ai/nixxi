@@ -33,6 +33,8 @@ class Application extends Model
         'customer_id',
         'membership_id',
         'assigned_ip',
+        'service_activation_date',
+        'billing_cycle',
         'is_active',
         'deactivated_at',
         'deactivated_by',
@@ -47,6 +49,7 @@ class Application extends Model
     protected $casts = [
         'application_data' => 'array',
         'is_active' => 'boolean',
+        'service_activation_date' => 'date',
         'deactivated_at' => 'datetime:Asia/Kolkata',
         'submitted_at' => 'datetime:Asia/Kolkata',
         'approved_at' => 'datetime:Asia/Kolkata',
@@ -159,6 +162,22 @@ class Application extends Model
     }
 
     /**
+     * Get the payment verification logs for this application.
+     */
+    public function paymentVerificationLogs(): HasMany
+    {
+        return $this->hasMany(PaymentVerificationLog::class);
+    }
+
+    /**
+     * Get the invoices for this application.
+     */
+    public function invoices(): HasMany
+    {
+        return $this->hasMany(Invoice::class);
+    }
+
+    /**
      * Get the admin who deactivated this member.
      */
     public function deactivatedBy(): BelongsTo
@@ -263,7 +282,9 @@ class Application extends Model
      */
     public function isVisibleToIxAccount(): bool
     {
-        return in_array($this->status, ['ip_assigned', 'invoice_pending']);
+        // IX Account can see all LIVE applications (is_active = true) regardless of status
+        // They can always verify payment and generate invoices for live applications
+        return $this->is_active && in_array($this->status, ['ip_assigned', 'invoice_pending', 'payment_verified', 'approved']);
     }
 
     /**

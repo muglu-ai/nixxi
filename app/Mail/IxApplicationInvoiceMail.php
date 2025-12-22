@@ -23,7 +23,9 @@ class IxApplicationInvoiceMail extends Mailable
         public string $invoiceNumber,
         public float $totalAmount,
         public string $status,
-        public string $invoicePdfPath
+        public ?string $invoicePdfPath = null,
+        public ?string $payuPaymentUrl = null,
+        public ?array $payuPaymentData = null
     ) {
         //
     }

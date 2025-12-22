@@ -21,7 +21,8 @@ class IxApplicationIpAssignedMail extends Mailable
         public Application $application,
         public string $assignedIp,
         public string $customerId,
-        public string $membershipId
+        public string $membershipId,
+        public ?string $serviceActivationDate = null
     ) {
         //
     }

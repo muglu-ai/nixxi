@@ -47,6 +47,12 @@
                                         <td style="padding: 8px 0; color: #555555; font-size: 14px; font-family: 'Nunito', 'Trebuchet MS', sans-serif;"><strong>Membership ID:</strong></td>
                                         <td style="padding: 8px 0; color: #2c3e50; font-size: 14px; font-weight: 600; font-family: 'Nunito', 'Trebuchet MS', sans-serif;">{{ $membershipId }}</td>
                                     </tr>
+                                    @if($serviceActivationDate)
+                                    <tr>
+                                        <td style="padding: 8px 0; color: #555555; font-size: 14px; font-family: 'Nunito', 'Trebuchet MS', sans-serif;"><strong>Service Activation Date:</strong></td>
+                                        <td style="padding: 8px 0; color: #2c3e50; font-size: 14px; font-weight: 600; font-family: 'Nunito', 'Trebuchet MS', sans-serif;">{{ \Carbon\Carbon::parse($serviceActivationDate)->format('d M Y') }}</td>
+                                    </tr>
+                                    @endif
                                     <tr>
                                         <td style="padding: 8px 0; color: #555555; font-size: 14px; font-family: 'Nunito', 'Trebuchet MS', sans-serif;"><strong>Status:</strong></td>
                                         <td style="padding: 8px 0;">

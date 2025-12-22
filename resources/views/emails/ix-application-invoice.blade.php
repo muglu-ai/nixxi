@@ -27,6 +27,22 @@
         
         <p>The invoice PDF is attached to this email. Please review the invoice and complete the payment as per the instructions provided.</p>
         
+        @if($payuPaymentUrl && $payuPaymentData)
+        <div style="background: #e8f5e9; padding: 20px; border-radius: 5px; margin: 20px 0; text-align: center;">
+            <h3 style="color: #2e7d32; margin-top: 0;">Pay Now</h3>
+            <p style="margin: 10px 0;">Click the button below to make payment securely via PayU:</p>
+            <form action="{{ $payuPaymentUrl }}" method="POST" style="margin: 15px 0;">
+                @foreach($payuPaymentData as $key => $value)
+                    <input type="hidden" name="{{ $key }}" value="{{ $value }}">
+                @endforeach
+                <button type="submit" style="background: #4caf50; color: #ffffff; padding: 12px 30px; border: none; border-radius: 5px; font-size: 16px; font-weight: bold; cursor: pointer; text-decoration: none; display: inline-block;">
+                    Pay ₹{{ number_format($totalAmount, 2) }} Now
+                </button>
+            </form>
+            <p style="margin: 10px 0 0 0; font-size: 12px; color: #666;">Secure payment powered by PayU</p>
+        </div>
+        @endif
+        
         <p style="margin-top: 30px;">
             <strong>Important:</strong> Please ensure payment is completed within the due date mentioned in the invoice to avoid any service interruption.
         </p>
