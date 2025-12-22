@@ -67,23 +67,10 @@ class UserInvoiceController extends Controller
             // Sanitize filename - replace / and \ with safe characters
             $safeFilename = str_replace(['/', '\\'], '-', $invoice->invoice_number).'_invoice.pdf';
 
-            // Try to get PDF from invoice pdf_path first
-            if ($invoice->pdf_path && Storage::disk('public')->exists($invoice->pdf_path)) {
-                $filePath = Storage::disk('public')->path($invoice->pdf_path);
-                return response()->download($filePath, $safeFilename);
-            }
-
-            // Fallback: Check application_data for PDF path (for older invoices)
             $application = $invoice->application;
-            $appData = $application->application_data ?? [];
-            $pdfs = $appData['pdfs'] ?? [];
             
-            if (isset($pdfs['invoice_pdf']) && Storage::disk('public')->exists($pdfs['invoice_pdf'])) {
-                $filePath = Storage::disk('public')->path($pdfs['invoice_pdf']);
-                return response()->download($filePath, $safeFilename);
-            }
-
-            // If PDF doesn't exist, generate it on the fly
+            // Always regenerate PDF on-the-fly to ensure latest calculation logic is used
+            // This ensures invoices show correct amounts even if they were generated before fixes
             if ($application->application_type === 'IX') {
                 // Use reflection or create a service, but for now, let's use the view directly
                 $data = $application->application_data ?? [];

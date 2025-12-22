@@ -1360,22 +1360,10 @@ class SuperAdminController extends Controller
             // Sanitize filename
             $safeFilename = str_replace(['/', '\\'], '-', $invoice->invoice_number).'_invoice.pdf';
 
-            // Try to get PDF from invoice pdf_path first
-            if ($invoice->pdf_path && Storage::disk('public')->exists($invoice->pdf_path)) {
-                $filePath = Storage::disk('public')->path($invoice->pdf_path);
-                return response()->download($filePath, $safeFilename);
-            }
-
-            // Fallback: Check application_data for PDF path
             $application = $invoice->application;
-            $appData = $application->application_data ?? [];
-            $pdfs = $appData['pdfs'] ?? [];
             
-            if (isset($pdfs['invoice_pdf']) && Storage::disk('public')->exists($pdfs['invoice_pdf'])) {
-                $filePath = Storage::disk('public')->path($pdfs['invoice_pdf']);
-                return response()->download($filePath, $safeFilename);
-            }
-
+            // Always regenerate PDF on-the-fly to ensure latest calculation logic is used
+            // This ensures invoices show correct amounts even if they were generated before fixes
             // Generate on the fly using reflection to access private method
             $reflection = new \ReflectionClass(\App\Http\Controllers\AdminController::class);
             $method = $reflection->getMethod('generateIxInvoicePdf');

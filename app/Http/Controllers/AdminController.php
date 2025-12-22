@@ -3066,6 +3066,19 @@ class AdminController extends Controller
         $invoiceDate = $invoice ? $invoice->invoice_date->format('d/m/Y') : now('Asia/Kolkata')->format('d/m/Y');
         $dueDate = $invoice ? $invoice->due_date->format('d/m/Y') : now('Asia/Kolkata')->addDays(28)->format('d/m/Y');
 
+        // Recalculate invoice amounts using latest calculation logic (even for existing invoices)
+        // This ensures old invoices show correct amounts after fixes
+        $recalculatedAmounts = $this->recalculateInvoiceAmounts($application, $invoice);
+        
+        // Create a temporary invoice object with recalculated amounts for the view
+        // This ensures the view uses correct amounts even if invoice record has old values
+        $invoiceForView = $invoice ? clone $invoice : null;
+        if ($invoiceForView) {
+            $invoiceForView->amount = $recalculatedAmounts['amount'];
+            $invoiceForView->gst_amount = $recalculatedAmounts['gst_amount'];
+            $invoiceForView->total_amount = $recalculatedAmounts['total_amount'];
+        }
+
         $pdf = Pdf::loadView('user.applications.ix.pdf.invoice', [
             'application' => $application,
             'user' => $user,
@@ -3076,7 +3089,7 @@ class AdminController extends Controller
             'invoiceNumber' => $invoiceNumber,
             'invoiceDate' => $invoiceDate,
             'dueDate' => $dueDate,
-            'invoice' => $invoice,
+            'invoice' => $invoiceForView ?? $invoice, // Use recalculated amounts
             'gstVerification' => $gstVerification,
         ])->setPaper('a4', 'portrait')
             ->setOption('margin-top', 6)
@@ -3086,6 +3099,146 @@ class AdminController extends Controller
             ->setOption('enable-local-file-access', true);
 
         return $pdf;
+    }
+
+    /**
+     * Recalculate invoice amounts using latest calculation logic.
+     * This ensures old invoices show correct amounts after fixes.
+     */
+    private function recalculateInvoiceAmounts(Application $application, ?Invoice $invoice = null): array
+    {
+        $applicationData = $application->application_data ?? [];
+        
+        // Get port amount based on billing cycle
+        $billingPlan = $application->billing_cycle ?? ($applicationData['port_selection']['billing_plan'] ?? 'monthly');
+        
+        // Map billing plan to pricing plan
+        $pricingPlan = match($billingPlan) {
+            'annual', 'arc' => 'arc',
+            'monthly', 'mrc' => 'mrc',
+            'quarterly' => 'quarterly',
+            default => 'mrc',
+        };
+        
+        // Determine port capacity (same logic as ixAccountGenerateInvoice)
+        $portCapacity = null;
+        
+        // Check for pending plan change request
+        $pendingPlanChange = \App\Models\PlanChangeRequest::where('application_id', $application->id)
+            ->where('status', 'pending')
+            ->latest()
+            ->first();
+        
+        if ($pendingPlanChange) {
+            $portCapacity = $pendingPlanChange->current_port_capacity ?? $application->assigned_port_capacity ?? ($applicationData['port_selection']['capacity'] ?? null);
+            Log::info("Pending plan change found for application {$application->id}, using current capacity: {$portCapacity}");
+        } else {
+            // Check for approved plan change that has taken effect
+            $effectivePlanChange = \App\Models\PlanChangeRequest::where('application_id', $application->id)
+                ->where('status', 'approved')
+                ->where(function ($query) {
+                    $query->whereNull('effective_from')
+                        ->orWhere('effective_from', '<=', now('Asia/Kolkata'));
+                })
+                ->latest('effective_from')
+                ->first();
+            
+            if ($effectivePlanChange && $effectivePlanChange->effective_from && $effectivePlanChange->effective_from <= now('Asia/Kolkata')) {
+                // Use new capacity if effective_from has passed
+                $portCapacity = $effectivePlanChange->new_port_capacity ?? $application->assigned_port_capacity ?? ($applicationData['port_selection']['capacity'] ?? null);
+                Log::info("Effective plan change found for application {$application->id}, using new capacity: {$portCapacity} (effective from {$effectivePlanChange->effective_from})");
+            } else {
+                // No plan change or not yet effective, use assigned capacity
+                $portCapacity = $application->assigned_port_capacity ?? ($applicationData['port_selection']['capacity'] ?? null);
+            }
+        }
+        
+        // Get pricing for the port capacity
+        $location = null;
+        if (isset($applicationData['location']['id'])) {
+            $location = IxLocation::find($applicationData['location']['id']);
+        }
+        
+        $portAmount = 0;
+        if ($location && $portCapacity) {
+            // Normalize port capacity format (same logic as ixAccountGenerateInvoice)
+            $normalizedCapacity = trim($portCapacity);
+            $normalizedCapacity = preg_replace('/\s+/', '', $normalizedCapacity);
+            
+            if (stripos($normalizedCapacity, 'Gbps') !== false || stripos($normalizedCapacity, 'gbps') !== false) {
+                $normalizedCapacity = str_ireplace(['Gbps', 'gbps', 'GBPS'], 'Gig', $normalizedCapacity);
+            }
+            
+            if (!preg_match('/(Gig|M)$/i', $normalizedCapacity)) {
+                if (preg_match('/^\d+$/', $normalizedCapacity)) {
+                    $normalizedCapacity = $normalizedCapacity . 'Gig';
+                }
+            }
+            
+            // Get pricing
+            $pricing = \App\Models\IxPortPricing::active()
+                ->where('node_type', $location->node_type)
+                ->where('port_capacity', $normalizedCapacity)
+                ->first();
+            
+            // Try variations if exact match not found
+            if (!$pricing) {
+                $variations = [
+                    trim($portCapacity),
+                    str_replace(' ', '', trim($portCapacity)),
+                    preg_replace('/\s+/', '', trim($portCapacity)),
+                    str_replace(['Gbps', 'gbps', 'GBPS'], 'Gig', str_replace(' ', '', trim($portCapacity))),
+                    str_replace(['Gbps', 'gbps'], 'Gig', trim($portCapacity)),
+                    str_replace([' Gbps', 'Gbps', 'gbps'], 'Gig', trim($portCapacity)),
+                ];
+                
+                foreach (array_unique($variations) as $variation) {
+                    if (empty($variation)) continue;
+                    $pricing = \App\Models\IxPortPricing::active()
+                        ->where('node_type', $location->node_type)
+                        ->where('port_capacity', $variation)
+                        ->first();
+                    if ($pricing) {
+                        break;
+                    }
+                }
+            }
+            
+            if ($pricing) {
+                $portAmount = (float) $pricing->getAmountForPlan($pricingPlan);
+            }
+        }
+        
+        // Calculate GST based on state
+        $gstState = null;
+        if ($location) {
+            $gstState = $location->state;
+        } else {
+            $gstVerification = GstVerification::where('user_id', $application->user_id)
+                ->where('is_verified', true)
+                ->latest()
+                ->first();
+            $gstState = $gstVerification?->state;
+        }
+        
+        $isDelhi = strtolower($gstState ?? '') === 'delhi' || strtolower($gstState ?? '') === 'new delhi';
+        
+        if ($isDelhi) {
+            $cgstAmount = round(($portAmount * 9) / 100, 2);
+            $sgstAmount = round(($portAmount * 9) / 100, 2);
+            $gstAmount = $cgstAmount + $sgstAmount;
+        } else {
+            $gstAmount = round(($portAmount * 18) / 100, 2);
+        }
+        
+        $amount = $portAmount;
+        $totalAmount = round($amount + $gstAmount, 2);
+        
+        return [
+            'amount' => $amount,
+            'gst_amount' => $gstAmount,
+            'total_amount' => $totalAmount,
+        ];
     }
 
     /**
