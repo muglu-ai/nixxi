@@ -2160,57 +2160,148 @@ class IxApplicationController extends Controller
                 $application = Application::find($paymentTransaction->application_id);
                 
                 if ($application) {
-                    // Handle invoice payment (check udf3 for invoice number)
+                    // Handle invoice payment (check udf3 for invoice number or bulk payment)
                     if ($isInvoicePayment && $invoiceNumber) {
-                        $invoice = \App\Models\Invoice::where('invoice_number', $invoiceNumber)
-                            ->where('application_id', $application->id)
-                            ->first();
-                        
-                        if ($invoice && $invoice->status === 'pending') {
-                            // Mark invoice as paid
-                            $invoice->update([
-                                'status' => 'paid',
-                                'paid_at' => now('Asia/Kolkata'),
+                        // Check if this is a bulk payment (udf3 starts with "BULK-")
+                        if (strpos($invoiceNumber, 'BULK-') === 0) {
+                            // Bulk payment: Extract invoice IDs
+                            $invoiceIdsString = str_replace('BULK-', '', $invoiceNumber);
+                            $invoiceIds = array_filter(explode(',', $invoiceIdsString));
+                            
+                            Log::info('Processing bulk payment', [
+                                'transaction_id' => $transactionId,
+                                'invoice_ids' => $invoiceIds,
+                                'application_id' => $application->id,
                             ]);
-
-                            // Automatically verify payment for this billing period
-                            if ($invoice->billing_period) {
-                                // Check if already verified
-                                $existingVerification = \App\Models\PaymentVerificationLog::where('application_id', $application->id)
-                                    ->where('billing_period', $invoice->billing_period)
+                            
+                            $processedInvoices = [];
+                            $processedApplications = [];
+                            
+                            // Process each invoice (may belong to different applications)
+                            foreach ($invoiceIds as $invoiceId) {
+                                $invoice = \App\Models\Invoice::where('id', $invoiceId)
+                                    ->where('status', 'pending')
+                                    ->with('application')
                                     ->first();
-
-                                if (!$existingVerification) {
-                                    \App\Models\PaymentVerificationLog::create([
-                                        'application_id' => $application->id,
-                                        'verified_by' => null, // System verified
-                                        'verification_type' => 'recurring',
-                                        'billing_period' => $invoice->billing_period,
-                                        'amount' => $invoice->total_amount,
-                                        'currency' => $invoice->currency,
-                                        'payment_method' => 'payu',
-                                        'notes' => 'Payment verified automatically via PayU for invoice '.$invoiceNumber,
-                                        'verified_at' => now('Asia/Kolkata'),
+                                
+                                if ($invoice && $invoice->application) {
+                                    $invoiceApplication = $invoice->application;
+                                    
+                                    // Mark invoice as paid
+                                    $invoice->update([
+                                        'status' => 'paid',
+                                        'paid_at' => now('Asia/Kolkata'),
                                     ]);
+                                    
+                                    $processedInvoices[] = $invoice->invoice_number;
+                                    
+                                    // Track applications for logging
+                                    if (!in_array($invoiceApplication->id, $processedApplications)) {
+                                        $processedApplications[] = $invoiceApplication->id;
+                                    }
 
-                                    // Log status change
-                                    \App\Models\ApplicationStatusHistory::log(
-                                        $application->id,
-                                        $application->status,
-                                        $application->status, // Keep same status
-                                        'system',
-                                        null,
-                                        "Payment automatically verified via PayU for billing period {$invoice->billing_period}"
-                                    );
+                                    // Automatically verify payment for this billing period
+                                    if ($invoice->billing_period) {
+                                        // Check if already verified for this application and billing period
+                                        $existingVerification = \App\Models\PaymentVerificationLog::where('application_id', $invoiceApplication->id)
+                                            ->where('billing_period', $invoice->billing_period)
+                                            ->first();
 
-                                    // Send message to user
-                                    \App\Models\Message::create([
-                                        'user_id' => $application->user_id,
-                                        'subject' => 'Payment Verified',
-                                        'message' => "Payment for invoice {$invoiceNumber} has been received and verified automatically. Thank you for your payment.",
-                                        'is_read' => false,
-                                        'sent_by' => 'system',
-                                    ]);
+                                        if (!$existingVerification) {
+                                            \App\Models\PaymentVerificationLog::create([
+                                                'application_id' => $invoiceApplication->id,
+                                                'verified_by' => null, // System verified
+                                                'verification_type' => 'recurring',
+                                                'billing_period' => $invoice->billing_period,
+                                                'amount' => $invoice->total_amount,
+                                                'currency' => $invoice->currency,
+                                                'payment_method' => 'payu',
+                                                'notes' => 'Payment verified automatically via PayU bulk payment for invoice '.$invoice->invoice_number,
+                                                'verified_at' => now('Asia/Kolkata'),
+                                            ]);
+
+                                            // Log status change
+                                            \App\Models\ApplicationStatusHistory::log(
+                                                $invoiceApplication->id,
+                                                $invoiceApplication->status,
+                                                $invoiceApplication->status, // Keep same status
+                                                'system',
+                                                null,
+                                                "Payment automatically verified via PayU for billing period {$invoice->billing_period}"
+                                            );
+                                        }
+                                    }
+                                }
+                            }
+                            
+                            // Send message to user about bulk payment (use the transaction's application user)
+                            if (count($processedInvoices) > 0) {
+                                \App\Models\Message::create([
+                                    'user_id' => $application->user_id,
+                                    'subject' => 'Bulk Payment Verified',
+                                    'message' => "Bulk payment for ".count($processedInvoices)." invoice(s) (".implode(', ', $processedInvoices).") has been received and verified automatically. Thank you for your payment.",
+                                    'is_read' => false,
+                                    'sent_by' => 'system',
+                                ]);
+                                
+                                Log::info('Bulk payment processed successfully', [
+                                    'transaction_id' => $transactionId,
+                                    'processed_invoices' => $processedInvoices,
+                                    'processed_applications' => $processedApplications,
+                                ]);
+                            }
+                        } else {
+                            // Single invoice payment
+                            $invoice = \App\Models\Invoice::where('invoice_number', $invoiceNumber)
+                                ->where('application_id', $application->id)
+                                ->first();
+                            
+                            if ($invoice && $invoice->status === 'pending') {
+                                // Mark invoice as paid
+                                $invoice->update([
+                                    'status' => 'paid',
+                                    'paid_at' => now('Asia/Kolkata'),
+                                ]);
+
+                                // Automatically verify payment for this billing period
+                                if ($invoice->billing_period) {
+                                    // Check if already verified
+                                    $existingVerification = \App\Models\PaymentVerificationLog::where('application_id', $application->id)
+                                        ->where('billing_period', $invoice->billing_period)
+                                        ->first();
+
+                                    if (!$existingVerification) {
+                                        \App\Models\PaymentVerificationLog::create([
+                                            'application_id' => $application->id,
+                                            'verified_by' => null, // System verified
+                                            'verification_type' => 'recurring',
+                                            'billing_period' => $invoice->billing_period,
+                                            'amount' => $invoice->total_amount,
+                                            'currency' => $invoice->currency,
+                                            'payment_method' => 'payu',
+                                            'notes' => 'Payment verified automatically via PayU for invoice '.$invoiceNumber,
+                                            'verified_at' => now('Asia/Kolkata'),
+                                        ]);
+
+                                        // Log status change
+                                        \App\Models\ApplicationStatusHistory::log(
+                                            $application->id,
+                                            $application->status,
+                                            $application->status, // Keep same status
+                                            'system',
+                                            null,
+                                            "Payment automatically verified via PayU for billing period {$invoice->billing_period}"
+                                        );
+
+                                        // Send message to user
+                                        \App\Models\Message::create([
+                                            'user_id' => $application->user_id,
+                                            'subject' => 'Payment Verified',
+                                            'message' => "Payment for invoice {$invoiceNumber} has been received and verified automatically. Thank you for your payment.",
+                                            'is_read' => false,
+                                            'sent_by' => 'system',
+                                        ]);
+                                    }
                                 }
                             }
                         }

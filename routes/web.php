@@ -369,6 +369,13 @@ Route::prefix('user')->name('user.')->middleware(['user.auth'])->group(function 
         Route::get('/', [\App\Http\Controllers\UserInvoiceController::class, 'index'])->name('index');
         Route::get('/{id}/download', [\App\Http\Controllers\UserInvoiceController::class, 'download'])->name('download');
     });
+
+    // Payment routes
+    Route::prefix('payments')->name('payments.')->group(function () {
+        Route::get('/pending', [\App\Http\Controllers\UserPaymentController::class, 'pending'])->name('pending');
+        Route::post('/pay-all', [\App\Http\Controllers\UserPaymentController::class, 'payAll'])->name('pay-all');
+        Route::post('/{invoiceId}/pay-now', [\App\Http\Controllers\UserPaymentController::class, 'payNow'])->name('pay-now');
+    });
 });
 
 // Cookie-based login route (for payment callbacks - no auth required)

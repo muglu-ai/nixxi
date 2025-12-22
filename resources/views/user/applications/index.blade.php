@@ -108,6 +108,30 @@
                                                     Pay Now
                                                 </a>
                                             @endif
+                                            
+                                            @php
+                                                $pendingInvoices = $pendingInvoicesByApplication[$application->id] ?? collect();
+                                            @endphp
+                                            @if($pendingInvoices->count() > 0)
+                                                @if($pendingInvoices->count() === 1)
+                                                    @php $invoice = $pendingInvoices->first(); @endphp
+                                                    <form action="{{ route('user.payments.pay-now', $invoice->id) }}" method="POST" class="d-inline">
+                                                        @csrf
+                                                        <button type="submit" class="btn btn-sm btn-danger">
+                                                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" class="me-1" viewBox="0 0 16 16">
+                                                                <path d="M8 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm.5-1.037a4.5 4.5 0 0 1-1.013-8.986A4.5 4.5 0 0 1 8.5 10.963z"/>
+                                                                <path d="M5.232 4.616a.5.5 0 0 1 .106.7L1.907 8l3.43 2.684a.5.5 0 1 1-.768.64L1.907 9l-3.43-2.684a.5.5 0 0 1 .768-.64zm10.536 0a.5.5 0 0 0-.106.7L14.093 8l-3.43 2.684a.5.5 0 1 0 .768.64L14.093 9l3.43-2.684a.5.5 0 0 0-.768-.64z"/>
+                                                            </svg>
+                                                            Pay Invoice (₹{{ number_format($invoice->total_amount, 2) }})
+                                                        </button>
+                                                    </form>
+                                                @else
+                                                    <span class="badge bg-danger">{{ $pendingInvoices->count() }} Pending</span>
+                                                    <a href="{{ route('user.payments.pending') }}" class="btn btn-sm btn-danger">
+                                                        Pay All
+                                                    </a>
+                                                @endif
+                                            @endif
                                         </div>
                                     </td>
                                 </tr>

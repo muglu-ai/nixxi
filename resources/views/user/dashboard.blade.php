@@ -85,6 +85,50 @@
         </div>
     </div>
 
+    <!-- Outstanding Amount Summary -->
+    @if($user->status === 'approved' || $user->status === 'active')
+    @if(isset($outstandingAmount) && $outstandingAmount > 0)
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card border-0 shadow-sm" style="border-radius: 16px; border-left: 4px solid #dc3545;">
+                <div class="card-body p-4">
+                    <div class="d-flex justify-content-between align-items-center flex-wrap">
+                        <div class="mb-3 mb-md-0">
+                            <h6 class="text-muted mb-2" style="font-size: 0.875rem; font-weight: 500;">Outstanding Amount</h6>
+                            <a href="{{ route('user.payments.pending') }}" style="text-decoration: none; color: inherit;">
+                                <h2 class="mb-0" style="color: #dc3545; font-weight: 700; cursor: pointer; transition: opacity 0.2s;" onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'">₹{{ number_format($outstandingAmount, 2) }}</h2>
+                            </a>
+                            <p class="text-muted small mb-0 mt-1">{{ $pendingInvoices ?? 0 }} {{ ($pendingInvoices ?? 0) == 1 ? 'invoice' : 'invoices' }} pending payment</p>
+                        </div>
+                        <div class="d-flex gap-2 flex-wrap">
+                            <a href="{{ route('user.payments.pending') }}" class="btn btn-outline-danger">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" class="me-2" viewBox="0 0 16 16">
+                                    <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z"/>
+                                    <path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4z"/>
+                                </svg>
+                                View Pending Payments
+                            </a>
+                            @if(isset($pendingInvoicesList) && $pendingInvoicesList->count() > 0)
+                            <form action="{{ route('user.payments.pay-all') }}" method="POST" class="d-inline">
+                                @csrf
+                                <button type="submit" class="btn btn-danger">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" class="me-2" viewBox="0 0 16 16">
+                                        <path d="M8 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm.5-1.037a4.5 4.5 0 0 1-1.013-8.986A4.5 4.5 0 0 1 8.5 10.963z"/>
+                                        <path d="M5.232 4.616a.5.5 0 0 1 .106.7L1.907 8l3.43 2.684a.5.5 0 1 1-.768.64L1.907 9l-3.43-2.684a.5.5 0 0 1 .768-.64zm10.536 0a.5.5 0 0 0-.106.7L14.093 8l-3.43 2.684a.5.5 0 1 0 .768.64L14.093 9l3.43-2.684a.5.5 0 0 0-.768-.64z"/>
+                                    </svg>
+                                    Pay All Now
+                                </button>
+                            </form>
+                            @endif
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    @endif
+    @endif
+
     <!-- Invoice Summary -->
     @if($user->status === 'approved' || $user->status === 'active')
     @if(isset($invoiceCount) && $invoiceCount > 0)

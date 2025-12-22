@@ -49,8 +49,16 @@ class ApplicationController extends Controller
                 ->where('application_type', 'IX')
                 ->whereIn('status', ['submitted', 'approved', 'payment_verified', 'processor_forwarded_legal', 'legal_forwarded_head', 'head_forwarded_ceo', 'ceo_approved', 'port_assigned', 'ip_assigned', 'invoice_pending'])
                 ->exists();
+            
+            // Get pending invoices for each application to show Pay Now buttons
+            $applicationIds = $applications->pluck('id')->toArray();
+            $pendingInvoicesByApplication = \App\Models\Invoice::whereIn('application_id', $applicationIds)
+                ->where('status', 'pending')
+                ->with(['application'])
+                ->get()
+                ->groupBy('application_id');
 
-            return response()->view('user.applications.index', compact('user', 'applications', 'hasSubmittedIxApplication'))
+            return response()->view('user.applications.index', compact('user', 'applications', 'hasSubmittedIxApplication', 'pendingInvoicesByApplication'))
                 ->header('Cache-Control', 'no-cache, no-store, max-age=0, must-revalidate')
                 ->header('Pragma', 'no-cache')
                 ->header('Expires', 'Fri, 01 Jan 1990 00:00:00 GMT');
