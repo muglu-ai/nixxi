@@ -57,6 +57,9 @@
                             </td>
                             <td class="text-end">
                                 <div class="btn-group btn-group-sm">
+                                    <a href="{{ route('superadmin.ix-locations.history', $location) }}" class="btn btn-outline-info" title="View History">
+                                        History
+                                    </a>
                                     <button class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#editLocationModal{{ $location->id }}">
                                         Edit
                                     </button>
@@ -122,6 +125,34 @@
                                                 <div class="col-md-6">
                                                     <label class="form-label">Zone</label>
                                                     <input type="text" class="form-control" name="zone" value="{{ old('zone', $location->zone) }}">
+                                                </div>
+                                                <div class="col-12">
+                                                    <hr class="my-3">
+                                                    <h6 class="text-muted mb-3">Admin-Only Details (Not visible to users)</h6>
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <label class="form-label">P2P Capacity</label>
+                                                    <input type="text" class="form-control" name="p2p_capacity" value="{{ old('p2p_capacity', $location->p2p_capacity) }}" placeholder="e.g. 80G">
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <label class="form-label">P2P Provider</label>
+                                                    <input type="text" class="form-control" name="p2p_provider" value="{{ old('p2p_provider', $location->p2p_provider) }}" placeholder="e.g. ANI Broadband">
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <label class="form-label">Connected Main Node</label>
+                                                    <input type="text" class="form-control" name="connected_main_node" value="{{ old('connected_main_node', $location->connected_main_node) }}" placeholder="e.g. New Delhi GK">
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <label class="form-label">P2P ARC (₹)</label>
+                                                    <input type="number" step="0.01" min="0" class="form-control" name="p2p_arc" value="{{ old('p2p_arc', $location->p2p_arc) }}" placeholder="0.00">
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <label class="form-label">Colocation Provider</label>
+                                                    <input type="text" class="form-control" name="colocation_provider" value="{{ old('colocation_provider', $location->colocation_provider) }}" placeholder="e.g. Netmagic">
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <label class="form-label">Colocation ARC (₹)</label>
+                                                    <input type="number" step="0.01" min="0" class="form-control" name="colocation_arc" value="{{ old('colocation_arc', $location->colocation_arc) }}" placeholder="0.00">
                                                 </div>
                                                 <div class="col-md-6">
                                                     <div class="form-check mt-4">
@@ -198,6 +229,34 @@
                         <div class="col-md-6">
                             <label class="form-label">Zone</label>
                             <input type="text" class="form-control" name="zone">
+                        </div>
+                        <div class="col-12">
+                            <hr class="my-3">
+                            <h6 class="text-muted mb-3">Admin-Only Details (Not visible to users)</h6>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">P2P Capacity</label>
+                            <input type="text" class="form-control" name="p2p_capacity" placeholder="e.g. 80G">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">P2P Provider</label>
+                            <input type="text" class="form-control" name="p2p_provider" placeholder="e.g. ANI Broadband">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Connected Main Node</label>
+                            <input type="text" class="form-control" name="connected_main_node" placeholder="e.g. New Delhi GK">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">P2P ARC (₹)</label>
+                            <input type="number" step="0.01" min="0" class="form-control" name="p2p_arc" placeholder="0.00">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Colocation Provider</label>
+                            <input type="text" class="form-control" name="colocation_provider" placeholder="e.g. Netmagic">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Colocation ARC (₹)</label>
+                            <input type="number" step="0.01" min="0" class="form-control" name="colocation_arc" placeholder="0.00">
                         </div>
                     </div>
                 </div>

@@ -3,7 +3,10 @@
 namespace App\Http\Controllers\SuperAdmin;
 
 use App\Http\Controllers\Controller;
+use App\Models\Admin;
 use App\Models\IxLocation;
+use App\Models\IxLocationHistory;
+use App\Models\SuperAdmin;
 use Exception;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -45,10 +48,19 @@ class IxLocationController extends Controller
             'ports' => 'nullable|integer|min:1|max:1000',
             'nodal_officer' => 'nullable|string|max:255',
             'zone' => 'nullable|string|max:255',
+            'p2p_capacity' => 'nullable|string|max:255',
+            'p2p_provider' => 'nullable|string|max:255',
+            'connected_main_node' => 'nullable|string|max:255',
+            'p2p_arc' => 'nullable|numeric|min:0',
+            'colocation_provider' => 'nullable|string|max:255',
+            'colocation_arc' => 'nullable|numeric|min:0',
         ]);
 
         try {
-            IxLocation::create($validated);
+            $location = IxLocation::create($validated);
+
+            // Log to history
+            $this->logHistory($location, null, $location->toArray(), 'created');
 
             return redirect()->route('superadmin.ix-locations.index')
                 ->with('success', 'IX location created successfully.');
@@ -79,11 +91,22 @@ class IxLocationController extends Controller
             'ports' => 'nullable|integer|min:1|max:1000',
             'nodal_officer' => 'nullable|string|max:255',
             'zone' => 'nullable|string|max:255',
+            'p2p_capacity' => 'nullable|string|max:255',
+            'p2p_provider' => 'nullable|string|max:255',
+            'connected_main_node' => 'nullable|string|max:255',
+            'p2p_arc' => 'nullable|numeric|min:0',
+            'colocation_provider' => 'nullable|string|max:255',
+            'colocation_arc' => 'nullable|numeric|min:0',
             'is_active' => 'nullable|boolean',
         ]);
 
         try {
+            $oldData = $ixLocation->toArray();
             $ixLocation->update($validated);
+            $newData = $ixLocation->fresh()->toArray();
+
+            // Log to history
+            $this->logHistory($ixLocation, $oldData, $newData, 'updated');
 
             return redirect()->route('superadmin.ix-locations.index')
                 ->with('success', 'IX location updated successfully.');
@@ -101,7 +124,13 @@ class IxLocationController extends Controller
     public function toggleStatus(IxLocation $ixLocation)
     {
         try {
+            $oldData = $ixLocation->toArray();
             $ixLocation->update(['is_active' => ! $ixLocation->is_active]);
+            $newData = $ixLocation->fresh()->toArray();
+
+            // Log to history
+            $changeType = $ixLocation->is_active ? 'activated' : 'deactivated';
+            $this->logHistory($ixLocation, $oldData, $newData, $changeType);
 
             return redirect()->route('superadmin.ix-locations.index')
                 ->with('success', 'Location status updated.');
@@ -118,6 +147,11 @@ class IxLocationController extends Controller
     public function destroy(IxLocation $ixLocation)
     {
         try {
+            $oldData = $ixLocation->toArray();
+            
+            // Log to history before deleting
+            $this->logHistory($ixLocation, $oldData, null, 'deleted');
+            
             $ixLocation->delete();
 
             return redirect()->route('superadmin.ix-locations.index')
@@ -127,5 +161,93 @@ class IxLocationController extends Controller
 
             return back()->with('error', 'Unable to delete location. Please try again.');
         }
+    }
+
+    /**
+     * Get location history.
+     */
+    public function history(IxLocation $ixLocation)
+    {
+        try {
+            $history = IxLocationHistory::where('ix_location_id', $ixLocation->id)
+                ->orderBy('created_at', 'desc')
+                ->get();
+
+            return view('superadmin.ix.location-history', compact('ixLocation', 'history'));
+        } catch (Exception $e) {
+            Log::error('Error loading IX location history: '.$e->getMessage());
+
+            return back()->with('error', 'Failed to load location history.');
+        }
+    }
+
+    /**
+     * Log history for IX location changes.
+     */
+    private function logHistory(IxLocation $location, ?array $oldData, ?array $newData, string $changeType): void
+    {
+        try {
+            $updatedBy = $this->getUpdatedBy();
+
+            IxLocationHistory::create([
+                'ix_location_id' => $location->id,
+                'old_data' => $oldData,
+                'new_data' => $newData,
+                'updated_by' => $updatedBy,
+                'change_type' => $changeType,
+                'notes' => $this->getChangeNotes($oldData, $newData, $changeType),
+            ]);
+        } catch (Exception $e) {
+            Log::error('Failed to log IX location history: '.$e->getMessage());
+        }
+    }
+
+    /**
+     * Get who made the change.
+     */
+    private function getUpdatedBy(): string
+    {
+        if (session('superadmin_id')) {
+            $superAdmin = SuperAdmin::find(session('superadmin_id'));
+            return $superAdmin ? "SuperAdmin: {$superAdmin->name}" : 'SuperAdmin';
+        }
+
+        if (session('admin_id')) {
+            $admin = Admin::find(session('admin_id'));
+            return $admin ? "Admin: {$admin->name}" : 'Admin';
+        }
+
+        return 'System';
+    }
+
+    /**
+     * Generate change notes based on what changed.
+     */
+    private function getChangeNotes(?array $oldData, ?array $newData, string $changeType): ?string
+    {
+        if ($changeType === 'created') {
+            return 'IX location created.';
+        }
+
+        if ($changeType === 'deleted') {
+            return 'IX location deleted.';
+        }
+
+        if ($changeType === 'activated' || $changeType === 'deactivated') {
+            return "Location {$changeType}.";
+        }
+
+        if ($oldData && $newData) {
+            $changes = [];
+            foreach ($newData as $key => $value) {
+                if (isset($oldData[$key]) && $oldData[$key] != $value && !in_array($key, ['updated_at', 'created_at'])) {
+                    $changes[] = ucfirst(str_replace('_', ' ', $key)).": {$oldData[$key]} → {$value}";
+                }
+            }
+
+            return !empty($changes) ? implode(', ', $changes) : 'No significant changes detected.';
+        }
+
+        return null;
     }
 }

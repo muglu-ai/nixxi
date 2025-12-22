@@ -87,6 +87,7 @@ Route::prefix('superadmin')->name('superadmin.')->middleware(['superadmin'])->gr
     Route::put('/ix-locations/{ixLocation}', [SuperAdminIxLocationController::class, 'update'])->name('ix-locations.update');
     Route::patch('/ix-locations/{ixLocation}/toggle', [SuperAdminIxLocationController::class, 'toggleStatus'])->name('ix-locations.toggle');
     Route::delete('/ix-locations/{ixLocation}', [SuperAdminIxLocationController::class, 'destroy'])->name('ix-locations.destroy');
+    Route::get('/ix-locations/{ixLocation}/history', [SuperAdminIxLocationController::class, 'history'])->name('ix-locations.history');
 
     // IX Port pricing management
     Route::get('/ix-port-pricing', [SuperAdminIxPortPricingController::class, 'index'])->name('ix-port-pricing.index');
