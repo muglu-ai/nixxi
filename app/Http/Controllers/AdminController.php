@@ -95,7 +95,53 @@ class AdminController extends Controller
             // Calculate statistics
             $totalUsers = Registration::count();
             $totalApplications = Application::count();
-            $approvedApplications = Application::where('status', 'approved')->count();
+            $approvedApplications = Application::whereIn('status', ['approved', 'payment_verified'])->count();
+            
+            // Approved applications with payment verification
+            $approvedApplicationsWithPayment = Application::whereIn('status', ['approved', 'payment_verified'])
+                ->whereHas('paymentTransactions', function ($q) {
+                    $q->where('payment_status', 'success');
+                })
+                ->count();
+            
+            // Member Statistics (Registrations that have at least one application with membership_id)
+            $totalMembers = Registration::whereHas('applications', function ($query) {
+                $query->whereNotNull('membership_id');
+            })->distinct()->count();
+            
+            // Active members: Have membership_id AND at least one application with active status
+            $activeMembers = Registration::whereHas('applications', function ($query) {
+                $query->whereNotNull('membership_id')
+                    ->whereIn('status', ['ip_assigned', 'payment_verified', 'approved']);
+            })->distinct()->count();
+            
+            // Disconnected members: Have membership_id but no active applications
+            $disconnectedMembers = Registration::whereHas('applications', function ($query) {
+                $query->whereNotNull('membership_id');
+            })
+            ->whereDoesntHave('applications', function ($query) {
+                $query->whereNotNull('membership_id')
+                    ->whereIn('status', ['ip_assigned', 'payment_verified', 'approved']);
+            })
+            ->distinct()
+            ->count();
+            
+            // Recent Live Members (applications with status 'ip_assigned' in last 30 days)
+            $recentLiveMembers = Application::with('user')
+                ->where('status', 'ip_assigned')
+                ->where('updated_at', '>=', now()->subDays(30))
+                ->orderBy('updated_at', 'desc')
+                ->take(10)
+                ->get();
+            
+            // IX Points Statistics
+            $totalIxPoints = IxLocation::where('is_active', true)->count();
+            $edgeIxPoints = IxLocation::where('is_active', true)->where('node_type', 'edge')->count();
+            $metroIxPoints = IxLocation::where('is_active', true)->where('node_type', 'metro')->count();
+            
+            // Grievance Tracking
+            $openGrievances = Ticket::whereIn('status', ['open', 'assigned', 'in_progress'])->count();
+            $pendingGrievances = Ticket::where('status', 'assigned')->count();
 
             // Pending applications based on selected role
             $pendingApplications = 0;
@@ -156,9 +202,19 @@ class AdminController extends Controller
                 'totalUsers',
                 'totalApplications',
                 'approvedApplications',
+                'approvedApplicationsWithPayment',
                 'pendingApplications',
                 'selectedRole',
-                'recentUsers'
+                'recentUsers',
+                'totalMembers',
+                'activeMembers',
+                'disconnectedMembers',
+                'recentLiveMembers',
+                'totalIxPoints',
+                'edgeIxPoints',
+                'metroIxPoints',
+                'openGrievances',
+                'pendingGrievances'
             ));
         } catch (QueryException $e) {
             Log::error('Database error loading Admin dashboard: '.$e->getMessage());

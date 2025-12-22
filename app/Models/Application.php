@@ -146,6 +146,14 @@ class Application extends Model
     }
 
     /**
+     * Get the payment transactions for this application.
+     */
+    public function paymentTransactions(): HasMany
+    {
+        return $this->hasMany(PaymentTransaction::class);
+    }
+
+    /**
      * Get the GST verification.
      */
     public function gstVerification(): BelongsTo

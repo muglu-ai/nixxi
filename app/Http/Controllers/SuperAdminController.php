@@ -138,6 +138,48 @@ class SuperAdminController extends Controller
             $totalIxPoints = IxLocation::where('is_active', true)->count();
             $edgeIxPoints = IxLocation::where('is_active', true)->where('node_type', 'edge')->count();
             $metroIxPoints = IxLocation::where('is_active', true)->where('node_type', 'metro')->count();
+            
+            // Approved Applications with payment verification
+            $approvedApplications = Application::whereIn('status', ['approved', 'payment_verified'])->count();
+            $approvedApplicationsWithPayment = Application::whereIn('status', ['approved', 'payment_verified'])
+                ->whereHas('paymentTransactions', function ($q) {
+                    $q->where('payment_status', 'success');
+                })
+                ->count();
+            
+            // Member Statistics (Registrations that have at least one application with membership_id)
+            $totalMembers = Registration::whereHas('applications', function ($query) {
+                $query->whereNotNull('membership_id');
+            })->distinct()->count();
+            
+            // Active members: Have membership_id AND at least one application with active status
+            $activeMembers = Registration::whereHas('applications', function ($query) {
+                $query->whereNotNull('membership_id')
+                    ->whereIn('status', ['ip_assigned', 'payment_verified', 'approved']);
+            })->distinct()->count();
+            
+            // Disconnected members: Have membership_id but no active applications
+            $disconnectedMembers = Registration::whereHas('applications', function ($query) {
+                $query->whereNotNull('membership_id');
+            })
+            ->whereDoesntHave('applications', function ($query) {
+                $query->whereNotNull('membership_id')
+                    ->whereIn('status', ['ip_assigned', 'payment_verified', 'approved']);
+            })
+            ->distinct()
+            ->count();
+            
+            // Recent Live Members (applications with status 'ip_assigned' in last 30 days)
+            $recentLiveMembers = Application::with('user')
+                ->where('status', 'ip_assigned')
+                ->where('updated_at', '>=', now()->subDays(30))
+                ->orderBy('updated_at', 'desc')
+                ->take(10)
+                ->get();
+            
+            // Grievance Tracking
+            $openGrievances = Ticket::whereIn('status', ['open', 'assigned', 'in_progress'])->count();
+            $pendingGrievances = Ticket::where('status', 'assigned')->count();
 
             return view('superadmin.dashboard', compact(
                 'superAdmin',
@@ -150,6 +192,14 @@ class SuperAdminController extends Controller
                 'roleSlugs',
                 'totalApplications',
                 'fullyApproved',
+                'approvedApplications',
+                'approvedApplicationsWithPayment',
+                'totalMembers',
+                'activeMembers',
+                'disconnectedMembers',
+                'recentLiveMembers',
+                'openGrievances',
+                'pendingGrievances',
                 // New IX Workflow Roles
                 'ixProcessorApproved',
                 'ixProcessorPending',

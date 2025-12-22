@@ -11,6 +11,25 @@
         <div class="accent-line"></div>
     </div>
 
+    <!-- Global Search -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card border-0 shadow-sm" style="border-radius: 16px;">
+                <div class="card-body p-3">
+                    <form action="{{ route('superadmin.users') }}" method="GET" class="d-flex gap-2">
+                        <input type="text" name="search" class="form-control" placeholder="Search applications, members, invoices, payments..." value="{{ request('search') }}">
+                        <button type="submit" class="btn btn-primary">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 16 16">
+                                <path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0z"/>
+                            </svg>
+                            Search
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- IX Points Visibility Section -->
     <div class="row g-4 mb-4">
         <div class="col-12">
@@ -83,6 +102,153 @@
                                 </div>
                             </a>
                         </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Approved Applications & Member Statistics Row -->
+    <div class="row g-4 mb-4">
+        <!-- Approved Applications -->
+        <div class="col-md-6">
+            <div class="card border-0 shadow-sm" style="border-radius: 16px;">
+                <div class="card-header bg-success text-white" style="border-radius: 16px 16px 0 0;">
+                    <h5 class="mb-0" style="font-weight: 600;">Approved Applications</h5>
+                </div>
+                <div class="card-body p-4">
+                    <div class="d-flex align-items-center justify-content-between">
+                        <div>
+                            <h6 class="text-muted mb-2" style="font-size: 0.875rem; font-weight: 500;">Total Approved</h6>
+                            <h2 class="mb-0" style="color: #2c3e50; font-weight: 700;">{{ $approvedApplications }}</h2>
+                            @if($approvedApplicationsWithPayment > 0)
+                            <small class="text-success">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16" style="display: inline-block; vertical-align: middle;">
+                                    <path d="M10.97 4.97a.75.75 0 0 1 1.07 1.05l-3.99 4.99a.75.75 0 0 1-1.08.02L4.324 8.384a.75.75 0 1 1 1.06-1.06l2.094 2.093 3.473-4.425a.267.267 0 0 1 .02-.022z"/>
+                                </svg>
+                                {{ $approvedApplicationsWithPayment }} verified payments
+                            </small>
+                            @endif
+                        </div>
+                        <div class="bg-success bg-opacity-10 rounded-circle p-3">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="#198754" viewBox="0 0 16 16">
+                                <path d="M10.97 4.97a.75.75 0 0 1 1.07 1.05l-3.99 4.99a.75.75 0 0 1-1.08.02L4.324 8.384a.75.75 0 1 1 1.06-1.06l2.094 2.093 3.473-4.425a.267.267 0 0 1 .02-.022z"/>
+                            </svg>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- Member Statistics -->
+        <div class="col-md-6">
+            <div class="card border-0 shadow-sm" style="border-radius: 16px;">
+                <div class="card-header bg-primary text-white" style="border-radius: 16px 16px 0 0;">
+                    <h5 class="mb-0" style="font-weight: 600;">Member Statistics</h5>
+                </div>
+                <div class="card-body p-4">
+                    <div class="row g-3">
+                        <div class="col-4">
+                            <div class="text-center">
+                                <h6 class="text-muted mb-1" style="font-size: 0.75rem;">Total</h6>
+                                <h4 class="mb-0" style="color: #2c3e50; font-weight: 700;">{{ $totalMembers }}</h4>
+                            </div>
+                        </div>
+                        <div class="col-4">
+                            <div class="text-center">
+                                <h6 class="text-muted mb-1" style="font-size: 0.75rem;">Active</h6>
+                                <h4 class="mb-0 text-success" style="font-weight: 700;">{{ $activeMembers }}</h4>
+                            </div>
+                        </div>
+                        <div class="col-4">
+                            <div class="text-center">
+                                <h6 class="text-muted mb-1" style="font-size: 0.75rem;">Disconnected</h6>
+                                <h4 class="mb-0 text-danger" style="font-weight: 700;">{{ $disconnectedMembers }}</h4>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Live Members & Grievance Tracking Row -->
+    <div class="row g-4 mb-4">
+        <!-- Recent Live Members -->
+        @if($recentLiveMembers->count() > 0)
+        <div class="col-md-8">
+            <div class="card border-0 shadow-sm" style="border-radius: 16px;">
+                <div class="card-header bg-success text-white" style="border-radius: 16px 16px 0 0;">
+                    <h5 class="mb-0" style="font-weight: 600;">Recent Live Members</h5>
+                </div>
+                <div class="card-body p-4">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead>
+                                <tr>
+                                    <th style="color: #2c3e50; font-weight: 600;">Application ID</th>
+                                    <th style="color: #2c3e50; font-weight: 600;">Member Name</th>
+                                    <th style="color: #2c3e50; font-weight: 600;">Status</th>
+                                    <th style="color: #2c3e50; font-weight: 600;">Activated Date</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach($recentLiveMembers as $application)
+                                <tr>
+                                    <td><a href="{{ route('superadmin.users.show', $application->user_id) }}" style="color: #0d6efd; text-decoration: none;">{{ $application->application_id }}</a></td>
+                                    <td>{{ $application->user->fullname ?? 'N/A' }}</td>
+                                    <td>
+                                        <span class="badge rounded-pill px-3 py-1 bg-success">
+                                            Live
+                                        </span>
+                                    </td>
+                                    <td>{{ $application->updated_at->format('M d, Y') }}</td>
+                                </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+        @endif
+        <!-- Grievance Tracking -->
+        <div class="col-md-4">
+            <div class="card border-0 shadow-sm" style="border-radius: 16px;">
+                <div class="card-header bg-warning text-white" style="border-radius: 16px 16px 0 0;">
+                    <h5 class="mb-0" style="font-weight: 600;">Grievance Tracking</h5>
+                </div>
+                <div class="card-body p-4">
+                    <div class="mb-3">
+                        <a href="{{ route('superadmin.grievance.index') }}" class="text-decoration-none">
+                            <div class="d-flex align-items-center justify-content-between p-3 bg-light rounded">
+                                <div>
+                                    <h6 class="text-muted mb-1" style="font-size: 0.875rem; font-weight: 500;">Open Grievances</h6>
+                                    <h3 class="mb-0" style="color: #2c3e50; font-weight: 700;">{{ $openGrievances }}</h3>
+                                </div>
+                                <div class="bg-warning bg-opacity-10 rounded-circle p-3">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="#ffc107" viewBox="0 0 16 16">
+                                        <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z"/>
+                                        <path d="M7.002 11a1 1 0 1 1 2 0 1 1 0 0 1-2 0zM7.1 4.995a.905.905 0 1 1 1.8 0l-.35 3.507a.552.552 0 0 1-1.1 0L7.1 4.995z"/>
+                                    </svg>
+                                </div>
+                            </div>
+                        </a>
+                    </div>
+                    <div>
+                        <a href="{{ route('superadmin.grievance.index') }}" class="text-decoration-none">
+                            <div class="d-flex align-items-center justify-content-between p-3 bg-light rounded">
+                                <div>
+                                    <h6 class="text-muted mb-1" style="font-size: 0.875rem; font-weight: 500;">Pending Requests</h6>
+                                    <h3 class="mb-0" style="color: #2c3e50; font-weight: 700;">{{ $pendingGrievances }}</h3>
+                                </div>
+                                <div class="bg-info bg-opacity-10 rounded-circle p-3">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="#0dcaf0" viewBox="0 0 16 16">
+                                        <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z"/>
+                                        <path d="M5 6.5a.5.5 0 0 1 .5-.5h5a.5.5 0 0 1 0 1h-5a.5.5 0 0 1-.5-.5zm0 3a.5.5 0 0 1 .5-.5h5a.5.5 0 0 1 0 1h-5a.5.5 0 0 1-.5-.5z"/>
+                                    </svg>
+                                </div>
+                            </div>
+                        </a>
                     </div>
                 </div>
             </div>
