@@ -249,31 +249,35 @@
             <div class="section-label">Buyer:</div>
             <div class="detail-row">
                 <span class="detail-label">Buyer:</span>
-                {{ $companyDetails['legal_name'] ?? $companyDetails['trade_name'] ?? $user->fullname ?? 'N/A' }}
+                {{ $buyerDetails['company_name'] ?? $user->fullname ?? 'N/A' }}
             </div>
             <div class="detail-row">
                 <span class="detail-label">Address:</span>
-                {{ $companyDetails['pradr']['addr'] ?? $companyDetails['primary_address'] ?? ($user->address ?? 'N/A') }}
+                {{ $buyerDetails['address'] ?? 'N/A' }}
             </div>
             <div class="detail-row">
                 <span class="detail-label">Phone:</span>
-                {{ $user->mobile ?? 'N/A' }}
+                {{ $buyerDetails['phone'] ?? $user->mobile ?? 'N/A' }}
+            </div>
+            <div class="detail-row">
+                <span class="detail-label">Email:</span>
+                {{ $buyerDetails['email'] ?? $user->email ?? 'N/A' }}
             </div>
             <div class="detail-row">
                 <span class="detail-label">GSTIN/UIN:</span>
-                {{ $data['gstin'] ?? ($gstVerification->gstin ?? 'N/A') }}
+                {{ $buyerDetails['gstin'] ?? ($data['gstin'] ?? 'N/A') }}
             </div>
             <div class="detail-row">
                 <span class="detail-label">PAN:</span>
-                {{ $companyDetails['pan'] ?? $user->pancardno ?? 'N/A' }}
+                {{ $buyerDetails['pan'] ?? $user->pancardno ?? 'N/A' }}
             </div>
             <div class="detail-row">
                 <span class="detail-label">Attn:</span>
-                {{ $companyDetails['legal_name'] ?? $companyDetails['trade_name'] ?? $user->fullname ?? 'N/A' }}
+                {{ $buyerDetails['company_name'] ?? $user->fullname ?? 'N/A' }}
             </div>
             <div class="detail-row">
                 <span class="detail-label">Place of Supply:</span>
-                {{ $companyDetails['state_info']['name'] ?? $companyDetails['state'] ?? ($gstVerification->state ?? 'N/A') }}
+                {{ $placeOfSupply ?? 'N/A' }}
             </div>
         </div>
         <div class="seller-column">
@@ -328,12 +332,53 @@
         $gstAmount = $invoice ? (float)$invoice->gst_amount : 0;
         $totalAmount = $invoice ? (float)$invoice->total_amount : 0;
         
-        // Get billing period from invoice or calculate from application
-        $billingPeriod = $invoice->billing_period ?? '';
-        if (!$billingPeriod && $invoice && $invoice->invoice_date && $invoice->due_date) {
-            $startDate = \Carbon\Carbon::parse($invoice->invoice_date);
-            $endDate = \Carbon\Carbon::parse($invoice->due_date);
-            $billingPeriod = $startDate->format('d/m/Y') . ' to ' . $endDate->format('d/m/Y');
+        // Get billing period dates
+        $billingStartDate = null;
+        $billingEndDate = null;
+        $billingPeriodText = '';
+        
+        if ($invoice && $invoice->invoice_date && $invoice->due_date) {
+            $billingStartDate = \Carbon\Carbon::parse($invoice->invoice_date);
+            $billingEndDate = \Carbon\Carbon::parse($invoice->due_date);
+            
+            // If due date is after invoice date, use that range
+            if ($billingEndDate->gt($billingStartDate)) {
+                $billingPeriodText = $billingStartDate->format('d/m/Y') . ' to ' . $billingEndDate->format('d/m/Y');
+            } else {
+                // Calculate based on billing cycle
+                $billingCycle = $application->billing_cycle ?? ($data['port_selection']['billing_plan'] ?? 'monthly');
+                $startDate = $application->service_activation_date 
+                    ? \Carbon\Carbon::parse($application->service_activation_date)
+                    : $billingStartDate;
+                
+                // Get last paid invoice to determine start date
+                $lastInvoice = \App\Models\Invoice::where('application_id', $application->id)
+                    ->where('status', 'paid')
+                    ->where('id', '<', $invoice->id)
+                    ->latest('invoice_date')
+                    ->first();
+                
+                if ($lastInvoice && $lastInvoice->due_date) {
+                    $startDate = \Carbon\Carbon::parse($lastInvoice->due_date);
+                }
+                
+                switch ($billingCycle) {
+                    case 'annual':
+                        $endDate = $startDate->copy()->addYear();
+                        break;
+                    case 'quarterly':
+                        $endDate = $startDate->copy()->addMonths(3);
+                        break;
+                    case 'monthly':
+                    default:
+                        $endDate = $startDate->copy()->addMonth();
+                        break;
+                }
+                
+                $billingPeriodText = $startDate->format('d/m/Y') . ' to ' . $endDate->format('d/m/Y');
+            }
+        } else {
+            $billingPeriodText = $invoiceDate . ' to ' . $dueDate;
         }
         
         // Get port capacity
@@ -344,6 +389,16 @@
             $portCapacity = str_replace('Gig', ' Gbps', $portCapacity);
         } elseif (strpos($portCapacity, 'Mbps') === false && is_numeric(str_replace([' ', 'Mbps', 'Gbps'], '', $portCapacity))) {
             $portCapacity = $portCapacity . ' Mbps';
+        }
+        
+        // Determine GST type (IGST vs CGST+SGST)
+        $isDelhi = strtolower($placeOfSupply ?? '') === 'delhi' || strtolower($placeOfSupply ?? '') === 'new delhi';
+        if ($isDelhi) {
+            $cgstAmount = round($gstAmount / 2, 2);
+            $sgstAmount = round($gstAmount / 2, 2);
+        } else {
+            $cgstAmount = 0;
+            $sgstAmount = 0;
         }
     @endphp
 
@@ -361,7 +416,7 @@
         <tbody>
             <tr>
                 <td>1</td>
-                <td>Port Charges For {{ $billingPeriod ?: ($invoiceDate . ' to ' . $dueDate) }}</td>
+                <td>Port Charges For {{ $billingPeriodText }}</td>
                 <td>1</td>
                 <td>{{ $portCapacity }}</td>
                 <td>{{ number_format($amount, 2) }}</td>
@@ -372,10 +427,21 @@
 
     <!-- Amount Summary -->
     <div class="amount-summary">
-        <div class="amount-row">
-            <div class="amount-label">IGST(18%):</div>
-            <div class="amount-value">{{ number_format($gstAmount, 2) }}</div>
-        </div>
+        @if($isDelhi)
+            <div class="amount-row">
+                <div class="amount-label">CGST(9%):</div>
+                <div class="amount-value">{{ number_format($cgstAmount, 2) }}</div>
+            </div>
+            <div class="amount-row">
+                <div class="amount-label">SGST(9%):</div>
+                <div class="amount-value">{{ number_format($sgstAmount, 2) }}</div>
+            </div>
+        @else
+            <div class="amount-row">
+                <div class="amount-label">IGST(18%):</div>
+                <div class="amount-value">{{ number_format($gstAmount, 2) }}</div>
+            </div>
+        @endif
         <div class="amount-row total-row">
             <div class="amount-label">Total Amount Due:</div>
             <div class="amount-value">{{ number_format($totalAmount, 2) }}</div>

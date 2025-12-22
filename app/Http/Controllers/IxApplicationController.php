@@ -642,18 +642,30 @@ class IxApplicationController extends Controller
             $applicationData = $mergedData;
         }
 
+        // Get GST verification ID if provided
+        $gstVerificationId = null;
+        if (isset($applicationData['gstin_verification_id'])) {
+            $gstVerificationId = $applicationData['gstin_verification_id'];
+        } elseif ($request->has('gstin_verification_id')) {
+            $gstVerificationId = $request->input('gstin_verification_id');
+        }
+
         // Save or update application
         // For IX applications, keep as 'draft' until payment is made
         // Status will be changed to 'submitted' only after successful payment
         if ($existingDraft) {
             $application = $existingDraft;
-            $application->update([
+            $updateData = [
                 'application_data' => $applicationData,
                 'status' => $isDraft ? 'draft' : 'draft', // Keep as draft until payment
                 'submitted_at' => null, // Will be set after payment
-            ]);
+            ];
+            if ($gstVerificationId) {
+                $updateData['gst_verification_id'] = $gstVerificationId;
+            }
+            $application->update($updateData);
         } else {
-            $application = Application::create([
+            $createData = [
                 'user_id' => $userId,
                 'pan_card_no' => $user->pancardno,
                 'application_id' => Application::generateApplicationId(),
@@ -661,7 +673,11 @@ class IxApplicationController extends Controller
                 'status' => $isDraft ? 'draft' : 'draft', // Keep as draft until payment
                 'application_data' => $applicationData,
                 'submitted_at' => null, // Will be set after payment
-            ]);
+            ];
+            if ($gstVerificationId) {
+                $createData['gst_verification_id'] = $gstVerificationId;
+            }
+            $application = Application::create($createData);
         }
 
         // Handle preview - return JSON
@@ -2527,16 +2543,26 @@ class IxApplicationController extends Controller
             $applicationData = $mergedData;
         }
 
+        // Get GST verification ID if provided
+        $gstVerificationId = null;
+        if (isset($applicationData['gstin_verification_id'])) {
+            $gstVerificationId = $applicationData['gstin_verification_id'];
+        }
+
         // Save or update application
         if ($existingDraft) {
             $application = $existingDraft;
-            $application->update([
+            $updateData = [
                 'application_data' => $applicationData,
                 'status' => 'draft',
                 'submitted_at' => null,
-            ]);
+            ];
+            if ($gstVerificationId) {
+                $updateData['gst_verification_id'] = $gstVerificationId;
+            }
+            $application->update($updateData);
         } else {
-            $application = Application::create([
+            $createData = [
                 'user_id' => $userId,
                 'pan_card_no' => $user->pancardno,
                 'application_id' => Application::generateApplicationId(),
@@ -2544,7 +2570,11 @@ class IxApplicationController extends Controller
                 'status' => 'draft',
                 'application_data' => $applicationData,
                 'submitted_at' => null,
-            ]);
+            ];
+            if ($gstVerificationId) {
+                $createData['gst_verification_id'] = $gstVerificationId;
+            }
+            $application = Application::create($createData);
         }
 
         return $application;
@@ -2931,11 +2961,56 @@ class IxApplicationController extends Controller
                 $sourceOutput = $result['source_output'] ?? null;
 
                 if ($sourceOutput) {
-                    $verification->update([
-                        'status' => 'completed',
-                        'is_verified' => true,
-                        'verification_data' => $result,
-                    ]);
+                    $isVerified = ($sourceOutput['status'] ?? '') === 'id_found';
+                    
+                    if ($isVerified) {
+                        // Extract GST data from the response structure
+                        $updateData = [
+                            'status' => 'completed',
+                            'is_verified' => true,
+                            'verification_data' => $result,
+                            'legal_name' => $sourceOutput['legal_name'] ?? null,
+                            'trade_name' => $sourceOutput['trade_name'] ?? null,
+                        ];
+
+                        // Extract PAN from GSTIN (first 10 characters after first 2)
+                        $gstin = $sourceOutput['gstin'] ?? $verification->gstin;
+                        if ($gstin && strlen($gstin) >= 10) {
+                            $updateData['pan'] = substr($gstin, 2, 10);
+                        }
+
+                        // Extract state and address from principal place of business
+                        $address = $sourceOutput['principal_place_of_business_fields']['principal_place_of_business_address'] ?? null;
+                        if ($address) {
+                            $updateData['state'] = $address['state_name'] ?? null;
+                            // Build primary address from address components
+                            $addressParts = array_filter([
+                                $address['door_number'] ?? null,
+                                $address['building_name'] ?? null,
+                                $address['street'] ?? null,
+                                $address['location'] ?? null,
+                                $address['city'] ?? null,
+                                $address['dst'] ?? null,
+                                $address['state_name'] ?? null,
+                                $address['pincode'] ?? null,
+                            ]);
+                            $updateData['primary_address'] = implode(', ', $addressParts);
+                        }
+
+                        $updateData['registration_date'] = isset($sourceOutput['date_of_registration']) ? date('Y-m-d', strtotime($sourceOutput['date_of_registration'])) : null;
+                        $updateData['gst_type'] = $sourceOutput['taxpayer_type'] ?? null;
+                        $updateData['company_status'] = $sourceOutput['gstin_status'] ?? null;
+                        $updateData['constitution_of_business'] = $sourceOutput['constitution_of_business'] ?? null;
+
+                        $verification->update($updateData);
+                    } else {
+                        $verification->update([
+                            'status' => 'completed',
+                            'is_verified' => false,
+                            'verification_data' => $result,
+                            'error_message' => $sourceOutput['message'] ?? 'GSTIN verification failed',
+                        ]);
+                    }
 
                     $gstin = session('ix_gstin_request_'.$verification->id) ?? $verification->gstin;
                     if ($gstin) {
@@ -2948,8 +3023,8 @@ class IxApplicationController extends Controller
 
                     return response()->json([
                         'success' => true,
-                        'message' => 'GSTIN verified successfully',
-                        'is_verified' => true,
+                        'message' => $isVerified ? 'GSTIN verified successfully' : 'GSTIN verification failed',
+                        'is_verified' => $isVerified,
                     ]);
                 }
             } elseif ($statusResult['status'] === 'failed') {

@@ -7,6 +7,7 @@ use App\Models\AdminAction;
 use App\Models\Application;
 use App\Models\ApplicationStatusHistory;
 use App\Models\GstVerification;
+use App\Models\Invoice;
 use App\Models\IxLocation;
 use App\Models\McaVerification;
 use App\Models\Message;
@@ -22,6 +23,7 @@ use App\Models\UdyamVerification;
 use App\Models\UserKycProfile;
 use App\Models\Role;
 use App\Models\SuperAdmin;
+use Illuminate\Support\Facades\Storage;
 use Exception;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
@@ -1260,6 +1262,166 @@ class SuperAdminController extends Controller
             Log::error('Error accepting payment: '.$e->getMessage());
 
             return back()->with('error', 'An error occurred while accepting payment. Please try again.');
+        }
+    }
+
+    /**
+     * Display list of all IX invoices.
+     */
+    public function invoices(Request $request)
+    {
+        try {
+            $superAdminId = session('superadmin_id');
+            $superAdmin = SuperAdmin::findOrFail($superAdminId);
+
+            $query = Invoice::with(['application.user', 'generatedBy'])
+                ->whereHas('application', function ($q) {
+                    $q->where('application_type', 'IX');
+                });
+
+            // Search functionality
+            if ($request->filled('search')) {
+                $search = $request->input('search');
+                $query->where(function ($q) use ($search) {
+                    $q->where('invoice_number', 'like', "%{$search}%")
+                        ->orWhereHas('application', function ($appQuery) use ($search) {
+                            $appQuery->where('application_id', 'like', "%{$search}%")
+                                ->orWhereHas('user', function ($userQuery) use ($search) {
+                                    $userQuery->where('fullname', 'like', "%{$search}%")
+                                        ->orWhere('email', 'like', "%{$search}%");
+                                });
+                        });
+                });
+            }
+
+            // Filter by status
+            if ($request->filled('status')) {
+                $query->where('status', $request->input('status'));
+            }
+
+            // Filter by date range
+            if ($request->filled('date_from')) {
+                $query->whereDate('invoice_date', '>=', $request->input('date_from'));
+            }
+            if ($request->filled('date_to')) {
+                $query->whereDate('invoice_date', '<=', $request->input('date_to'));
+            }
+
+            $invoices = $query->latest('invoice_date')->paginate(20)->withQueryString();
+
+            return view('superadmin.invoices.index', compact('invoices'));
+        } catch (Exception $e) {
+            Log::error('Error loading invoices: '.$e->getMessage());
+
+            return redirect()->route('superadmin.dashboard')
+                ->with('error', 'Unable to load invoices.');
+        }
+    }
+
+    /**
+     * Display invoice details.
+     */
+    public function showInvoice($id)
+    {
+        try {
+            $superAdminId = session('superadmin_id');
+            $superAdmin = SuperAdmin::findOrFail($superAdminId);
+
+            $invoice = Invoice::with(['application.user', 'generatedBy'])
+                ->whereHas('application', function ($q) {
+                    $q->where('application_type', 'IX');
+                })
+                ->findOrFail($id);
+
+            return view('superadmin.invoices.show', compact('invoice'));
+        } catch (Exception $e) {
+            Log::error('Error loading invoice details: '.$e->getMessage());
+
+            return redirect()->route('superadmin.invoices.index')
+                ->with('error', 'Unable to load invoice details.');
+        }
+    }
+
+    /**
+     * Download invoice PDF.
+     */
+    public function downloadInvoice($id)
+    {
+        try {
+            $superAdminId = session('superadmin_id');
+            $superAdmin = SuperAdmin::findOrFail($superAdminId);
+
+            $invoice = Invoice::with(['application'])
+                ->whereHas('application', function ($q) {
+                    $q->where('application_type', 'IX');
+                })
+                ->findOrFail($id);
+
+            // Sanitize filename
+            $safeFilename = str_replace(['/', '\\'], '-', $invoice->invoice_number).'_invoice.pdf';
+
+            // Try to get PDF from invoice pdf_path first
+            if ($invoice->pdf_path && Storage::disk('public')->exists($invoice->pdf_path)) {
+                $filePath = Storage::disk('public')->path($invoice->pdf_path);
+                return response()->download($filePath, $safeFilename);
+            }
+
+            // Fallback: Check application_data for PDF path
+            $application = $invoice->application;
+            $appData = $application->application_data ?? [];
+            $pdfs = $appData['pdfs'] ?? [];
+            
+            if (isset($pdfs['invoice_pdf']) && Storage::disk('public')->exists($pdfs['invoice_pdf'])) {
+                $filePath = Storage::disk('public')->path($pdfs['invoice_pdf']);
+                return response()->download($filePath, $safeFilename);
+            }
+
+            // Generate on the fly using reflection to access private method
+            $reflection = new \ReflectionClass(\App\Http\Controllers\AdminController::class);
+            $method = $reflection->getMethod('generateIxInvoicePdf');
+            $method->setAccessible(true);
+            $adminController = new \App\Http\Controllers\AdminController();
+            $invoicePdf = $method->invoke($adminController, $application, $invoice);
+            
+            return $invoicePdf->download($safeFilename);
+        } catch (Exception $e) {
+            Log::error('Error downloading invoice PDF: '.$e->getMessage());
+
+            return redirect()->route('superadmin.invoices.index')
+                ->with('error', 'Unable to download invoice PDF.');
+        }
+    }
+
+    /**
+     * Update invoice status.
+     */
+    public function updateInvoiceStatus(Request $request, $id)
+    {
+        try {
+            $superAdminId = session('superadmin_id');
+            $superAdmin = SuperAdmin::findOrFail($superAdminId);
+
+            $validated = $request->validate([
+                'status' => 'required|in:pending,paid,overdue,cancelled',
+            ]);
+
+            $invoice = Invoice::whereHas('application', function ($q) {
+                $q->where('application_type', 'IX');
+            })->findOrFail($id);
+
+            $oldStatus = $invoice->status;
+            $invoice->update([
+                'status' => $validated['status'],
+                'paid_at' => $validated['status'] === 'paid' ? now('Asia/Kolkata') : null,
+            ]);
+
+            Log::info("SuperAdmin {$superAdmin->name} updated invoice {$invoice->invoice_number} status from {$oldStatus} to {$validated['status']}");
+
+            return back()->with('success', 'Invoice status updated successfully.');
+        } catch (Exception $e) {
+            Log::error('Error updating invoice status: '.$e->getMessage());
+
+            return back()->with('error', 'Unable to update invoice status.');
         }
     }
 }

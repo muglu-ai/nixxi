@@ -111,6 +111,14 @@ Route::prefix('superadmin')->name('superadmin.')->middleware(['superadmin'])->gr
         Route::post('/{id}/unassign', [SuperAdminGrievanceController::class, 'unassign'])->name('unassign');
         Route::get('/admins-by-role', [SuperAdminGrievanceController::class, 'getAdminsByRole'])->name('admins-by-role');
     });
+
+    // Invoice management routes
+    Route::prefix('invoices')->name('invoices.')->group(function () {
+        Route::get('/', [SuperAdminController::class, 'invoices'])->name('index');
+        Route::get('/{id}', [SuperAdminController::class, 'showInvoice'])->name('show');
+        Route::get('/{id}/download', [SuperAdminController::class, 'downloadInvoice'])->name('download');
+        Route::post('/{id}/update-status', [SuperAdminController::class, 'updateInvoiceStatus'])->name('update-status');
+    });
 });
 
 // Admin Login Routes (Public - no authentication required)

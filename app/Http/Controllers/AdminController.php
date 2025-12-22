@@ -2583,19 +2583,117 @@ class AdminController extends Controller
                 $billingPeriod = $this->getCurrentBillingPeriod($application);
             }
 
-            // Calculate due date (1 month from service activation or current date)
-            $dueDate = $application->service_activation_date 
-                ? \Carbon\Carbon::parse($application->service_activation_date)->addMonth()
-                : now('Asia/Kolkata')->addMonth();
+            // Calculate billing period dates for invoice
+            $billingStartDate = null;
+            $billingEndDate = null;
+            $dueDate = null;
+            
+            if ($application->service_activation_date) {
+                $activationDate = \Carbon\Carbon::parse($application->service_activation_date);
+                
+                // Get the last invoice for this application to determine start date
+                $lastInvoice = Invoice::where('application_id', $application->id)
+                    ->where('status', 'paid')
+                    ->latest('invoice_date')
+                    ->first();
+                
+                if ($lastInvoice && $lastInvoice->due_date) {
+                    // Next billing period starts from last invoice's due date
+                    $billingStartDate = \Carbon\Carbon::parse($lastInvoice->due_date);
+                } else {
+                    // First invoice starts from service activation date
+                    $billingStartDate = $activationDate;
+                }
+                
+                // Calculate end date based on billing cycle
+                switch ($billingPlan) {
+                    case 'annual':
+                    case 'arc':
+                        $billingEndDate = $billingStartDate->copy()->addYear();
+                        break;
+                    case 'quarterly':
+                        $billingEndDate = $billingStartDate->copy()->addMonths(3);
+                        break;
+                    case 'monthly':
+                    case 'mrc':
+                    default:
+                        $billingEndDate = $billingStartDate->copy()->addMonth();
+                        break;
+                }
+                
+                // Due date is the billing end date
+                $dueDate = $billingEndDate;
+            } else {
+                // Fallback: 1 month from current date
+                $dueDate = now('Asia/Kolkata')->addMonth();
+            }
 
-            // Get payment amount
+            // Get payment amount - ONLY port charges, NO application fee
             $applicationData = $application->application_data ?? [];
-            $portAmount = (float) ($applicationData['port_selection']['amount'] ?? 0);
-            $applicationFee = (float) ($applicationData['payment']['application_fee'] ?? 1000.00);
-            $gstPercentage = (float) ($applicationData['payment']['gst_percentage'] ?? 18.00);
-            $gstAmount = ($applicationFee * $gstPercentage) / 100;
-            $amount = $applicationFee;
-            $totalAmount = round($portAmount + $applicationFee + $gstAmount, 2);
+            
+            // Get port amount based on billing cycle
+            $billingPlan = $application->billing_cycle ?? ($applicationData['port_selection']['billing_plan'] ?? 'monthly');
+            $portCapacity = $application->assigned_port_capacity ?? ($applicationData['port_selection']['capacity'] ?? null);
+            
+            // Map billing plan to pricing plan
+            $pricingPlan = match($billingPlan) {
+                'annual', 'arc' => 'arc',
+                'monthly', 'mrc' => 'mrc',
+                'quarterly' => 'quarterly',
+                default => 'mrc',
+            };
+            
+            // Get pricing for the port capacity
+            $location = null;
+            if (isset($applicationData['location']['id'])) {
+                $location = IxLocation::find($applicationData['location']['id']);
+            }
+            
+            $portAmount = 0;
+            if ($location && $portCapacity) {
+                $pricing = IxPortPricing::active()
+                    ->where('node_type', $location->node_type)
+                    ->where('port_capacity', $portCapacity)
+                    ->first();
+                
+                if ($pricing) {
+                    $portAmount = (float) $pricing->getAmountForPlan($pricingPlan);
+                }
+            } else {
+                // Fallback to stored amount
+                $portAmount = (float) ($applicationData['port_selection']['amount'] ?? 0);
+            }
+            
+            // Calculate GST based on state (IGST for non-Delhi, CGST+SGST for Delhi)
+            $gstState = null;
+            if ($location) {
+                $gstState = $location->state;
+            } else {
+                // Get from GST verification
+                $gstVerification = GstVerification::where('user_id', $application->user_id)
+                    ->where('is_verified', true)
+                    ->latest()
+                    ->first();
+                $gstState = $gstVerification?->state;
+            }
+            
+            $gstPercentage = 18.00;
+            $isDelhi = strtolower($gstState ?? '') === 'delhi' || strtolower($gstState ?? '') === 'new delhi';
+            
+            if ($isDelhi) {
+                // CGST 9% + SGST 9% = 18% total
+                $cgstAmount = round(($portAmount * 9) / 100, 2);
+                $sgstAmount = round(($portAmount * 9) / 100, 2);
+                $gstAmount = $cgstAmount + $sgstAmount;
+            } else {
+                // IGST 18%
+                $gstAmount = round(($portAmount * 18) / 100, 2);
+                $cgstAmount = 0;
+                $sgstAmount = 0;
+            }
+            
+            $amount = $portAmount; // Only port charges, no application fee
+            $totalAmount = round($amount + $gstAmount, 2);
 
             // Generate invoice number
             $invoiceNumber = 'NIXI-IX-'.date('y').'-'.(date('y') + 1).'/'.str_pad($application->id, 4, '0', STR_PAD_LEFT);
@@ -2634,6 +2732,45 @@ class AdminController extends Controller
                 'udf3' => $invoiceNumber,
             ]);
 
+            // Calculate billing period dates for invoice
+            $billingStartDate = null;
+            $billingEndDate = null;
+            
+            if ($application->service_activation_date) {
+                $activationDate = \Carbon\Carbon::parse($application->service_activation_date);
+                
+                // Get the last invoice for this application to determine start date
+                $lastInvoice = Invoice::where('application_id', $application->id)
+                    ->where('status', 'paid')
+                    ->latest('invoice_date')
+                    ->first();
+                
+                if ($lastInvoice && $lastInvoice->due_date) {
+                    // Next billing period starts from last invoice's due date
+                    $billingStartDate = \Carbon\Carbon::parse($lastInvoice->due_date);
+                } else {
+                    // First invoice starts from service activation date
+                    $billingStartDate = $activationDate;
+                }
+                
+                // Calculate end date based on billing cycle
+                switch ($billingPlan) {
+                    case 'annual':
+                        $billingEndDate = $billingStartDate->copy()->addYear();
+                        break;
+                    case 'quarterly':
+                        $billingEndDate = $billingStartDate->copy()->addMonths(3);
+                        break;
+                    case 'monthly':
+                    default:
+                        $billingEndDate = $billingStartDate->copy()->addMonth();
+                        break;
+                }
+                
+                // Update due date to billing end date
+                $dueDate = $billingEndDate;
+            }
+            
             // Create invoice record
             $invoice = Invoice::create([
                 'application_id' => $application->id,
@@ -2717,26 +2854,60 @@ class AdminController extends Controller
         $data = $application->application_data ?? [];
         $user = $application->user;
 
-        // Get company details from GST verification if available
-        $gstVerification = GstVerification::where('user_id', $user->id)
-            ->where('is_verified', true)
-            ->latest()
-            ->first();
+        // Check if this is first application or subsequent
+        $isFirstApplication = Application::where('user_id', $user->id)
+            ->where('application_type', 'IX')
+            ->where('id', '<', $application->id)
+            ->doesntExist();
 
-        $companyDetails = [];
+        // Get buyer details
+        $buyerDetails = [];
+        $gstVerification = null;
+        
+        if ($isFirstApplication) {
+            // First application: Get from KYC
+            $kyc = \App\Models\UserKycProfile::where('user_id', $user->id)
+                ->where('status', 'completed')
+                ->first();
+            
+            if ($kyc && $kyc->gst_verification_id) {
+                $gstVerification = GstVerification::find($kyc->gst_verification_id);
+            }
+        } else {
+            // Subsequent application: Get from GST verification used in this application
+            if ($application->gst_verification_id) {
+                $gstVerification = GstVerification::find($application->gst_verification_id);
+            } else {
+                // Fallback: Get latest verified GST for this application's GSTIN
+                $applicationGstin = $data['gstin'] ?? null;
+                if ($applicationGstin) {
+                    $gstVerification = GstVerification::where('user_id', $user->id)
+                        ->where('gstin', $applicationGstin)
+                        ->where('is_verified', true)
+                        ->latest()
+                        ->first();
+                }
+            }
+        }
+        
+        // If still no GST verification, get latest one
+        if (!$gstVerification) {
+            $gstVerification = GstVerification::where('user_id', $user->id)
+                ->where('is_verified', true)
+                ->latest()
+                ->first();
+        }
+
+        // Build buyer details
         if ($gstVerification) {
-            $companyDetails = [
-                'legal_name' => $gstVerification->legal_name,
-                'trade_name' => $gstVerification->trade_name,
-                'pan' => $gstVerification->pan,
+            $buyerDetails = [
+                'company_name' => $gstVerification->legal_name ?? $gstVerification->trade_name ?? $user->fullname,
+                'pan' => $gstVerification->pan ?? $user->pancardno,
+                'gstin' => $gstVerification->gstin,
                 'state' => $gstVerification->state,
-                'registration_date' => $gstVerification->registration_date?->format('d/m/Y'),
-                'gst_type' => $gstVerification->gst_type,
-                'company_status' => $gstVerification->company_status,
-                'primary_address' => $gstVerification->primary_address,
             ];
-
-            // Parse primary address if it's a JSON string
+            
+            // Get billing address from GST API response
             if ($gstVerification->verification_data) {
                 $verificationData = is_string($gstVerification->verification_data)
                     ? json_decode($gstVerification->verification_data, true)
@@ -2744,15 +2915,49 @@ class AdminController extends Controller
 
                 if (isset($verificationData['result']['source_output']['principal_place_of_business_fields']['principal_place_of_business_address'])) {
                     $address = $verificationData['result']['source_output']['principal_place_of_business_fields']['principal_place_of_business_address'];
-                    $companyDetails['pradr'] = [
-                        'addr' => trim(($address['door_number'] ?? '').' '.($address['building_name'] ?? '').' '.($address['street'] ?? '').' '.($address['location'] ?? '').' '.($address['dst'] ?? '').' '.($address['city'] ?? '').' '.($address['state_name'] ?? '').' '.($address['pincode'] ?? '')),
-                        'state_name' => $address['state_name'] ?? null,
-                    ];
-                    $companyDetails['state_info'] = [
-                        'name' => $address['state_name'] ?? $gstVerification->state,
-                    ];
+                    $buyerDetails['address'] = trim(($address['door_number'] ?? '').' '.($address['building_name'] ?? '').' '.($address['street'] ?? '').' '.($address['location'] ?? '').' '.($address['dst'] ?? '').' '.($address['city'] ?? '').' '.($address['state_name'] ?? '').' '.($address['pincode'] ?? ''));
+                    $buyerDetails['state_name'] = $address['state_name'] ?? $gstVerification->state;
+                } else {
+                    $buyerDetails['address'] = $gstVerification->primary_address ?? '';
                 }
+            } else {
+                $buyerDetails['address'] = $gstVerification->primary_address ?? '';
             }
+            
+            // Get phone and email from user
+            $buyerDetails['phone'] = $user->mobile ?? '';
+            $buyerDetails['email'] = $user->email ?? '';
+        } else {
+            // Fallback to user data
+            $buyerDetails = [
+                'company_name' => $user->fullname,
+                'pan' => $user->pancardno,
+                'gstin' => $data['gstin'] ?? 'N/A',
+                'address' => '',
+                'phone' => $user->mobile ?? '',
+                'email' => $user->email ?? '',
+                'state' => null,
+                'state_name' => null,
+            ];
+        }
+        
+        // Get place of supply from IX location
+        $placeOfSupply = null;
+        if (isset($data['location']['id'])) {
+            $location = IxLocation::find($data['location']['id']);
+            if ($location) {
+                $placeOfSupply = $location->state;
+            }
+        }
+        
+        // If no location in data, try to get from application
+        if (!$placeOfSupply && isset($data['location']['state'])) {
+            $placeOfSupply = $data['location']['state'];
+        }
+        
+        // Fallback to buyer state
+        if (!$placeOfSupply) {
+            $placeOfSupply = $buyerDetails['state_name'] ?? $buyerDetails['state'] ?? 'N/A';
         }
 
         // Get application pricing for fallback
@@ -2767,8 +2972,8 @@ class AdminController extends Controller
             'application' => $application,
             'user' => $user,
             'data' => $data,
-            'companyDetails' => $companyDetails,
-            'applicationPricing' => $applicationPricing,
+            'buyerDetails' => $buyerDetails,
+            'placeOfSupply' => $placeOfSupply,
             'invoiceNumber' => $invoiceNumber,
             'invoiceDate' => $invoiceDate,
             'dueDate' => $dueDate,

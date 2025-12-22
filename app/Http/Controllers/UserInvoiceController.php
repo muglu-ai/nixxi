@@ -89,25 +89,60 @@ class UserInvoiceController extends Controller
                 $data = $application->application_data ?? [];
                 $user = $application->user;
                 
-                $gstVerification = \App\Models\GstVerification::where('user_id', $user->id)
-                    ->where('is_verified', true)
-                    ->latest()
-                    ->first();
+                // Check if this is first application or subsequent
+                $isFirstApplication = \App\Models\Application::where('user_id', $user->id)
+                    ->where('application_type', 'IX')
+                    ->where('id', '<', $application->id)
+                    ->doesntExist();
                 
-                $companyDetails = [];
+                // Get buyer details
+                $buyerDetails = [];
+                $gstVerification = null;
+                
+                if ($isFirstApplication) {
+                    // First application: Get from KYC
+                    $kyc = \App\Models\UserKycProfile::where('user_id', $user->id)
+                        ->where('status', 'completed')
+                        ->first();
+                    
+                    if ($kyc && $kyc->gst_verification_id) {
+                        $gstVerification = \App\Models\GstVerification::find($kyc->gst_verification_id);
+                    }
+                } else {
+                    // Subsequent application: Get from GST verification used in this application
+                    if ($application->gst_verification_id) {
+                        $gstVerification = \App\Models\GstVerification::find($application->gst_verification_id);
+                    } else {
+                        // Fallback: Get latest verified GST for this application's GSTIN
+                        $applicationGstin = $data['gstin'] ?? null;
+                        if ($applicationGstin) {
+                            $gstVerification = \App\Models\GstVerification::where('user_id', $user->id)
+                                ->where('gstin', $applicationGstin)
+                                ->where('is_verified', true)
+                                ->latest()
+                                ->first();
+                        }
+                    }
+                }
+                
+                // If still no GST verification, get latest one
+                if (!$gstVerification) {
+                    $gstVerification = \App\Models\GstVerification::where('user_id', $user->id)
+                        ->where('is_verified', true)
+                        ->latest()
+                        ->first();
+                }
+                
+                // Build buyer details
                 if ($gstVerification) {
-                    $companyDetails = [
-                        'legal_name' => $gstVerification->legal_name,
-                        'trade_name' => $gstVerification->trade_name,
-                        'pan' => $gstVerification->pan,
+                    $buyerDetails = [
+                        'company_name' => $gstVerification->legal_name ?? $gstVerification->trade_name ?? $user->fullname,
+                        'pan' => $gstVerification->pan ?? $user->pancardno,
+                        'gstin' => $gstVerification->gstin,
                         'state' => $gstVerification->state,
-                        'registration_date' => $gstVerification->registration_date?->format('d/m/Y'),
-                        'gst_type' => $gstVerification->gst_type,
-                        'company_status' => $gstVerification->company_status,
-                        'primary_address' => $gstVerification->primary_address,
                     ];
                     
-                    // Parse primary address if it's a JSON string
+                    // Get billing address from GST API response
                     if ($gstVerification->verification_data) {
                         $verificationData = is_string($gstVerification->verification_data)
                             ? json_decode($gstVerification->verification_data, true)
@@ -115,15 +150,49 @@ class UserInvoiceController extends Controller
                         
                         if (isset($verificationData['result']['source_output']['principal_place_of_business_fields']['principal_place_of_business_address'])) {
                             $address = $verificationData['result']['source_output']['principal_place_of_business_fields']['principal_place_of_business_address'];
-                            $companyDetails['pradr'] = [
-                                'addr' => trim(($address['door_number'] ?? '').' '.($address['building_name'] ?? '').' '.($address['street'] ?? '').' '.($address['location'] ?? '').' '.($address['dst'] ?? '').' '.($address['city'] ?? '').' '.($address['state_name'] ?? '').' '.($address['pincode'] ?? '')),
-                                'state_name' => $address['state_name'] ?? null,
-                            ];
-                            $companyDetails['state_info'] = [
-                                'name' => $address['state_name'] ?? $gstVerification->state,
-                            ];
+                            $buyerDetails['address'] = trim(($address['door_number'] ?? '').' '.($address['building_name'] ?? '').' '.($address['street'] ?? '').' '.($address['location'] ?? '').' '.($address['dst'] ?? '').' '.($address['city'] ?? '').' '.($address['state_name'] ?? '').' '.($address['pincode'] ?? ''));
+                            $buyerDetails['state_name'] = $address['state_name'] ?? $gstVerification->state;
+                        } else {
+                            $buyerDetails['address'] = $gstVerification->primary_address ?? '';
                         }
+                    } else {
+                        $buyerDetails['address'] = $gstVerification->primary_address ?? '';
                     }
+                    
+                    // Get phone and email from user
+                    $buyerDetails['phone'] = $user->mobile ?? '';
+                    $buyerDetails['email'] = $user->email ?? '';
+                } else {
+                    // Fallback to user data
+                    $buyerDetails = [
+                        'company_name' => $user->fullname,
+                        'pan' => $user->pancardno,
+                        'gstin' => $data['gstin'] ?? 'N/A',
+                        'address' => '',
+                        'phone' => $user->mobile ?? '',
+                        'email' => $user->email ?? '',
+                        'state' => null,
+                        'state_name' => null,
+                    ];
+                }
+                
+                // Get place of supply from IX location
+                $placeOfSupply = null;
+                if (isset($data['location']['id'])) {
+                    $location = \App\Models\IxLocation::find($data['location']['id']);
+                    if ($location) {
+                        $placeOfSupply = $location->state;
+                    }
+                }
+                
+                // If no location in data, try to get from application
+                if (!$placeOfSupply && isset($data['location']['state'])) {
+                    $placeOfSupply = $data['location']['state'];
+                }
+                
+                // Fallback to buyer state
+                if (!$placeOfSupply) {
+                    $placeOfSupply = $buyerDetails['state_name'] ?? $buyerDetails['state'] ?? 'N/A';
                 }
                 
                 $applicationPricing = \App\Models\IxApplicationPricing::getActive();
@@ -132,8 +201,8 @@ class UserInvoiceController extends Controller
                     'application' => $application,
                     'user' => $user,
                     'data' => $data,
-                    'companyDetails' => $companyDetails,
-                    'applicationPricing' => $applicationPricing,
+                    'buyerDetails' => $buyerDetails,
+                    'placeOfSupply' => $placeOfSupply,
                     'invoiceNumber' => $invoice->invoice_number,
                     'invoiceDate' => $invoice->invoice_date->format('d/m/Y'),
                     'dueDate' => $invoice->due_date->format('d/m/Y'),
