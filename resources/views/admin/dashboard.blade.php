@@ -285,9 +285,9 @@
                 </div>
             </div>
         </div>
-        <!-- Grievance Tracking -->
+        <!-- Grievance Tracking & Plan Changes -->
         <div class="col-md-4">
-            <div class="card border-0 shadow-sm" style="border-radius: 16px;">
+            <div class="card border-0 shadow-sm mb-4" style="border-radius: 16px;">
                 <div class="card-header bg-warning text-white" style="border-radius: 16px 16px 0 0;">
                     <h5 class="mb-0" style="font-weight: 600;">Grievance Tracking</h5>
                 </div>
@@ -322,6 +322,34 @@
                                     </svg>
                                 </div>
                             </div>
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Plan Change Requests -->
+            <div class="card border-0 shadow-sm" style="border-radius: 16px;">
+                <div class="card-header bg-info text-white" style="border-radius: 16px 16px 0 0;">
+                    <h5 class="mb-0" style="font-weight: 600;">Plan Change Requests</h5>
+                </div>
+                <div class="card-body p-4">
+                    <a href="{{ route('admin.plan-change.index', ['status' => 'pending']) }}" class="text-decoration-none">
+                        <div class="d-flex align-items-center justify-content-between p-3 bg-light rounded">
+                            <div>
+                                <h6 class="text-muted mb-1" style="font-size: 0.875rem; font-weight: 500;">Pending Requests</h6>
+                                <h3 class="mb-0" style="color: #2c3e50; font-weight: 700;">{{ $pendingPlanChanges }}</h3>
+                            </div>
+                            <div class="bg-info bg-opacity-10 rounded-circle p-3">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="#0dcaf0" viewBox="0 0 16 16">
+                                    <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z"/>
+                                    <path d="M7.854 4.146a.5.5 0 0 0-.708 0l-3 3a.5.5 0 1 0 .708.708L7.5 5.707l2.646 2.647a.5.5 0 0 0 .708-.708l-3-3z"/>
+                                </svg>
+                            </div>
+                        </div>
+                    </a>
+                    <div class="mt-3">
+                        <a href="{{ route('admin.plan-change.index') }}" class="btn btn-sm btn-outline-primary w-100">
+                            View All Requests
                         </a>
                     </div>
                 </div>
@@ -408,6 +436,16 @@
                         View Applications
                     </a>
                     @endif
+                    <a href="{{ route('admin.plan-change.index', ['status' => 'pending']) }}" class="btn btn-warning btn-lg w-100 mb-2" style="border-radius: 10px; font-weight: 500;">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" class="me-2" viewBox="0 0 16 16">
+                            <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z"/>
+                            <path d="M7.854 4.146a.5.5 0 0 0-.708 0l-3 3a.5.5 0 1 0 .708.708L7.5 5.707l2.646 2.647a.5.5 0 0 0 .708-.708l-3-3z"/>
+                        </svg>
+                        Plan Change Requests
+                        @if($pendingPlanChanges > 0)
+                            <span class="badge bg-danger ms-2">{{ $pendingPlanChanges }}</span>
+                        @endif
+                    </a>
                 </div>
             </div>
         </div>

@@ -19,6 +19,7 @@ class Invoice extends Model
         'currency',
         'status',
         'payu_payment_link',
+        'pdf_path',
         'generated_by',
         'sent_at',
         'paid_at',

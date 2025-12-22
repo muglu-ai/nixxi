@@ -98,6 +98,7 @@ class AdminController extends Controller
             $totalUsers = Registration::count();
             $totalApplications = Application::count();
             $approvedApplications = Application::whereIn('status', ['approved', 'payment_verified'])->count();
+            $pendingPlanChanges = \App\Models\PlanChangeRequest::where('status', 'pending')->count();
             
             // Approved applications with payment verification
             $approvedApplicationsWithPayment = Application::whereIn('status', ['approved', 'payment_verified'])
@@ -140,6 +141,9 @@ class AdminController extends Controller
             // Grievance Tracking
             $openGrievances = Ticket::whereIn('status', ['open', 'assigned', 'in_progress'])->count();
             $pendingGrievances = Ticket::where('status', 'assigned')->count();
+            
+            // Plan Change Requests
+            $pendingPlanChanges = \App\Models\PlanChangeRequest::where('status', 'pending')->count();
 
             // Pending applications based on selected role (all visible, is_active shows live status)
             $pendingApplications = 0;
@@ -215,7 +219,8 @@ class AdminController extends Controller
                 'edgeIxPoints',
                 'metroIxPoints',
                 'openGrievances',
-                'pendingGrievances'
+                'pendingGrievances',
+                'pendingPlanChanges'
             ));
         } catch (QueryException $e) {
             Log::error('Database error loading Admin dashboard: '.$e->getMessage());
@@ -2651,6 +2656,9 @@ class AdminController extends Controller
                 $invoicePdfPath = 'applications/'.$application->user_id.'/ix/'.$invoiceNumber.'_invoice.pdf';
 
                 Storage::disk('public')->put($invoicePdfPath, $invoicePdf->output());
+                
+                // Update invoice with PDF path
+                $invoice->update(['pdf_path' => $invoicePdfPath]);
             } catch (Exception $e) {
                 Log::error('Error generating IX invoice PDF: '.$e->getMessage());
             }

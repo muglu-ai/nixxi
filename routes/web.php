@@ -355,6 +355,12 @@ Route::prefix('user')->name('user.')->middleware(['user.auth'])->group(function 
         Route::get('/create', [\App\Http\Controllers\PlanChangeRequestController::class, 'create'])->name('create');
         Route::post('/', [\App\Http\Controllers\PlanChangeRequestController::class, 'store'])->name('store');
     });
+
+    // Invoice routes
+    Route::prefix('invoices')->name('invoices.')->group(function () {
+        Route::get('/', [\App\Http\Controllers\UserInvoiceController::class, 'index'])->name('index');
+        Route::get('/{id}/download', [\App\Http\Controllers\UserInvoiceController::class, 'download'])->name('download');
+    });
 });
 
 // Cookie-based login route (for payment callbacks - no auth required)

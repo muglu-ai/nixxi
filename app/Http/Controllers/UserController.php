@@ -51,8 +51,21 @@ class UserController extends Controller
                 ->where('application_type', 'IX')
                 ->whereIn('status', ['submitted', 'approved', 'payment_verified', 'processor_forwarded_legal', 'legal_forwarded_head', 'head_forwarded_ceo', 'ceo_approved', 'port_assigned', 'ip_assigned', 'invoice_pending'])
                 ->exists();
+            
+            // Get invoice statistics
+            $invoiceCount = \App\Models\Invoice::whereHas('application', function ($query) use ($userId) {
+                $query->where('user_id', $userId);
+            })->count();
+            
+            $pendingInvoices = \App\Models\Invoice::whereHas('application', function ($query) use ($userId) {
+                $query->where('user_id', $userId);
+            })->where('status', 'pending')->count();
+            
+            $paidInvoices = \App\Models\Invoice::whereHas('application', function ($query) use ($userId) {
+                $query->where('user_id', $userId);
+            })->where('status', 'paid')->count();
 
-            return response()->view('user.dashboard', compact('user', 'unreadCount', 'applications', 'hasIxApplication'))
+            return response()->view('user.dashboard', compact('user', 'unreadCount', 'applications', 'hasIxApplication', 'invoiceCount', 'pendingInvoices', 'paidInvoices'))
                 ->header('Cache-Control', 'no-cache, no-store, max-age=0, must-revalidate')
                 ->header('Pragma', 'no-cache')
                 ->header('Expires', 'Fri, 01 Jan 1990 00:00:00 GMT');
