@@ -80,76 +80,61 @@ class SuperAdminController extends Controller
             ];
             $roles = Role::whereIn('slug', $roleSlugs)->get()->keyBy('slug');
 
-            // Application Details Chart Data (only active)
-            $totalApplications = Application::where('is_active', true)->count();
-            $fullyApproved = Application::where('is_active', true)
-                ->where(function ($query) {
+            // Application Details Chart Data (all visible, is_active shows live status)
+            $totalApplications = Application::count();
+            $fullyApproved = Application::where(function ($query) {
                     $query->where('status', 'approved')
                         ->orWhere('status', 'payment_verified');
                 })
                 ->count();
 
-            // New IX Workflow Roles Statistics (only active)
+            // New IX Workflow Roles Statistics (all visible, is_active shows live status)
             $ixProcessorApproved = Application::where('application_type', 'IX')
-                ->where('is_active', true)
                 ->whereIn('status', ['processor_forwarded_legal', 'legal_forwarded_head', 'head_forwarded_ceo', 'ceo_approved', 'port_assigned', 'ip_assigned', 'invoice_pending', 'payment_verified', 'approved'])
                 ->count();
             $ixProcessorPending = Application::where('application_type', 'IX')
-                ->where('is_active', true)
                 ->whereIn('status', ['submitted', 'resubmitted', 'processor_resubmission', 'legal_sent_back', 'head_sent_back'])
                 ->count();
 
             $ixLegalApproved = Application::where('application_type', 'IX')
-                ->where('is_active', true)
                 ->whereIn('status', ['legal_forwarded_head', 'head_forwarded_ceo', 'ceo_approved', 'port_assigned', 'ip_assigned', 'invoice_pending', 'payment_verified', 'approved'])
                 ->count();
             $ixLegalPending = Application::where('application_type', 'IX')
-                ->where('is_active', true)
                 ->where('status', 'processor_forwarded_legal')
                 ->count();
 
             $ixHeadApproved = Application::where('application_type', 'IX')
-                ->where('is_active', true)
                 ->whereIn('status', ['head_forwarded_ceo', 'ceo_approved', 'port_assigned', 'ip_assigned', 'invoice_pending', 'payment_verified', 'approved'])
                 ->count();
             $ixHeadPending = Application::where('application_type', 'IX')
-                ->where('is_active', true)
                 ->where('status', 'legal_forwarded_head')
                 ->count();
 
             $ceoApproved = Application::where('application_type', 'IX')
-                ->where('is_active', true)
                 ->whereIn('status', ['ceo_approved', 'port_assigned', 'ip_assigned', 'invoice_pending', 'payment_verified', 'approved'])
                 ->count();
             $ceoPending = Application::where('application_type', 'IX')
-                ->where('is_active', true)
                 ->where('status', 'head_forwarded_ceo')
                 ->count();
 
             $nodalOfficerApproved = Application::where('application_type', 'IX')
-                ->where('is_active', true)
                 ->whereIn('status', ['port_assigned', 'ip_assigned', 'invoice_pending', 'payment_verified', 'approved'])
                 ->count();
             $nodalOfficerPending = Application::where('application_type', 'IX')
-                ->where('is_active', true)
                 ->where('status', 'ceo_approved')
                 ->count();
 
             $ixTechTeamApproved = Application::where('application_type', 'IX')
-                ->where('is_active', true)
                 ->whereIn('status', ['ip_assigned', 'invoice_pending', 'payment_verified', 'approved'])
                 ->count();
             $ixTechTeamPending = Application::where('application_type', 'IX')
-                ->where('is_active', true)
                 ->where('status', 'port_assigned')
                 ->count();
 
             $ixAccountApproved = Application::where('application_type', 'IX')
-                ->where('is_active', true)
                 ->whereIn('status', ['payment_verified', 'approved'])
                 ->count();
             $ixAccountPending = Application::where('application_type', 'IX')
-                ->where('is_active', true)
                 ->whereIn('status', ['ip_assigned', 'invoice_pending'])
                 ->count();
 
@@ -158,44 +143,34 @@ class SuperAdminController extends Controller
             $edgeIxPoints = IxLocation::where('is_active', true)->where('node_type', 'edge')->count();
             $metroIxPoints = IxLocation::where('is_active', true)->where('node_type', 'metro')->count();
             
-            // Approved Applications with payment verification (only active)
-            $approvedApplications = Application::where('is_active', true)
-                ->whereIn('status', ['approved', 'payment_verified'])
+            // Approved Applications with payment verification
+            $approvedApplications = Application::whereIn('status', ['approved', 'payment_verified'])
                 ->count();
-            $approvedApplicationsWithPayment = Application::where('is_active', true)
-                ->whereIn('status', ['approved', 'payment_verified'])
+            $approvedApplicationsWithPayment = Application::whereIn('status', ['approved', 'payment_verified'])
                 ->whereHas('paymentTransactions', function ($q) {
                     $q->where('payment_status', 'success');
                 })
                 ->count();
             
-            // Member Statistics (Registrations that have at least one application with membership_id and is_active = true)
+            // Member Statistics (Registrations that have at least one application with membership_id)
+            // Live members: is_active = true
             $totalMembers = Registration::whereHas('applications', function ($query) {
-                $query->whereNotNull('membership_id')
-                    ->where('is_active', true);
+                $query->whereNotNull('membership_id');
             })->distinct()->count();
             
-            // Active members: Have membership_id AND at least one application with active status and is_active = true
+            // Live members: Have membership_id AND is_active = true
             $activeMembers = Registration::whereHas('applications', function ($query) {
                 $query->whereNotNull('membership_id')
-                    ->where('is_active', true)
-                    ->whereIn('status', ['ip_assigned', 'payment_verified', 'approved']);
+                    ->where('is_active', true);
             })->distinct()->count();
             
-            // Disconnected members: Have membership_id but no active applications (is_active = true)
+            // Not live members: Have membership_id but is_active = false
             $disconnectedMembers = Registration::whereHas('applications', function ($query) {
                 $query->whereNotNull('membership_id')
-                    ->where('is_active', true);
-            })
-            ->whereDoesntHave('applications', function ($query) {
-                $query->whereNotNull('membership_id')
-                    ->where('is_active', true)
-                    ->whereIn('status', ['ip_assigned', 'payment_verified', 'approved']);
-            })
-            ->distinct()
-            ->count();
+                    ->where('is_active', false);
+            })->distinct()->count();
             
-            // Recent Live Members (applications with status 'ip_assigned' in last 30 days and is_active = true)
+            // Recent Live Members (applications with status 'ip_assigned' and is_active = true in last 30 days)
             $recentLiveMembers = Application::with('user')
                 ->where('status', 'ip_assigned')
                 ->where('is_active', true)

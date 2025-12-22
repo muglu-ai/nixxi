@@ -37,6 +37,18 @@
                             <small class="text-muted">{{ $application->user->email }}</small>
                         </td>
                     </tr>
+                    @if($application->membership_id)
+                    <tr>
+                        <th>Live Status:</th>
+                        <td>
+                            @if($application->is_active)
+                                <span class="badge bg-success">LIVE</span>
+                            @else
+                                <span class="badge bg-danger">NOT LIVE</span>
+                            @endif
+                        </td>
+                    </tr>
+                    @endif
                     <tr>
                         <th>Status:</th>
                         <td>

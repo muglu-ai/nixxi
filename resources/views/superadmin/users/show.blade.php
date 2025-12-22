@@ -241,9 +241,9 @@
                                     <td>
                                         @if($isMember)
                                             @if($application->is_active)
-                                                <span class="badge bg-success">Active</span>
+                                                <span class="badge bg-success">LIVE</span>
                                             @else
-                                                <span class="badge bg-danger">Deactivated</span>
+                                                <span class="badge bg-danger">NOT LIVE</span>
                                             @endif
                                         @else
                                             <span class="text-muted">N/A</span>
@@ -275,12 +275,12 @@
                                                 <form method="POST" action="{{ route('superadmin.applications.toggle-member-status', $application->id) }}" class="d-inline">
                                                     @csrf
                                                     @if($application->is_active)
-                                                        <button type="submit" class="btn btn-sm btn-danger w-100" onclick="return confirm('Are you sure you want to deactivate this member? The application will be hidden from user and admin views.')">
-                                                            Deactivate Member
+                                                        <button type="submit" class="btn btn-sm btn-danger w-100" onclick="return confirm('Are you sure you want to mark this member as NOT LIVE?')">
+                                                            Mark as Not Live
                                                         </button>
                                                     @else
-                                                        <button type="submit" class="btn btn-sm btn-success w-100" onclick="return confirm('Are you sure you want to activate this member? The application will be visible to user and admin views.')">
-                                                            Activate Member
+                                                        <button type="submit" class="btn btn-sm btn-success w-100" onclick="return confirm('Are you sure you want to mark this member as LIVE?')">
+                                                            Mark as Live
                                                         </button>
                                                     @endif
                                                 </form>

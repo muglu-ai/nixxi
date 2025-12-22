@@ -38,17 +38,15 @@ class ApplicationController extends Controller
                     ->with('error', 'Your account must be approved to access applications.');
             }
 
-            // Get user's applications with status history (only active applications)
+            // Get user's applications with status history (all applications visible, is_active shows live status)
             $applications = Application::with(['statusHistory'])
                 ->where('user_id', $userId)
-                ->where('is_active', true)
                 ->latest()
                 ->paginate(10);
 
-            // Check if user has any submitted IX application (only active)
+            // Check if user has any submitted IX application
             $hasSubmittedIxApplication = Application::where('user_id', $userId)
                 ->where('application_type', 'IX')
-                ->where('is_active', true)
                 ->whereIn('status', ['submitted', 'approved', 'payment_verified', 'processor_forwarded_legal', 'legal_forwarded_head', 'head_forwarded_ceo', 'ceo_approved', 'port_assigned', 'ip_assigned', 'invoice_pending'])
                 ->exists();
 
@@ -84,11 +82,11 @@ class ApplicationController extends Controller
                     ->with('error', 'Your account must be approved to access applications.');
             }
 
-            // Get application with status history and verification relationships (only active)
+            // Get application with status history and verification relationships
+            // is_active shows live status, not visibility
             $application = Application::with(['statusHistory', 'gstVerification', 'udyamVerification', 'mcaVerification', 'rocIecVerification'])
                 ->where('id', $id)
                 ->where('user_id', $userId)
-                ->where('is_active', true)
                 ->firstOrFail();
 
             return response()->view('user.applications.show', compact('user', 'application'))

@@ -100,6 +100,16 @@ use Illuminate\Support\Facades\Storage;
                             <th>Membership ID:</th>
                             <td><strong>{{ $application->membership_id }}</strong></td>
                         </tr>
+                        <tr>
+                            <th>Live Status:</th>
+                            <td>
+                                @if($application->is_active)
+                                    <span class="badge bg-success">LIVE</span>
+                                @else
+                                    <span class="badge bg-danger">NOT LIVE</span>
+                                @endif
+                            </td>
+                        </tr>
                         @endif
                         @if($application->assigned_ip)
                         <tr>
