@@ -213,6 +213,10 @@ Route::prefix('admin')->name('admin.')->middleware(['admin'])->group(function ()
         Route::post('/{id}/resolve', [AdminGrievanceController::class, 'resolve'])->name('resolve');
         Route::post('/{id}/close', [AdminGrievanceController::class, 'close'])->name('close');
     });
+
+    // IX Points routes
+    Route::get('/ix-points', [AdminController::class, 'ixPoints'])->name('ix-points');
+    Route::get('/ix-points/{id}', [AdminController::class, 'showIxPoint'])->name('ix-points.show');
 });
 
 // Register Routes (Public - no authentication required)

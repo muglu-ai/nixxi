@@ -107,6 +107,58 @@
                     </table>
                 </div>
             </div>
+
+            <!-- Admin-Only Details -->
+            <div class="card border-0 shadow-sm mt-4" style="border-radius: 16px;">
+                <div class="card-header bg-info text-white" style="border-radius: 16px 16px 0 0;">
+                    <h5 class="mb-0">Admin-Only Details</h5>
+                </div>
+                <div class="card-body p-4">
+                    <table class="table table-borderless mb-0">
+                        @if($location->p2p_capacity)
+                        <tr>
+                            <th width="40%" class="text-muted">P2P Capacity:</th>
+                            <td><strong>{{ $location->p2p_capacity }}</strong></td>
+                        </tr>
+                        @endif
+                        @if($location->p2p_provider)
+                        <tr>
+                            <th class="text-muted">P2P Provider:</th>
+                            <td>{{ $location->p2p_provider }}</td>
+                        </tr>
+                        @endif
+                        @if($location->connected_main_node)
+                        <tr>
+                            <th class="text-muted">Connected Main Node:</th>
+                            <td>{{ $location->connected_main_node }}</td>
+                        </tr>
+                        @endif
+                        @if($location->p2p_arc)
+                        <tr>
+                            <th class="text-muted">P2P ARC:</th>
+                            <td><strong>₹{{ number_format($location->p2p_arc, 2) }}</strong></td>
+                        </tr>
+                        @endif
+                        @if($location->colocation_provider)
+                        <tr>
+                            <th class="text-muted">Colocation Provider:</th>
+                            <td>{{ $location->colocation_provider }}</td>
+                        </tr>
+                        @endif
+                        @if($location->colocation_arc)
+                        <tr>
+                            <th class="text-muted">Colocation ARC:</th>
+                            <td><strong>₹{{ number_format($location->colocation_arc, 2) }}</strong></td>
+                        </tr>
+                        @endif
+                        @if(!$location->p2p_capacity && !$location->p2p_provider && !$location->connected_main_node && !$location->p2p_arc && !$location->colocation_provider && !$location->colocation_arc)
+                        <tr>
+                            <td colspan="2" class="text-muted text-center">No admin-only details available.</td>
+                        </tr>
+                        @endif
+                    </table>
+                </div>
+            </div>
         </div>
 
         <!-- Applications -->

@@ -219,7 +219,7 @@
                 <div class="card-body p-4">
                     <div class="row g-4">
                         <div class="col-md-4">
-                            <a href="{{ route('admin.applications') }}" class="text-decoration-none">
+                            <a href="{{ route('admin.ix-points') }}" class="text-decoration-none">
                                 <div class="card border-0 shadow-sm" style="border-radius: 12px; transition: transform 0.2s, box-shadow 0.2s; cursor: pointer;" 
                                      onmouseover="this.style.transform='translateY(-5px)'; this.style.boxShadow='0 4px 12px rgba(0,0,0,0.15)'"
                                      onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 2px 8px rgba(0,0,0,0.1)'">
@@ -240,7 +240,7 @@
                             </a>
                         </div>
                         <div class="col-md-4">
-                            <a href="{{ route('admin.applications', ['node_type' => 'edge']) }}" class="text-decoration-none">
+                            <a href="{{ route('admin.ix-points', ['node_type' => 'edge']) }}" class="text-decoration-none">
                                 <div class="card border-0 shadow-sm" style="border-radius: 12px; transition: transform 0.2s, box-shadow 0.2s; cursor: pointer;" 
                                      onmouseover="this.style.transform='translateY(-5px)'; this.style.boxShadow='0 4px 12px rgba(0,0,0,0.15)'"
                                      onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 2px 8px rgba(0,0,0,0.1)'">
@@ -261,7 +261,7 @@
                             </a>
                         </div>
                         <div class="col-md-4">
-                            <a href="{{ route('admin.applications', ['node_type' => 'metro']) }}" class="text-decoration-none">
+                            <a href="{{ route('admin.ix-points', ['node_type' => 'metro']) }}" class="text-decoration-none">
                                 <div class="card border-0 shadow-sm" style="border-radius: 12px; transition: transform 0.2s, box-shadow 0.2s; cursor: pointer;" 
                                      onmouseover="this.style.transform='translateY(-5px)'; this.style.boxShadow='0 4px 12px rgba(0,0,0,0.15)'"
                                      onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 2px 8px rgba(0,0,0,0.1)'">

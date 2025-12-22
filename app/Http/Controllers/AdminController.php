@@ -852,6 +852,35 @@ class AdminController extends Controller
     }
 
     /**
+     * Display IX point details.
+     */
+    public function showIxPoint(Request $request, $id)
+    {
+        try {
+            $location = IxLocation::where('is_active', true)->findOrFail($id);
+            
+            // Get application counts for this location
+            $applications = Application::where('application_type', 'IX')
+                ->whereRaw('JSON_EXTRACT(application_data, "$.location.id") = ?', [$location->id])
+                ->get();
+            
+            $locationStats = [
+                'total_applications' => $applications->count(),
+                'approved_applications' => $applications->whereIn('status', ['approved', 'payment_verified'])->count(),
+                'pending_applications' => $applications->whereNotIn('status', ['approved', 'rejected', 'ceo_rejected', 'payment_verified'])->count(),
+                'rejected_applications' => $applications->whereIn('status', ['rejected', 'ceo_rejected'])->count(),
+            ];
+            
+            return view('admin.ix-points.show', compact('location', 'locationStats'));
+        } catch (Exception $e) {
+            Log::error('Error loading IX point details: '.$e->getMessage());
+            
+            return redirect()->route('admin.ix-points')
+                ->with('error', 'Unable to load IX point details right now.');
+        }
+    }
+
+    /**
      * Display applications based on admin role.
      */
     public function applications(Request $request)

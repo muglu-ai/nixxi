@@ -76,9 +76,11 @@
                                     @php
                                         $stats = $locationStats[$location->id] ?? ['total_applications' => 0, 'approved_applications' => 0, 'pending_applications' => 0];
                                     @endphp
-                                    <tr>
+                                    <tr style="cursor: pointer;" onclick="window.location='{{ route('admin.ix-points.show', $location->id) }}'">
                                         <td>
-                                            <strong>{{ $location->name }}</strong>
+                                            <a href="{{ route('admin.ix-points.show', $location->id) }}" style="color: #2c3e50; text-decoration: none;" onclick="event.stopPropagation();">
+                                                <strong>{{ $location->name }}</strong>
+                                            </a>
                                             @if($location->switch_details)
                                                 <br><small class="text-muted">Switch: {{ $location->switch_details }}</small>
                                             @endif
