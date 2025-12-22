@@ -2802,11 +2802,36 @@ class AdminController extends Controller
             // Log final invoice amounts for debugging
             Log::info("Invoice calculation for application {$application->id}: portCapacity={$portCapacity}, portAmount={$portAmount}, amount={$amount}, gstAmount={$gstAmount}, totalAmount={$totalAmount}");
 
-            // Generate invoice number
-            $invoiceNumber = 'NIXI-IX-'.date('y').'-'.(date('y') + 1).'/'.str_pad($application->id, 4, '0', STR_PAD_LEFT);
+            // Generate invoice number (ensure uniqueness)
+            $baseInvoiceNumber = 'NIXI-IX-'.date('y').'-'.(date('y') + 1).'/'.str_pad($application->id, 4, '0', STR_PAD_LEFT);
+            $invoiceNumber = $baseInvoiceNumber;
+            
+            // Always include billing period if available to ensure uniqueness for recurring invoices
             if ($billingPeriod) {
                 $invoiceNumber .= '-'.$billingPeriod;
             }
+            
+            // Check if invoice number already exists and make it unique
+            $counter = 1;
+            $originalInvoiceNumber = $invoiceNumber;
+            while (Invoice::where('invoice_number', $invoiceNumber)->exists()) {
+                // If billing period was included, append counter
+                if ($billingPeriod) {
+                    $invoiceNumber = $originalInvoiceNumber.'-'.$counter;
+                } else {
+                    // If no billing period, append counter directly
+                    $invoiceNumber = $baseInvoiceNumber.'-'.$counter;
+                }
+                $counter++;
+                
+                // Safety check to prevent infinite loop
+                if ($counter > 100) {
+                    Log::error("Unable to generate unique invoice number for application {$application->id} after 100 attempts");
+                    return back()->with('error', 'Unable to generate unique invoice number. Please contact support.');
+                }
+            }
+            
+            Log::info("Generated invoice number: {$invoiceNumber} for application {$application->id}, billing period: {$billingPeriod}");
 
             // Generate PayU payment link
             $payuService = new \App\Services\PayuService();
