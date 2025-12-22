@@ -2681,8 +2681,28 @@ class AdminController extends Controller
             
             $portAmount = 0;
             if ($location && $portCapacity) {
-                // Normalize port capacity format for matching (handle variations like "10Gig", "10 Gbps", etc.)
+                // Normalize port capacity format for matching (handle variations like "10Gig", "10 Gbps", "20Gig", etc.)
+                // Database stores as "20Gig", "10Gig", etc. (no space, "Gig" suffix)
                 $normalizedCapacity = trim($portCapacity);
+                
+                // Step 1: Remove all spaces
+                $normalizedCapacity = preg_replace('/\s+/', '', $normalizedCapacity);
+                
+                // Step 2: Convert "Gbps" to "Gig" (database uses "Gig")
+                // Handle "20 Gbps" -> "20Gbps" -> "20Gig"
+                if (stripos($normalizedCapacity, 'Gbps') !== false || stripos($normalizedCapacity, 'gbps') !== false) {
+                    $normalizedCapacity = str_ireplace(['Gbps', 'gbps', 'GBPS'], 'Gig', $normalizedCapacity);
+                }
+                
+                // Step 3: Ensure it ends with "Gig" or "M" (for capacities like "100M")
+                if (!preg_match('/(Gig|M)$/i', $normalizedCapacity)) {
+                    // If it doesn't end with Gig or M, it might be just a number, try adding "Gig"
+                    if (preg_match('/^\d+$/', $normalizedCapacity)) {
+                        $normalizedCapacity = $normalizedCapacity . 'Gig';
+                    }
+                }
+                
+                Log::info("Normalizing port capacity: '{$portCapacity}' -> '{$normalizedCapacity}' for location {$location->id} ({$location->name}), node_type {$location->node_type}");
                 
                 // Get pricing for this location and port capacity (exact match first)
                 $pricing = IxPortPricing::active()
@@ -2690,23 +2710,27 @@ class AdminController extends Controller
                     ->where('port_capacity', $normalizedCapacity)
                     ->first();
                 
-                // If exact match not found, try to find by normalizing common variations
+                // If exact match not found, try original format and other variations
                 if (!$pricing) {
-                    // Try common variations: "10Gig" -> "10Gig", "10 Gbps" -> "10Gig", "10Gbps" -> "10Gig"
+                    // Try multiple normalization strategies
+                    // Try multiple normalization strategies
                     $variations = [
-                        $normalizedCapacity,
-                        str_replace([' ', 'Gbps', 'gbps', 'Gbps'], 'Gig', $normalizedCapacity),
-                        str_replace([' ', 'Gig', 'gig'], 'Gbps', $normalizedCapacity),
-                        preg_replace('/\s+/', '', $normalizedCapacity),
+                        trim($portCapacity), // Original with trimmed spaces: "20 Gbps"
+                        str_replace(' ', '', trim($portCapacity)), // Remove spaces: "20 Gbps" -> "20Gbps"
+                        preg_replace('/\s+/', '', trim($portCapacity)), // Remove all whitespace
+                        str_replace(['Gbps', 'gbps', 'GBPS'], 'Gig', str_replace(' ', '', trim($portCapacity))), // Remove space then convert: "20 Gbps" -> "20Gig"
+                        str_replace(['Gbps', 'gbps'], 'Gig', trim($portCapacity)), // Convert Gbps to Gig: "20Gbps" -> "20Gig"
+                        str_replace([' Gbps', 'Gbps', 'gbps'], 'Gig', trim($portCapacity)), // Convert with space: "20 Gbps" -> "20Gig"
                     ];
                     
                     foreach (array_unique($variations) as $variation) {
+                        if (empty($variation)) continue;
                         $pricing = IxPortPricing::active()
                             ->where('node_type', $location->node_type)
                             ->where('port_capacity', $variation)
                             ->first();
                         if ($pricing) {
-                            Log::info("Pricing found with variation: '{$variation}' for original '{$normalizedCapacity}'");
+                            Log::info("Pricing found with variation: '{$variation}' for original '{$portCapacity}'");
                             break;
                         }
                     }
@@ -2721,12 +2745,15 @@ class AdminController extends Controller
                         ->where('node_type', $location->node_type)
                         ->pluck('port_capacity')
                         ->toArray();
-                    Log::warning("No pricing found for location {$location->id} ({$location->name}), node_type {$location->node_type}, port_capacity '{$portCapacity}'. Available capacities: " . implode(', ', $availablePricings));
+                    Log::error("CRITICAL: No pricing found for location {$location->id} ({$location->name}), node_type {$location->node_type}, port_capacity '{$portCapacity}' (tried normalized: '{$normalizedCapacity}'). Available capacities: " . implode(', ', $availablePricings));
+                    
+                    // Don't use fallback - this is an error condition
+                    return back()->with('error', "No pricing found for port capacity '{$portCapacity}' at location '{$location->name}'. Please configure pricing in Super Admin panel.");
                 }
             } else {
-                // Fallback to stored amount
-                $portAmount = (float) ($applicationData['port_selection']['amount'] ?? 0);
-                Log::warning("Using fallback amount from application_data: {$portAmount}. Location: " . ($location ? "{$location->id} ({$location->name})" : 'null') . ", Port Capacity: " . ($portCapacity ?? 'null'));
+                // This should not happen if location and port capacity are properly set
+                Log::error("CRITICAL: Missing location or port capacity for invoice generation. Location: " . ($location ? "{$location->id}" : 'null') . ", Port Capacity: " . ($portCapacity ?? 'null'));
+                return back()->with('error', 'Unable to calculate port charges. Location or port capacity is missing.');
             }
             
             // Validate port amount is not zero or incorrect
@@ -2765,6 +2792,15 @@ class AdminController extends Controller
             
             $amount = $portAmount; // Only port charges, no application fee
             $totalAmount = round($amount + $gstAmount, 2);
+            
+            // Validate calculations
+            if ($amount <= 0 || $totalAmount <= 0) {
+                Log::error("Invalid invoice calculation for application {$application->id}: amount={$amount}, gstAmount={$gstAmount}, totalAmount={$totalAmount}");
+                return back()->with('error', 'Invalid invoice calculation. Please check port capacity and pricing configuration.');
+            }
+            
+            // Log final invoice amounts for debugging
+            Log::info("Invoice calculation for application {$application->id}: portCapacity={$portCapacity}, portAmount={$portAmount}, amount={$amount}, gstAmount={$gstAmount}, totalAmount={$totalAmount}");
 
             // Generate invoice number
             $invoiceNumber = 'NIXI-IX-'.date('y').'-'.(date('y') + 1).'/'.str_pad($application->id, 4, '0', STR_PAD_LEFT);
