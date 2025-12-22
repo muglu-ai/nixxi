@@ -203,11 +203,13 @@
                             <thead>
                                 <tr>
                                     <th style="color: #2c3e50; font-weight: 600;">Application ID</th>
+                                    <th style="color: #2c3e50; font-weight: 600;">Membership ID</th>
                                     <th style="color: #2c3e50; font-weight: 600;">Status</th>
+                                    <th style="color: #2c3e50; font-weight: 600;">Member Status</th>
                                     <th style="color: #2c3e50; font-weight: 600;">Payment Status</th>
                                     <th style="color: #2c3e50; font-weight: 600;">Amount</th>
                                     <th style="color: #2c3e50; font-weight: 600;">Submitted At</th>
-                                    <th style="color: #2c3e50; font-weight: 600;">Action</th>
+                                    <th style="color: #2c3e50; font-weight: 600;">Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -216,9 +218,17 @@
                                     $payment = $paymentTransactions[$application->id] ?? null;
                                     $paymentStatus = $payment ? $payment->payment_status : 'pending';
                                     $isPaymentAccepted = $paymentStatus === 'success';
+                                    $isMember = !is_null($application->membership_id);
                                 @endphp
                                 <tr>
                                     <td><strong>{{ $application->application_id }}</strong></td>
+                                    <td>
+                                        @if($isMember)
+                                            <strong>{{ $application->membership_id }}</strong>
+                                        @else
+                                            <span class="text-muted">N/A</span>
+                                        @endif
+                                    </td>
                                     <td>
                                         <span class="badge rounded-pill px-3 py-1
                                             @if($application->status === 'approved' || $application->status === 'payment_verified') bg-success
@@ -227,6 +237,17 @@
                                             @else bg-secondary @endif">
                                             {{ $application->status_display }}
                                         </span>
+                                    </td>
+                                    <td>
+                                        @if($isMember)
+                                            @if($application->is_active)
+                                                <span class="badge bg-success">Active</span>
+                                            @else
+                                                <span class="badge bg-danger">Deactivated</span>
+                                            @endif
+                                        @else
+                                            <span class="text-muted">N/A</span>
+                                        @endif
                                     </td>
                                     <td>
                                         @if($isPaymentAccepted)
@@ -249,14 +270,29 @@
                                         {{ $application->submitted_at ? $application->submitted_at->format('d M Y, h:i A') : 'Not submitted' }}
                                     </td>
                                     <td>
-                                        @if(!$isPaymentAccepted && $application->status !== 'submitted')
-                                            <form action="{{ route('superadmin.applications.accept-payment', $application->id) }}" method="POST" class="d-inline" onsubmit="return confirm('Are you sure you want to accept payment for this application? This will submit the application for IX Processor review.');">
-                                                @csrf
-                                                <button type="submit" class="btn btn-sm btn-success">
-                                                    <i class="bi bi-check-circle me-1"></i> Accept Payment
-                                                </button>
-                                            </form>
-                                        @elseif($isPaymentAccepted)
+                                        <div class="d-flex flex-column gap-2">
+                                            @if($isMember)
+                                                <form method="POST" action="{{ route('superadmin.applications.toggle-member-status', $application->id) }}" class="d-inline">
+                                                    @csrf
+                                                    @if($application->is_active)
+                                                        <button type="submit" class="btn btn-sm btn-danger w-100" onclick="return confirm('Are you sure you want to deactivate this member? The application will be hidden from user and admin views.')">
+                                                            Deactivate Member
+                                                        </button>
+                                                    @else
+                                                        <button type="submit" class="btn btn-sm btn-success w-100" onclick="return confirm('Are you sure you want to activate this member? The application will be visible to user and admin views.')">
+                                                            Activate Member
+                                                        </button>
+                                                    @endif
+                                                </form>
+                                            @endif
+                                            @if(!$isPaymentAccepted && $application->status !== 'submitted')
+                                                <form action="{{ route('superadmin.applications.accept-payment', $application->id) }}" method="POST" class="d-inline" onsubmit="return confirm('Are you sure you want to accept payment for this application? This will submit the application for IX Processor review.');">
+                                                    @csrf
+                                                    <button type="submit" class="btn btn-sm btn-success w-100">
+                                                        <i class="bi bi-check-circle me-1"></i> Accept Payment
+                                                    </button>
+                                                </form>
+                                            @elseif($isPaymentAccepted)
                                             <span class="badge bg-success">Payment Accepted</span>
                                         @else
                                             <span class="text-muted">Already Submitted</span>

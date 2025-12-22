@@ -81,16 +81,17 @@
                                         <th>Email</th>
                                         <th>Mobile</th>
                                         <th>Membership ID</th>
-                                        <th>Status</th>
-                                        <th>Applications</th>
+                                        <th>Application Status</th>
+                                        <th>Member Status</th>
                                         <th>Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     @foreach($members as $member)
                                     @php
-                                        $memberApplication = $member->applications->first();
+                                        $memberApplication = $member->applications->whereNotNull('membership_id')->first();
                                         $membershipId = $memberApplication->membership_id ?? 'N/A';
+                                        $isActive = $memberApplication->is_active ?? true;
                                     @endphp
                                     <tr>
                                         <td><strong>{{ $member->registrationid }}</strong></td>
@@ -98,6 +99,17 @@
                                         <td>{{ $member->email }}</td>
                                         <td>{{ $member->mobile }}</td>
                                         <td><strong>{{ $membershipId }}</strong></td>
+                                        <td>
+                                            @if($memberApplication)
+                                                @if($isActive)
+                                                    <span class="badge bg-success">Active</span>
+                                                @else
+                                                    <span class="badge bg-danger">Deactivated</span>
+                                                @endif
+                                            @else
+                                                <span class="badge bg-secondary">N/A</span>
+                                            @endif
+                                        </td>
                                         <td>
                                             @if($member->status === 'approved' || $member->status === 'active')
                                                 <span class="badge bg-success">Active</span>
@@ -110,10 +122,23 @@
                                             @endif
                                         </td>
                                         <td>
-                                            <span class="badge bg-info">{{ $member->applications->count() }} application(s)</span>
-                                        </td>
-                                        <td>
-                                            <a href="{{ route('admin.users.show', $member->id) }}" class="btn btn-sm btn-primary">View Details</a>
+                                            <div class="d-flex gap-2">
+                                                <a href="{{ route('admin.users.show', $member->id) }}" class="btn btn-sm btn-primary">View Details</a>
+                                                @if($memberApplication)
+                                                    <form method="POST" action="{{ route('admin.applications.toggle-member-status', $memberApplication->id) }}" class="d-inline">
+                                                        @csrf
+                                                        @if($isActive)
+                                                            <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Are you sure you want to deactivate this member? The application will be hidden from user and admin views.')">
+                                                                Deactivate
+                                                            </button>
+                                                        @else
+                                                            <button type="submit" class="btn btn-sm btn-success" onclick="return confirm('Are you sure you want to activate this member? The application will be visible to user and admin views.')">
+                                                                Activate
+                                                            </button>
+                                                        @endif
+                                                    </form>
+                                                @endif
+                                            </div>
                                         </td>
                                     </tr>
                                     @endforeach

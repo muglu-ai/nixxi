@@ -92,9 +92,9 @@ class AdminController extends Controller
                 session(['admin_selected_role' => $selectedRole]);
             }
 
-            // Calculate statistics
+            // Calculate statistics (only active applications)
             $totalUsers = Registration::count();
-            $totalApplications = Application::count();
+            $totalApplications = Application::where('is_active', true)->count();
             $approvedApplications = Application::whereIn('status', ['approved', 'payment_verified'])->count();
             
             // Approved applications with payment verification
@@ -104,31 +104,36 @@ class AdminController extends Controller
                 })
                 ->count();
             
-            // Member Statistics (Registrations that have at least one application with membership_id)
+            // Member Statistics (Registrations that have at least one application with membership_id and is_active = true)
             $totalMembers = Registration::whereHas('applications', function ($query) {
-                $query->whereNotNull('membership_id');
+                $query->whereNotNull('membership_id')
+                    ->where('is_active', true);
             })->distinct()->count();
             
-            // Active members: Have membership_id AND at least one application with active status
+            // Active members: Have membership_id AND at least one application with active status and is_active = true
             $activeMembers = Registration::whereHas('applications', function ($query) {
                 $query->whereNotNull('membership_id')
+                    ->where('is_active', true)
                     ->whereIn('status', ['ip_assigned', 'payment_verified', 'approved']);
             })->distinct()->count();
             
-            // Disconnected members: Have membership_id but no active applications
+            // Disconnected members: Have membership_id but no active applications (is_active = true)
             $disconnectedMembers = Registration::whereHas('applications', function ($query) {
-                $query->whereNotNull('membership_id');
+                $query->whereNotNull('membership_id')
+                    ->where('is_active', true);
             })
             ->whereDoesntHave('applications', function ($query) {
                 $query->whereNotNull('membership_id')
+                    ->where('is_active', true)
                     ->whereIn('status', ['ip_assigned', 'payment_verified', 'approved']);
             })
             ->distinct()
             ->count();
             
-            // Recent Live Members (applications with status 'ip_assigned' in last 30 days)
+            // Recent Live Members (applications with status 'ip_assigned' in last 30 days and is_active = true)
             $recentLiveMembers = Application::with('user')
                 ->where('status', 'ip_assigned')
+                ->where('is_active', true)
                 ->where('updated_at', '>=', now()->subDays(30))
                 ->orderBy('updated_at', 'desc')
                 ->take(10)
@@ -143,7 +148,7 @@ class AdminController extends Controller
             $openGrievances = Ticket::whereIn('status', ['open', 'assigned', 'in_progress'])->count();
             $pendingGrievances = Ticket::where('status', 'assigned')->count();
 
-            // Pending applications based on selected role
+            // Pending applications based on selected role (only active)
             $pendingApplications = 0;
             $roleToUse = $selectedRole;
             if ($admin->roles->count() === 1) {
@@ -153,44 +158,58 @@ class AdminController extends Controller
             // New IX workflow roles
             if ($roleToUse === 'ix_processor') {
                 $pendingApplications = Application::where('application_type', 'IX')
+                    ->where('is_active', true)
                     ->whereIn('status', ['submitted', 'resubmitted', 'processor_resubmission', 'legal_sent_back', 'head_sent_back'])
                     ->count();
             } elseif ($roleToUse === 'ix_legal') {
                 $pendingApplications = Application::where('application_type', 'IX')
+                    ->where('is_active', true)
                     ->where('status', 'processor_forwarded_legal')
                     ->count();
             } elseif ($roleToUse === 'ix_head') {
                 $pendingApplications = Application::where('application_type', 'IX')
+                    ->where('is_active', true)
                     ->where('status', 'legal_forwarded_head')
                     ->count();
             } elseif ($roleToUse === 'ceo') {
                 $pendingApplications = Application::where('application_type', 'IX')
+                    ->where('is_active', true)
                     ->where('status', 'head_forwarded_ceo')
                     ->count();
             } elseif ($roleToUse === 'nodal_officer') {
                 $pendingApplications = Application::where('application_type', 'IX')
+                    ->where('is_active', true)
                     ->where('status', 'ceo_approved')
                     ->count();
             } elseif ($roleToUse === 'ix_tech_team') {
                 $pendingApplications = Application::where('application_type', 'IX')
+                    ->where('is_active', true)
                     ->where('status', 'port_assigned')
                     ->count();
             } elseif ($roleToUse === 'ix_account') {
                 $pendingApplications = Application::where('application_type', 'IX')
+                    ->where('is_active', true)
                     ->whereIn('status', ['ip_assigned', 'invoice_pending'])
                     ->count();
             } elseif ($roleToUse === 'processor') {
                 // Legacy
-                $pendingApplications = Application::whereIn('status', ['pending', 'processor_review'])->count();
+                $pendingApplications = Application::where('is_active', true)
+                    ->whereIn('status', ['pending', 'processor_review'])
+                    ->count();
             } elseif ($roleToUse === 'finance') {
                 // Legacy
-                $pendingApplications = Application::whereIn('status', ['processor_approved', 'finance_review'])->count();
+                $pendingApplications = Application::where('is_active', true)
+                    ->whereIn('status', ['processor_approved', 'finance_review'])
+                    ->count();
             } elseif ($roleToUse === 'technical') {
                 // Legacy
-                $pendingApplications = Application::where('status', 'finance_approved')->count();
+                $pendingApplications = Application::where('is_active', true)
+                    ->where('status', 'finance_approved')
+                    ->count();
             } else {
                 // If no role selected, show all pending IX applications
                 $pendingApplications = Application::where('application_type', 'IX')
+                    ->where('is_active', true)
                     ->whereNotIn('status', ['approved', 'rejected', 'ceo_rejected', 'payment_verified'])
                     ->count();
             }
@@ -272,11 +291,15 @@ class AdminController extends Controller
     public function showUser($id)
     {
         try {
+            $admin = $this->getCurrentAdmin();
             $user = Registration::with([
                 'messages',
                 'profileUpdateRequests.approver',
                 'profileUpdateRequests' => function ($query) {
                     $query->with('approver')->latest();
+                },
+                'applications' => function ($query) {
+                    $query->whereNotNull('membership_id')->latest();
                 },
             ])->findOrFail($id);
 
@@ -295,7 +318,7 @@ class AdminController extends Controller
                 ->latest()
                 ->get();
 
-            return view('admin.users.show', compact('user', 'adminActions'));
+            return view('admin.users.show', compact('user', 'adminActions', 'admin'));
         } catch (QueryException $e) {
             Log::error('Database error loading user details: '.$e->getMessage());
             abort(503, 'Database connection error. Please try again later.');
@@ -583,20 +606,24 @@ class AdminController extends Controller
             $filter = $request->get('filter', 'all'); // all, active, disconnected
 
             $query = Registration::whereHas('applications', function ($query) {
-                $query->whereNotNull('membership_id');
+                $query->whereNotNull('membership_id')
+                    ->where('is_active', true);
             });
 
             if ($filter === 'active') {
                 $query->whereHas('applications', function ($q) {
                     $q->whereNotNull('membership_id')
+                        ->where('is_active', true)
                         ->whereIn('status', ['ip_assigned', 'payment_verified', 'approved']);
                 });
             } elseif ($filter === 'disconnected') {
                 $query->whereHas('applications', function ($q) {
-                    $q->whereNotNull('membership_id');
+                    $q->whereNotNull('membership_id')
+                        ->where('is_active', true);
                 })
                 ->whereDoesntHave('applications', function ($q) {
                     $q->whereNotNull('membership_id')
+                        ->where('is_active', true)
                         ->whereIn('status', ['ip_assigned', 'payment_verified', 'approved']);
                 });
             }
@@ -612,8 +639,10 @@ class AdminController extends Controller
                 });
             }
 
+            // Show all applications (including inactive) for management purposes
             $members = $query->with(['applications' => function ($q) {
-                $q->whereNotNull('membership_id')->latest();
+                $q->whereNotNull('membership_id')
+                    ->latest();
             }])->distinct()->orderBy('created_at', 'desc')->paginate(20)->withQueryString();
 
             return view('admin.members.index', compact('members', 'admin', 'filter'));
@@ -622,6 +651,71 @@ class AdminController extends Controller
 
             return redirect()->route('admin.dashboard')
                 ->with('error', 'Unable to load members. Please try again.');
+        }
+    }
+
+    /**
+     * Toggle member activation/deactivation status.
+     */
+    public function toggleMemberStatus(Request $request, $applicationId)
+    {
+        try {
+            // Check if called from admin or superadmin context
+            $adminId = session('admin_id');
+            $superAdminId = session('superadmin_id');
+            
+            if (!$adminId && !$superAdminId) {
+                return back()->with('error', 'Unauthorized access.');
+            }
+            
+            $application = Application::whereNotNull('membership_id')
+                ->findOrFail($applicationId);
+            
+            $oldStatus = $application->is_active;
+            $newStatus = !$oldStatus;
+            
+            $application->update([
+                'is_active' => $newStatus,
+                'deactivated_at' => $newStatus ? null : now('Asia/Kolkata'),
+                'deactivated_by' => $newStatus ? null : ($adminId ?? $superAdminId),
+            ]);
+
+            // Log action
+            if ($adminId) {
+                AdminAction::log(
+                    $adminId,
+                    $newStatus ? 'activated_member' : 'deactivated_member',
+                    $application,
+                    ($newStatus ? 'Activated' : 'Deactivated')." member application {$application->application_id}",
+                    [
+                        'old_status' => $oldStatus,
+                        'new_status' => $newStatus,
+                        'membership_id' => $application->membership_id,
+                    ]
+                );
+            } elseif ($superAdminId) {
+                AdminAction::logSuperAdmin(
+                    $superAdminId,
+                    $newStatus ? 'activated_member' : 'deactivated_member',
+                    $application,
+                    ($newStatus ? 'Activated' : 'Deactivated')." member application {$application->application_id}",
+                    [
+                        'old_status' => $oldStatus,
+                        'new_status' => $newStatus,
+                        'membership_id' => $application->membership_id,
+                    ]
+                );
+            }
+
+            $message = $newStatus 
+                ? 'Member activated successfully! Application is now visible to user and admin.'
+                : 'Member deactivated successfully! Application is now hidden from user and admin.';
+
+            return back()->with('success', $message);
+        } catch (Exception $e) {
+            Log::error('Error toggling member status: '.$e->getMessage());
+
+            return back()->with('error', 'An error occurred. Please try again.');
         }
     }
 
@@ -831,6 +925,13 @@ class AdminController extends Controller
             ])->where('application_type', 'IX'); // Only show IX applications for new workflow
 
             // Show all applications by default (admins can see all)
+            // Filter out deactivated members (applications with is_active = false)
+            // Note: Admins can see all applications including inactive ones for management
+            // But by default show only active ones. Add ?show_inactive=1 to see all
+            if (!$request->get('show_inactive')) {
+                $query->where('is_active', true);
+            }
+            
             // Apply status filter if provided
             if ($statusFilter === 'approved') {
                 $query->whereIn('status', ['approved', 'payment_verified']);
@@ -839,7 +940,7 @@ class AdminController extends Controller
             } elseif ($statusFilter === 'ip_assigned') {
                 $query->where('status', 'ip_assigned');
             }
-            // If no status filter, show all applications (admins can see all)
+            // If no status filter, show all active applications (admins can see all)
             // Actions are restricted based on application stage in the show view
 
             // Search functionality

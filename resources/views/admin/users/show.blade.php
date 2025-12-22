@@ -276,6 +276,75 @@
     </div>
 </div>
 
+<!-- Member Applications Section -->
+@if($user->applications->whereNotNull('membership_id')->count() > 0)
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card border-0 shadow-sm" style="border-radius: 16px;">
+            <div class="card-header bg-primary text-white" style="border-radius: 16px 16px 0 0;">
+                <h5 class="mb-0" style="font-weight: 600;">Member Applications ({{ $user->applications->whereNotNull('membership_id')->count() }})</h5>
+            </div>
+            <div class="card-body p-4">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead>
+                            <tr>
+                                <th style="color: #2c3e50; font-weight: 600;">Application ID</th>
+                                <th style="color: #2c3e50; font-weight: 600;">Membership ID</th>
+                                <th style="color: #2c3e50; font-weight: 600;">Status</th>
+                                <th style="color: #2c3e50; font-weight: 600;">Member Status</th>
+                                <th style="color: #2c3e50; font-weight: 600;">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach($user->applications->whereNotNull('membership_id') as $application)
+                            <tr>
+                                <td><strong>{{ $application->application_id }}</strong></td>
+                                <td><strong>{{ $application->membership_id }}</strong></td>
+                                <td>
+                                    <span class="badge rounded-pill px-3 py-1
+                                        @if($application->status === 'approved' || $application->status === 'payment_verified') bg-success
+                                        @elseif($application->status === 'rejected' || $application->status === 'ceo_rejected') bg-danger
+                                        @elseif(in_array($application->status, ['submitted', 'resubmitted', 'processor_resubmission'])) bg-warning text-dark
+                                        @else bg-secondary @endif">
+                                        {{ $application->status_display }}
+                                    </span>
+                                </td>
+                                <td>
+                                    @if($application->is_active)
+                                        <span class="badge bg-success">Active</span>
+                                    @else
+                                        <span class="badge bg-danger">Deactivated</span>
+                                    @endif
+                                </td>
+                                <td>
+                                    <div class="d-flex gap-2">
+                                        <a href="{{ route('admin.applications.show', $application->id) }}" class="btn btn-sm btn-primary">View</a>
+                                        <form method="POST" action="{{ route('admin.applications.toggle-member-status', $application->id) }}" class="d-inline">
+                                            @csrf
+                                            @if($application->is_active)
+                                                <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Are you sure you want to deactivate this member? The application will be hidden from user and admin views.')">
+                                                    Deactivate
+                                                </button>
+                                            @else
+                                                <button type="submit" class="btn btn-sm btn-success" onclick="return confirm('Are you sure you want to activate this member? The application will be visible to user and admin views.')">
+                                                    Activate
+                                                </button>
+                                            @endif
+                                        </form>
+                                    </div>
+                                </td>
+                            </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+@endif
+
 <div class="row">
     <div class="col-12">
         <div class="card">

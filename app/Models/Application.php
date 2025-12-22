@@ -33,6 +33,9 @@ class Application extends Model
         'customer_id',
         'membership_id',
         'assigned_ip',
+        'is_active',
+        'deactivated_at',
+        'deactivated_by',
         'gst_verification_id',
         'udyam_verification_id',
         'mca_verification_id',
@@ -43,6 +46,8 @@ class Application extends Model
 
     protected $casts = [
         'application_data' => 'array',
+        'is_active' => 'boolean',
+        'deactivated_at' => 'datetime:Asia/Kolkata',
         'submitted_at' => 'datetime:Asia/Kolkata',
         'approved_at' => 'datetime:Asia/Kolkata',
         'created_at' => 'datetime:Asia/Kolkata',
@@ -151,6 +156,14 @@ class Application extends Model
     public function paymentTransactions(): HasMany
     {
         return $this->hasMany(PaymentTransaction::class);
+    }
+
+    /**
+     * Get the admin who deactivated this member.
+     */
+    public function deactivatedBy(): BelongsTo
+    {
+        return $this->belongsTo(Admin::class, 'deactivated_by');
     }
 
     /**

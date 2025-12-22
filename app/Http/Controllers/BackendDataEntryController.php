@@ -379,6 +379,7 @@ class BackendDataEntryController extends Controller
                     'status' => 'submitted', // Directly submitted since payment is completed
                     'application_data' => $applicationData,
                     'gst_verification_id' => $gstVerification->id,
+                    'is_active' => true, // Member is active by default
                     'submitted_at' => now('Asia/Kolkata'),
                 ]);
 

@@ -39,16 +39,18 @@ class UserController extends Controller
 
             $unreadCount = $user->unreadMessagesCount();
 
-            // Get user's applications with status history
+            // Get user's applications with status history (only active)
             $applications = Application::with(['statusHistory'])
                 ->where('user_id', $userId)
+                ->where('is_active', true)
                 ->latest()
                 ->take(5)
                 ->get();
 
-            // Check if user has any IX application (submitted, approved, or payment_verified)
+            // Check if user has any IX application (submitted, approved, or payment_verified) - only active
             $hasIxApplication = Application::where('user_id', $userId)
                 ->where('application_type', 'IX')
+                ->where('is_active', true)
                 ->whereIn('status', ['submitted', 'approved', 'payment_verified', 'processor_forwarded_legal', 'legal_forwarded_head', 'head_forwarded_ceo', 'ceo_approved', 'port_assigned', 'ip_assigned', 'invoice_pending'])
                 ->exists();
 

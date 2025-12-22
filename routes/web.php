@@ -53,6 +53,7 @@ Route::prefix('superadmin')->name('superadmin.')->middleware(['superadmin'])->gr
     Route::get('/users/{id}', [SuperAdminController::class, 'showUser'])->name('users.show');
     Route::delete('/users/{id}', [SuperAdminController::class, 'deleteUser'])->name('users.delete');
     Route::post('/applications/{applicationId}/accept-payment', [SuperAdminController::class, 'acceptPayment'])->name('applications.accept-payment');
+    Route::post('/applications/{applicationId}/toggle-member-status', [\App\Http\Controllers\AdminController::class, 'toggleMemberStatus'])->name('applications.toggle-member-status');
 
     // Admin management
     Route::get('/admins', [SuperAdminController::class, 'admins'])->name('admins');
@@ -134,6 +135,7 @@ Route::prefix('admin')->name('admin.')->middleware(['admin'])->group(function ()
 
     // Members management (users with membership_id)
     Route::get('/members', [AdminController::class, 'members'])->name('members');
+    Route::post('/applications/{applicationId}/toggle-member-status', [AdminController::class, 'toggleMemberStatus'])->name('applications.toggle-member-status');
 
     // Profile update requests
     Route::get('/profile-update-requests', [AdminController::class, 'profileUpdateRequests'])->name('profile-update-requests');
