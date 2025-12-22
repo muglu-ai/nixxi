@@ -64,10 +64,13 @@ class UserInvoiceController extends Controller
             })
             ->findOrFail($id);
 
+            // Sanitize filename - replace / and \ with safe characters
+            $safeFilename = str_replace(['/', '\\'], '-', $invoice->invoice_number).'_invoice.pdf';
+
             // Try to get PDF from invoice pdf_path first
             if ($invoice->pdf_path && Storage::disk('public')->exists($invoice->pdf_path)) {
                 $filePath = Storage::disk('public')->path($invoice->pdf_path);
-                return response()->download($filePath, $invoice->invoice_number.'_invoice.pdf');
+                return response()->download($filePath, $safeFilename);
             }
 
             // Fallback: Check application_data for PDF path (for older invoices)
@@ -77,7 +80,7 @@ class UserInvoiceController extends Controller
             
             if (isset($pdfs['invoice_pdf']) && Storage::disk('public')->exists($pdfs['invoice_pdf'])) {
                 $filePath = Storage::disk('public')->path($pdfs['invoice_pdf']);
-                return response()->download($filePath, $invoice->invoice_number.'_invoice.pdf');
+                return response()->download($filePath, $safeFilename);
             }
 
             // If PDF doesn't exist, generate it on the fly
@@ -120,7 +123,7 @@ class UserInvoiceController extends Controller
                 ])->setPaper('a4', 'portrait')
                     ->setOption('enable-local-file-access', true);
                 
-                return $invoicePdf->download($invoice->invoice_number.'_invoice.pdf');
+                return $invoicePdf->download($safeFilename);
             } else {
                 // For IRIN applications, check if PDF exists in application_data
                 $appData = $application->application_data ?? [];
@@ -128,7 +131,7 @@ class UserInvoiceController extends Controller
                 
                 if (isset($pdfs['invoice_pdf']) && Storage::disk('public')->exists($pdfs['invoice_pdf'])) {
                     $filePath = Storage::disk('public')->path($pdfs['invoice_pdf']);
-                    return response()->download($filePath, $invoice->invoice_number.'_invoice.pdf');
+                    return response()->download($filePath, $safeFilename);
                 }
                 
                 return redirect()->route('user.invoices.index')
