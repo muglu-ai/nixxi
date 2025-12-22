@@ -319,19 +319,18 @@ class SuperAdminController extends Controller
             
             $query = Registration::with(['messages', 'profileUpdateRequests']);
             
-            // Apply member filter if provided
+            // Apply member filter if provided (based on is_active for Live/Not Live)
             if ($filter === 'active') {
+                // Live members: is_active = true
                 $query->whereHas('applications', function ($q) {
                     $q->whereNotNull('membership_id')
-                        ->whereIn('status', ['ip_assigned', 'payment_verified', 'approved']);
+                        ->where('is_active', true);
                 });
             } elseif ($filter === 'disconnected') {
+                // Not live members: is_active = false
                 $query->whereHas('applications', function ($q) {
-                    $q->whereNotNull('membership_id');
-                })
-                ->whereDoesntHave('applications', function ($q) {
                     $q->whereNotNull('membership_id')
-                        ->whereIn('status', ['ip_assigned', 'payment_verified', 'approved']);
+                        ->where('is_active', false);
                 });
             }
 

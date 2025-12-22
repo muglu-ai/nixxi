@@ -166,7 +166,7 @@
                                     <div class="card-body p-4">
                                         <div class="d-flex align-items-center justify-content-between">
                                             <div>
-                                                <h6 class="text-muted mb-2" style="font-size: 0.875rem; font-weight: 500;">Active Members</h6>
+                                                <h6 class="text-muted mb-2" style="font-size: 0.875rem; font-weight: 500;">Live Members</h6>
                                                 <h2 class="mb-0" style="color: #2c3e50; font-weight: 700;">{{ $activeMembers }}</h2>
                                             </div>
                                             <div class="bg-success bg-opacity-10 rounded-circle p-3">
@@ -188,7 +188,7 @@
                                     <div class="card-body p-4">
                                         <div class="d-flex align-items-center justify-content-between">
                                             <div>
-                                                <h6 class="text-muted mb-2" style="font-size: 0.875rem; font-weight: 500;">Disconnected Members</h6>
+                                                <h6 class="text-muted mb-2" style="font-size: 0.875rem; font-weight: 500;">Not Live Members</h6>
                                                 <h2 class="mb-0" style="color: #2c3e50; font-weight: 700;">{{ $disconnectedMembers }}</h2>
                                             </div>
                                             <div class="bg-danger bg-opacity-10 rounded-circle p-3">

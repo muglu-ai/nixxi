@@ -23,12 +23,12 @@
                 </li>
                 <li class="nav-item">
                     <a class="nav-link {{ $filter === 'active' ? 'active' : '' }}" href="{{ route('admin.members', ['filter' => 'active']) }}">
-                        Active Members
+                        Live Members
                     </a>
                 </li>
                 <li class="nav-item">
                     <a class="nav-link {{ $filter === 'disconnected' ? 'active' : '' }}" href="{{ route('admin.members', ['filter' => 'disconnected']) }}">
-                        Disconnected Members
+                        Not Live Members
                     </a>
                 </li>
             </ul>

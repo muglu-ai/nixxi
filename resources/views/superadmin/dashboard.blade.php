@@ -158,7 +158,7 @@
                         <div class="col-4">
                             <a href="{{ route('superadmin.users', ['filter' => 'active']) }}" class="text-decoration-none">
                                 <div class="text-center p-2 rounded" style="transition: background-color 0.2s;" onmouseover="this.style.backgroundColor='#f8f9fa'" onmouseout="this.style.backgroundColor='transparent'">
-                                    <h6 class="text-muted mb-1" style="font-size: 0.75rem;">Active</h6>
+                                    <h6 class="text-muted mb-1" style="font-size: 0.75rem;">Live</h6>
                                     <h4 class="mb-0 text-success" style="font-weight: 700;">{{ $activeMembers }}</h4>
                                 </div>
                             </a>
@@ -166,7 +166,7 @@
                         <div class="col-4">
                             <a href="{{ route('superadmin.users', ['filter' => 'disconnected']) }}" class="text-decoration-none">
                                 <div class="text-center p-2 rounded" style="transition: background-color 0.2s;" onmouseover="this.style.backgroundColor='#f8f9fa'" onmouseout="this.style.backgroundColor='transparent'">
-                                    <h6 class="text-muted mb-1" style="font-size: 0.75rem;">Disconnected</h6>
+                                    <h6 class="text-muted mb-1" style="font-size: 0.75rem;">Not Live</h6>
                                     <h4 class="mb-0 text-danger" style="font-weight: 700;">{{ $disconnectedMembers }}</h4>
                                 </div>
                             </a>
