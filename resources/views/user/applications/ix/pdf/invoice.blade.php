@@ -273,7 +273,7 @@
             </div>
             <div class="detail-row">
                 <span class="detail-label">Attn:</span>
-                {{ $buyerDetails['company_name'] ?? $user->fullname ?? 'N/A' }}
+                {{ $attnName ?? ($buyerDetails['company_name'] ?? $user->fullname ?? 'N/A') }}
             </div>
             <div class="detail-row">
                 <span class="detail-label">Place of Supply:</span>

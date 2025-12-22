@@ -2575,65 +2575,11 @@ class AdminController extends Controller
                 return back()->with('error', 'This application is not available for Account review.');
             }
 
-            // Get billing period
-            $billingPeriod = null;
-            $isInitialInvoice = !$application->service_activation_date;
-            
-            if (!$isInitialInvoice) {
-                $billingPeriod = $this->getCurrentBillingPeriod($application);
-            }
-
-            // Calculate billing period dates for invoice
-            $billingStartDate = null;
-            $billingEndDate = null;
-            $dueDate = null;
-            
-            if ($application->service_activation_date) {
-                $activationDate = \Carbon\Carbon::parse($application->service_activation_date);
-                
-                // Get the last invoice for this application to determine start date
-                $lastInvoice = Invoice::where('application_id', $application->id)
-                    ->where('status', 'paid')
-                    ->latest('invoice_date')
-                    ->first();
-                
-                if ($lastInvoice && $lastInvoice->due_date) {
-                    // Next billing period starts from last invoice's due date
-                    $billingStartDate = \Carbon\Carbon::parse($lastInvoice->due_date);
-                } else {
-                    // First invoice starts from service activation date
-                    $billingStartDate = $activationDate;
-                }
-                
-                // Calculate end date based on billing cycle
-                switch ($billingPlan) {
-                    case 'annual':
-                    case 'arc':
-                        $billingEndDate = $billingStartDate->copy()->addYear();
-                        break;
-                    case 'quarterly':
-                        $billingEndDate = $billingStartDate->copy()->addMonths(3);
-                        break;
-                    case 'monthly':
-                    case 'mrc':
-                    default:
-                        $billingEndDate = $billingStartDate->copy()->addMonth();
-                        break;
-                }
-                
-                // Due date is the billing end date
-                $dueDate = $billingEndDate;
-            } else {
-                // Fallback: 1 month from current date
-                $dueDate = now('Asia/Kolkata')->addMonth();
-            }
-
             // Get payment amount - ONLY port charges, NO application fee
             $applicationData = $application->application_data ?? [];
             
             // Get port amount based on billing cycle
             $billingPlan = $application->billing_cycle ?? ($applicationData['port_selection']['billing_plan'] ?? 'monthly');
-            $portCapacity = $application->assigned_port_capacity ?? ($applicationData['port_selection']['capacity'] ?? null);
             
             // Map billing plan to pricing plan
             $pricingPlan = match($billingPlan) {
@@ -2642,6 +2588,44 @@ class AdminController extends Controller
                 'quarterly' => 'quarterly',
                 default => 'mrc',
             };
+            
+            // Calculate billing period dates for invoice
+            $billingStartDate = null;
+            $billingEndDate = null;
+            $dueDate = null;
+            $billingPeriod = null;
+            
+            if ($application->service_activation_date) {
+                // Always start from service_activation_date for current billing period
+                $billingStartDate = \Carbon\Carbon::parse($application->service_activation_date);
+                
+                // Calculate end date based on billing cycle
+                switch ($billingPlan) {
+                    case 'annual':
+                    case 'arc':
+                        $billingEndDate = $billingStartDate->copy()->addYear();
+                        $billingPeriod = $billingStartDate->format('Y');
+                        break;
+                    case 'quarterly':
+                        $billingEndDate = $billingStartDate->copy()->addMonths(3);
+                        $quarter = ceil($billingStartDate->month / 3);
+                        $billingPeriod = $billingStartDate->format('Y').'-Q'.$quarter;
+                        break;
+                    case 'monthly':
+                    case 'mrc':
+                    default:
+                        $billingEndDate = $billingStartDate->copy()->addMonth();
+                        $billingPeriod = $billingStartDate->format('Y-m');
+                        break;
+                }
+                
+                // Due date is the billing end date
+                $dueDate = $billingEndDate;
+            } else {
+                // Fallback: 1 month from current date if no service activation date
+                $dueDate = now('Asia/Kolkata')->addMonth();
+            }
+            $portCapacity = $application->assigned_port_capacity ?? ($applicationData['port_selection']['capacity'] ?? null);
             
             // Get pricing for the port capacity
             $location = null;
@@ -2731,45 +2715,6 @@ class AdminController extends Controller
                 'udf2' => (string) $paymentTransaction->id, // Store payment transaction ID
                 'udf3' => $invoiceNumber,
             ]);
-
-            // Calculate billing period dates for invoice
-            $billingStartDate = null;
-            $billingEndDate = null;
-            
-            if ($application->service_activation_date) {
-                $activationDate = \Carbon\Carbon::parse($application->service_activation_date);
-                
-                // Get the last invoice for this application to determine start date
-                $lastInvoice = Invoice::where('application_id', $application->id)
-                    ->where('status', 'paid')
-                    ->latest('invoice_date')
-                    ->first();
-                
-                if ($lastInvoice && $lastInvoice->due_date) {
-                    // Next billing period starts from last invoice's due date
-                    $billingStartDate = \Carbon\Carbon::parse($lastInvoice->due_date);
-                } else {
-                    // First invoice starts from service activation date
-                    $billingStartDate = $activationDate;
-                }
-                
-                // Calculate end date based on billing cycle
-                switch ($billingPlan) {
-                    case 'annual':
-                        $billingEndDate = $billingStartDate->copy()->addYear();
-                        break;
-                    case 'quarterly':
-                        $billingEndDate = $billingStartDate->copy()->addMonths(3);
-                        break;
-                    case 'monthly':
-                    default:
-                        $billingEndDate = $billingStartDate->copy()->addMonth();
-                        break;
-                }
-                
-                // Update due date to billing end date
-                $dueDate = $billingEndDate;
-            }
             
             // Create invoice record
             $invoice = Invoice::create([
@@ -2786,7 +2731,15 @@ class AdminController extends Controller
                 'payu_payment_link' => json_encode($paymentData), // Store full payment data
                 'generated_by' => $admin->id,
             ]);
-
+            
+            // Update service_activation_date to billing end date for next billing cycle
+            if ($billingEndDate && $application->service_activation_date) {
+                $application->update([
+                    'service_activation_date' => $billingEndDate->format('Y-m-d'),
+                ]);
+                Log::info("Updated service_activation_date for application {$application->id} to {$billingEndDate->format('Y-m-d')} after invoice generation");
+            }
+            
             // Generate invoice PDF
             try {
                 $invoicePdf = $this->generateIxInvoicePdf($application, $invoice);
@@ -2941,6 +2894,28 @@ class AdminController extends Controller
             ];
         }
         
+        // Get Attn (Authorized Representative Name)
+        $attnName = null;
+        if ($isFirstApplication) {
+            // First application: Get from KYC
+            $kyc = \App\Models\UserKycProfile::where('user_id', $user->id)
+                ->where('status', 'completed')
+                ->first();
+            if ($kyc && $kyc->contact_name) {
+                $attnName = $kyc->contact_name;
+            }
+        } else {
+            // Subsequent application: Get from form (representative name)
+            if (isset($data['representative']['name'])) {
+                $attnName = $data['representative']['name'];
+            }
+        }
+        
+        // Fallback to user name if no representative found
+        if (!$attnName) {
+            $attnName = $buyerDetails['company_name'] ?? $user->fullname;
+        }
+        
         // Get place of supply from IX location
         $placeOfSupply = null;
         if (isset($data['location']['id'])) {
@@ -2974,6 +2949,7 @@ class AdminController extends Controller
             'data' => $data,
             'buyerDetails' => $buyerDetails,
             'placeOfSupply' => $placeOfSupply,
+            'attnName' => $attnName,
             'invoiceNumber' => $invoiceNumber,
             'invoiceDate' => $invoiceDate,
             'dueDate' => $dueDate,

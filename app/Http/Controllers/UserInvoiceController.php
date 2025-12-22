@@ -195,6 +195,28 @@ class UserInvoiceController extends Controller
                     $placeOfSupply = $buyerDetails['state_name'] ?? $buyerDetails['state'] ?? 'N/A';
                 }
                 
+                // Get Attn (Authorized Representative Name)
+                $attnName = null;
+                if ($isFirstApplication) {
+                    // First application: Get from KYC
+                    $kyc = \App\Models\UserKycProfile::where('user_id', $user->id)
+                        ->where('status', 'completed')
+                        ->first();
+                    if ($kyc && $kyc->contact_name) {
+                        $attnName = $kyc->contact_name;
+                    }
+                } else {
+                    // Subsequent application: Get from form (representative name)
+                    if (isset($data['representative']['name'])) {
+                        $attnName = $data['representative']['name'];
+                    }
+                }
+                
+                // Fallback to user name if no representative found
+                if (!$attnName) {
+                    $attnName = $buyerDetails['company_name'] ?? $user->fullname;
+                }
+                
                 $applicationPricing = \App\Models\IxApplicationPricing::getActive();
                 
                 $invoicePdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('user.applications.ix.pdf.invoice', [
@@ -203,6 +225,7 @@ class UserInvoiceController extends Controller
                     'data' => $data,
                     'buyerDetails' => $buyerDetails,
                     'placeOfSupply' => $placeOfSupply,
+                    'attnName' => $attnName,
                     'invoiceNumber' => $invoice->invoice_number,
                     'invoiceDate' => $invoice->invoice_date->format('d/m/Y'),
                     'dueDate' => $invoice->due_date->format('d/m/Y'),
