@@ -11,6 +11,7 @@ use App\Models\ApplicationStatusHistory;
 use App\Models\GstVerification;
 use App\Models\IxApplicationPricing;
 use App\Models\IxLocation;
+use App\Models\IxPortPricing;
 use App\Models\McaVerification;
 use App\Models\Message;
 use App\Models\PanVerification;
@@ -2625,7 +2626,52 @@ class AdminController extends Controller
                 // Fallback: 1 month from current date if no service activation date
                 $dueDate = now('Asia/Kolkata')->addMonth();
             }
-            $portCapacity = $application->assigned_port_capacity ?? ($applicationData['port_selection']['capacity'] ?? null);
+            // Check for plan change requests (pending or approved with future effective_from)
+            $pendingPlanChange = \App\Models\PlanChangeRequest::where('application_id', $application->id)
+                ->where('status', 'pending')
+                ->latest()
+                ->first();
+            
+            $approvedPlanChange = null;
+            if (!$pendingPlanChange) {
+                // Check for approved plan change with future effective_from date
+                $approvedPlanChange = \App\Models\PlanChangeRequest::where('application_id', $application->id)
+                    ->where('status', 'approved')
+                    ->whereNotNull('effective_from')
+                    ->where('effective_from', '>', now('Asia/Kolkata'))
+                    ->latest()
+                    ->first();
+            }
+            
+            // Determine which port capacity to use for billing
+            if ($pendingPlanChange) {
+                // If there's a pending plan change, use current capacity (not the new one)
+                $portCapacity = $pendingPlanChange->current_port_capacity ?? $application->assigned_port_capacity ?? ($applicationData['port_selection']['capacity'] ?? null);
+                Log::info("Pending plan change found for application {$application->id}, using current capacity: {$portCapacity}");
+            } elseif ($approvedPlanChange) {
+                // Approved but not yet effective - use current capacity until effective_from date
+                $portCapacity = $approvedPlanChange->current_port_capacity ?? $application->assigned_port_capacity ?? ($applicationData['port_selection']['capacity'] ?? null);
+                Log::info("Approved plan change with future effective_from found for application {$application->id}, using current capacity: {$portCapacity} until {$approvedPlanChange->effective_from}");
+            } else {
+                // Check for approved plan change that has taken effect
+                $effectivePlanChange = \App\Models\PlanChangeRequest::where('application_id', $application->id)
+                    ->where('status', 'approved')
+                    ->where(function ($query) {
+                        $query->whereNull('effective_from')
+                            ->orWhere('effective_from', '<=', now('Asia/Kolkata'));
+                    })
+                    ->latest('effective_from')
+                    ->first();
+                
+                if ($effectivePlanChange && $effectivePlanChange->effective_from && $effectivePlanChange->effective_from <= now('Asia/Kolkata')) {
+                    // Use new capacity if effective_from has passed
+                    $portCapacity = $effectivePlanChange->new_port_capacity ?? $application->assigned_port_capacity ?? ($applicationData['port_selection']['capacity'] ?? null);
+                    Log::info("Effective plan change found for application {$application->id}, using new capacity: {$portCapacity} (effective from {$effectivePlanChange->effective_from})");
+                } else {
+                    // No plan change or not yet effective, use assigned capacity
+                    $portCapacity = $application->assigned_port_capacity ?? ($applicationData['port_selection']['capacity'] ?? null);
+                }
+            }
             
             // Get pricing for the port capacity
             $location = null;
@@ -2635,17 +2681,58 @@ class AdminController extends Controller
             
             $portAmount = 0;
             if ($location && $portCapacity) {
+                // Normalize port capacity format for matching (handle variations like "10Gig", "10 Gbps", etc.)
+                $normalizedCapacity = trim($portCapacity);
+                
+                // Get pricing for this location and port capacity (exact match first)
                 $pricing = IxPortPricing::active()
                     ->where('node_type', $location->node_type)
-                    ->where('port_capacity', $portCapacity)
+                    ->where('port_capacity', $normalizedCapacity)
                     ->first();
+                
+                // If exact match not found, try to find by normalizing common variations
+                if (!$pricing) {
+                    // Try common variations: "10Gig" -> "10Gig", "10 Gbps" -> "10Gig", "10Gbps" -> "10Gig"
+                    $variations = [
+                        $normalizedCapacity,
+                        str_replace([' ', 'Gbps', 'gbps', 'Gbps'], 'Gig', $normalizedCapacity),
+                        str_replace([' ', 'Gig', 'gig'], 'Gbps', $normalizedCapacity),
+                        preg_replace('/\s+/', '', $normalizedCapacity),
+                    ];
+                    
+                    foreach (array_unique($variations) as $variation) {
+                        $pricing = IxPortPricing::active()
+                            ->where('node_type', $location->node_type)
+                            ->where('port_capacity', $variation)
+                            ->first();
+                        if ($pricing) {
+                            Log::info("Pricing found with variation: '{$variation}' for original '{$normalizedCapacity}'");
+                            break;
+                        }
+                    }
+                }
                 
                 if ($pricing) {
                     $portAmount = (float) $pricing->getAmountForPlan($pricingPlan);
+                    Log::info("Pricing found for location {$location->id} ({$location->name}), node_type {$location->node_type}, port_capacity '{$portCapacity}' (normalized: '{$normalizedCapacity}'), plan {$pricingPlan}, amount: {$portAmount}");
+                } else {
+                    // Log available pricings for debugging
+                    $availablePricings = IxPortPricing::active()
+                        ->where('node_type', $location->node_type)
+                        ->pluck('port_capacity')
+                        ->toArray();
+                    Log::warning("No pricing found for location {$location->id} ({$location->name}), node_type {$location->node_type}, port_capacity '{$portCapacity}'. Available capacities: " . implode(', ', $availablePricings));
                 }
             } else {
                 // Fallback to stored amount
                 $portAmount = (float) ($applicationData['port_selection']['amount'] ?? 0);
+                Log::warning("Using fallback amount from application_data: {$portAmount}. Location: " . ($location ? "{$location->id} ({$location->name})" : 'null') . ", Port Capacity: " . ($portCapacity ?? 'null'));
+            }
+            
+            // Validate port amount is not zero or incorrect
+            if ($portAmount <= 0) {
+                Log::error("Invalid port amount calculated: {$portAmount} for application {$application->id}. Location: " . ($location ? "{$location->id} ({$location->node_type})" : 'null') . ", Port Capacity: " . ($portCapacity ?? 'null'));
+                return back()->with('error', 'Unable to calculate port charges. Please ensure port capacity and location are correctly configured.');
             }
             
             // Calculate GST based on state (IGST for non-Delhi, CGST+SGST for Delhi)
