@@ -2580,7 +2580,21 @@ class AdminController extends Controller
             $applicationData = $application->application_data ?? [];
             
             // Get port amount based on billing cycle
-            $billingPlan = $application->billing_cycle ?? ($applicationData['port_selection']['billing_plan'] ?? 'monthly');
+            $billingPlanRaw = $application->billing_cycle ?? ($applicationData['port_selection']['billing_plan'] ?? 'monthly');
+            
+            // Normalize billing plan (handle case variations and aliases)
+            $billingPlan = strtolower(trim($billingPlanRaw));
+            if (in_array($billingPlan, ['arc', 'annual'])) {
+                $billingPlan = 'annual';
+            } elseif (in_array($billingPlan, ['mrc', 'monthly'])) {
+                $billingPlan = 'monthly';
+            } elseif ($billingPlan === 'quarterly') {
+                $billingPlan = 'quarterly';
+            } else {
+                $billingPlan = 'monthly'; // Default fallback
+            }
+            
+            Log::info("Billing plan for application {$application->id}: raw='{$billingPlanRaw}', normalized='{$billingPlan}'");
             
             // Map billing plan to pricing plan
             $pricingPlan = match($billingPlan) {

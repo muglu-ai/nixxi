@@ -332,52 +332,66 @@
         $gstAmount = $invoice ? (float)$invoice->gst_amount : 0;
         $totalAmount = $invoice ? (float)$invoice->total_amount : 0;
         
-        // Get billing period dates
+        // Get billing period dates - Always recalculate based on billing cycle to ensure correctness
         $billingStartDate = null;
         $billingEndDate = null;
         $billingPeriodText = '';
         
-        if ($invoice && $invoice->invoice_date && $invoice->due_date) {
-            $billingStartDate = \Carbon\Carbon::parse($invoice->invoice_date);
-            $billingEndDate = \Carbon\Carbon::parse($invoice->due_date);
-            
-            // If due date is after invoice date, use that range
-            if ($billingEndDate->gt($billingStartDate)) {
-                $billingPeriodText = $billingStartDate->format('d/m/Y') . ' to ' . $billingEndDate->format('d/m/Y');
-            } else {
-                // Calculate based on billing cycle
-                $billingCycle = $application->billing_cycle ?? ($data['port_selection']['billing_plan'] ?? 'monthly');
-                $startDate = $application->service_activation_date 
-                    ? \Carbon\Carbon::parse($application->service_activation_date)
-                    : $billingStartDate;
-                
-                // Get last paid invoice to determine start date
-                $lastInvoice = \App\Models\Invoice::where('application_id', $application->id)
-                    ->where('status', 'paid')
-                    ->where('id', '<', $invoice->id)
-                    ->latest('invoice_date')
-                    ->first();
-                
-                if ($lastInvoice && $lastInvoice->due_date) {
-                    $startDate = \Carbon\Carbon::parse($lastInvoice->due_date);
-                }
-                
-                switch ($billingCycle) {
-                    case 'annual':
-                        $endDate = $startDate->copy()->addYear();
-                        break;
-                    case 'quarterly':
-                        $endDate = $startDate->copy()->addMonths(3);
-                        break;
-                    case 'monthly':
-                    default:
-                        $endDate = $startDate->copy()->addMonth();
-                        break;
-                }
-                
-                $billingPeriodText = $startDate->format('d/m/Y') . ' to ' . $endDate->format('d/m/Y');
-            }
+        // Get billing cycle from application (prioritize database field over application_data)
+        $billingCycle = strtolower(trim($application->billing_cycle ?? ($data['port_selection']['billing_plan'] ?? 'monthly')));
+        
+        // Normalize billing cycle values
+        if (in_array($billingCycle, ['arc', 'annual'])) {
+            $billingCycle = 'annual';
+        } elseif (in_array($billingCycle, ['mrc', 'monthly'])) {
+            $billingCycle = 'monthly';
+        } elseif ($billingCycle === 'quarterly') {
+            $billingCycle = 'quarterly';
         } else {
+            $billingCycle = 'monthly'; // Default fallback
+        }
+        
+        if ($invoice && $invoice->invoice_date) {
+            // Use invoice date as start date, or service activation date if this is first invoice
+            $startDate = null;
+            
+            // Check if this is the first invoice (no previous paid invoices)
+            $lastPaidInvoice = \App\Models\Invoice::where('application_id', $application->id)
+                ->where('status', 'paid')
+                ->where('id', '<', $invoice->id)
+                ->latest('invoice_date')
+                ->first();
+            
+            if ($lastPaidInvoice && $lastPaidInvoice->due_date) {
+                // Subsequent invoice: start from last invoice's due date
+                $startDate = \Carbon\Carbon::parse($lastPaidInvoice->due_date);
+            } elseif ($application->service_activation_date) {
+                // First invoice: start from service activation date
+                $startDate = \Carbon\Carbon::parse($application->service_activation_date);
+            } else {
+                // Fallback: use invoice date
+                $startDate = \Carbon\Carbon::parse($invoice->invoice_date);
+            }
+            
+            // Calculate end date based on billing cycle
+            switch ($billingCycle) {
+                case 'annual':
+                case 'arc':
+                    $endDate = $startDate->copy()->addYear();
+                    break;
+                case 'quarterly':
+                    $endDate = $startDate->copy()->addMonths(3);
+                    break;
+                case 'monthly':
+                case 'mrc':
+                default:
+                    $endDate = $startDate->copy()->addMonth();
+                    break;
+            }
+            
+            $billingPeriodText = $startDate->format('d/m/Y') . ' to ' . $endDate->format('d/m/Y');
+        } else {
+            // Fallback if no invoice dates
             $billingPeriodText = $invoiceDate . ' to ' . $dueDate;
         }
         
