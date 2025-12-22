@@ -170,11 +170,10 @@ class SuperAdminController extends Controller
                     ->where('is_active', false);
             })->distinct()->count();
             
-            // Recent Live Members (applications with status 'ip_assigned' and is_active = true in last 30 days)
+            // Recent Live Members (applications with membership_id and is_active = true, ordered by most recent)
             $recentLiveMembers = Application::with('user')
-                ->where('status', 'ip_assigned')
+                ->whereNotNull('membership_id')
                 ->where('is_active', true)
-                ->where('updated_at', '>=', now()->subDays(30))
                 ->orderBy('updated_at', 'desc')
                 ->take(10)
                 ->get();

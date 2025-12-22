@@ -123,7 +123,7 @@
                                         </td>
                                         <td>
                                             <div class="d-flex gap-2">
-                                                <a href="{{ route('admin.users.show', $member->id) }}" class="btn btn-sm btn-primary">View Details</a>
+                                                <a href="{{ route('admin.users.show', ['id' => $member->id, 'from' => 'members']) }}" class="btn btn-sm btn-primary">View Details</a>
                                                 @if($memberApplication)
                                                     <form method="POST" action="{{ route('admin.applications.toggle-member-status', $memberApplication->id) }}" class="d-inline">
                                                         @csrf

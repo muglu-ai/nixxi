@@ -335,7 +335,7 @@
             <div class="card border-0 shadow-sm" style="border-radius: 16px;">
                 <div class="card-header bg-success text-white d-flex justify-content-between align-items-center" style="border-radius: 16px 16px 0 0;">
                     <h5 class="mb-0" style="font-weight: 600;">Recent Live Members</h5>
-                    <a href="{{ route('admin.applications', ['status' => 'ip_assigned']) }}" class="btn btn-sm btn-light">
+                    <a href="{{ route('admin.members', ['filter' => 'active']) }}" class="btn btn-sm btn-light">
                         View All Live Members
                     </a>
                 </div>
@@ -346,22 +346,27 @@
                             <thead>
                                 <tr>
                                     <th style="color: #2c3e50; font-weight: 600;">Application ID</th>
+                                    <th style="color: #2c3e50; font-weight: 600;">Membership ID</th>
                                     <th style="color: #2c3e50; font-weight: 600;">Member Name</th>
-                                    <th style="color: #2c3e50; font-weight: 600;">Status</th>
-                                    <th style="color: #2c3e50; font-weight: 600;">Activated Date</th>
+                                    <th style="color: #2c3e50; font-weight: 600;">Application Status</th>
+                                    <th style="color: #2c3e50; font-weight: 600;">Last Updated</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 @foreach($recentLiveMembers as $application)
                                 <tr>
                                     <td><a href="{{ route('admin.applications.show', $application->id) }}" style="color: #0d6efd; text-decoration: none;">{{ $application->application_id }}</a></td>
+                                    <td><strong>{{ $application->membership_id }}</strong></td>
                                     <td>{{ $application->user->fullname ?? 'N/A' }}</td>
                                     <td>
-                                        <span class="badge rounded-pill px-3 py-1 bg-success">
-                                            Live
+                                        <span class="badge rounded-pill px-3 py-1
+                                            @if($application->status === 'approved' || $application->status === 'payment_verified') bg-success
+                                            @elseif(in_array($application->status, ['ip_assigned', 'invoice_pending'])) bg-info
+                                            @else bg-secondary @endif">
+                                            {{ $application->status_display }}
                                         </span>
                                     </td>
-                                    <td>{{ $application->updated_at->format('M d, Y') }}</td>
+                                    <td>{{ $application->updated_at->format('M d, Y h:i A') }}</td>
                                 </tr>
                                 @endforeach
                             </tbody>

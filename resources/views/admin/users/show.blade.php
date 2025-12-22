@@ -5,16 +5,21 @@
 @section('content')
 <div class="row mb-4">
     <div class="col-12">
-        <h1>Registration Details</h1>
+        <h1>{{ $fromMembersPage ? 'Member Details' : 'Registration Details' }}</h1>
         <div class="d-flex gap-2">
-            <a href="{{ route('admin.users') }}" class="btn btn-secondary">Back to Registrations</a>
-            <button type="button" class="btn btn-danger" data-bs-toggle="modal" data-bs-target="#deleteUserModal">
-                Delete User
-            </button>
+            @if($fromMembersPage)
+                <a href="{{ route('admin.members') }}" class="btn btn-secondary">Back to Members</a>
+            @else
+                <a href="{{ route('admin.users') }}" class="btn btn-secondary">Back to Registrations</a>
+                <button type="button" class="btn btn-danger" data-bs-toggle="modal" data-bs-target="#deleteUserModal">
+                    Delete User
+                </button>
+            @endif
         </div>
     </div>
 </div>
 
+@if(!$fromMembersPage)
 <!-- Delete User Confirmation Modal -->
 <div class="modal fade" id="deleteUserModal" tabindex="-1" aria-labelledby="deleteUserModalLabel" aria-hidden="true">
     <div class="modal-dialog">
@@ -53,7 +58,9 @@
         </div>
     </div>
 </div>
+@endif
 
+@if(!$fromMembersPage)
 <div class="row">
     <div class="col-md-6">
         <div class="card mb-4">
@@ -275,76 +282,182 @@
         </div>
     </div>
 </div>
+@endif
 
 <!-- Member Applications Section -->
 @if($user->applications->whereNotNull('membership_id')->count() > 0)
-<div class="row mt-4">
+<div class="row {{ $fromMembersPage ? '' : 'mt-4' }}">
     <div class="col-12">
         <div class="card border-0 shadow-sm" style="border-radius: 16px;">
             <div class="card-header bg-primary text-white" style="border-radius: 16px 16px 0 0;">
-                <h5 class="mb-0" style="font-weight: 600;">Member Applications ({{ $user->applications->whereNotNull('membership_id')->count() }})</h5>
+                <h5 class="mb-0" style="font-weight: 600;">Membership Details ({{ $user->applications->whereNotNull('membership_id')->count() }})</h5>
             </div>
             <div class="card-body p-4">
-                <div class="table-responsive">
-                    <table class="table table-hover mb-0">
-                        <thead>
-                            <tr>
-                                <th style="color: #2c3e50; font-weight: 600;">Application ID</th>
-                                <th style="color: #2c3e50; font-weight: 600;">Membership ID</th>
-                                <th style="color: #2c3e50; font-weight: 600;">Status</th>
-                                <th style="color: #2c3e50; font-weight: 600;">Member Status</th>
-                                <th style="color: #2c3e50; font-weight: 600;">Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @foreach($user->applications->whereNotNull('membership_id') as $application)
-                            <tr>
-                                <td><strong>{{ $application->application_id }}</strong></td>
-                                <td><strong>{{ $application->membership_id }}</strong></td>
-                                <td>
-                                    <span class="badge rounded-pill px-3 py-1
-                                        @if($application->status === 'approved' || $application->status === 'payment_verified') bg-success
-                                        @elseif($application->status === 'rejected' || $application->status === 'ceo_rejected') bg-danger
-                                        @elseif(in_array($application->status, ['submitted', 'resubmitted', 'processor_resubmission'])) bg-warning text-dark
-                                        @else bg-secondary @endif">
-                                        {{ $application->status_display }}
-                                    </span>
-                                </td>
-                                <td>
-                                    @if($application->is_active)
-                                        <span class="badge bg-success">LIVE</span>
-                                    @else
-                                        <span class="badge bg-danger">NOT LIVE</span>
+                @foreach($user->applications->whereNotNull('membership_id') as $application)
+                <div class="card mb-4 border">
+                    <div class="card-header bg-light">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="mb-0"><strong>Application ID:</strong> {{ $application->application_id }}</h6>
+                                <h6 class="mb-0 mt-1"><strong>Membership ID:</strong> {{ $application->membership_id }}</h6>
+                            </div>
+                            <div>
+                                @if($application->is_active)
+                                    <span class="badge bg-success fs-6">LIVE</span>
+                                @else
+                                    <span class="badge bg-danger fs-6">NOT LIVE</span>
+                                @endif
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <table class="table table-borderless">
+                                    <tr>
+                                        <th width="40%">Application Status:</th>
+                                        <td>
+                                            <span class="badge rounded-pill px-3 py-1
+                                                @if($application->status === 'approved' || $application->status === 'payment_verified') bg-success
+                                                @elseif($application->status === 'rejected' || $application->status === 'ceo_rejected') bg-danger
+                                                @elseif(in_array($application->status, ['submitted', 'resubmitted', 'processor_resubmission'])) bg-warning text-dark
+                                                @else bg-secondary @endif">
+                                                {{ $application->status_display }}
+                                            </span>
+                                        </td>
+                                    </tr>
+                                    @if($application->submitted_at)
+                                    <tr>
+                                        <th>Submitted At:</th>
+                                        <td>{{ $application->submitted_at->format('d M Y, h:i A') }}</td>
+                                    </tr>
                                     @endif
-                                </td>
-                                <td>
-                                    <div class="d-flex gap-2">
-                                        <a href="{{ route('admin.applications.show', $application->id) }}" class="btn btn-sm btn-primary">View</a>
-                                        <form method="POST" action="{{ route('admin.applications.toggle-member-status', $application->id) }}" class="d-inline">
-                                            @csrf
-                                            @if($application->is_active)
-                                                <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Are you sure you want to mark this member as NOT LIVE?')">
-                                                    Mark as Not Live
-                                                </button>
-                                            @else
-                                                <button type="submit" class="btn btn-sm btn-success" onclick="return confirm('Are you sure you want to mark this member as LIVE?')">
-                                                    Mark as Live
-                                                </button>
-                                            @endif
-                                        </form>
-                                    </div>
-                                </td>
-                            </tr>
-                            @endforeach
-                        </tbody>
-                    </table>
+                                    @if($application->approved_at)
+                                    <tr>
+                                        <th>Approved At:</th>
+                                        <td>{{ $application->approved_at->format('d M Y, h:i A') }}</td>
+                                    </tr>
+                                    @endif
+                                    @if($application->assigned_ip)
+                                    <tr>
+                                        <th>Assigned IP:</th>
+                                        <td><strong>{{ $application->assigned_ip }}</strong></td>
+                                    </tr>
+                                    @endif
+                                    @if($application->assigned_port_number)
+                                    <tr>
+                                        <th>Port Number:</th>
+                                        <td><strong>{{ $application->assigned_port_number }}</strong></td>
+                                    </tr>
+                                    @endif
+                                    @if($application->assigned_port_capacity)
+                                    <tr>
+                                        <th>Port Capacity:</th>
+                                        <td><strong>{{ $application->assigned_port_capacity }}</strong></td>
+                                    </tr>
+                                    @endif
+                                    @if($application->customer_id)
+                                    <tr>
+                                        <th>Customer ID:</th>
+                                        <td><strong>{{ $application->customer_id }}</strong></td>
+                                    </tr>
+                                    @endif
+                                </table>
+                            </div>
+                            <div class="col-md-6">
+                                @php
+                                    $locationData = $application->application_data['location'] ?? null;
+                                    $billingData = $application->application_data['billing'] ?? null;
+                                @endphp
+                                @if($locationData)
+                                <h6 class="mb-3">Location Details:</h6>
+                                <table class="table table-borderless">
+                                    <tr>
+                                        <th width="40%">Location:</th>
+                                        <td>{{ $locationData['name'] ?? 'N/A' }}</td>
+                                    </tr>
+                                    @if(isset($locationData['node_type']))
+                                    <tr>
+                                        <th>Node Type:</th>
+                                        <td>{{ ucfirst($locationData['node_type']) }}</td>
+                                    </tr>
+                                    @endif
+                                    @if(isset($locationData['state']))
+                                    <tr>
+                                        <th>State:</th>
+                                        <td>{{ $locationData['state'] }}</td>
+                                    </tr>
+                                    @endif
+                                    @if(isset($locationData['city']))
+                                    <tr>
+                                        <th>City:</th>
+                                        <td>{{ $locationData['city'] }}</td>
+                                    </tr>
+                                    @endif
+                                </table>
+                                @endif
+                                @if($billingData)
+                                <h6 class="mb-3 mt-3">Billing Details:</h6>
+                                <table class="table table-borderless">
+                                    @if(isset($billingData['plan']))
+                                    <tr>
+                                        <th width="40%">Billing Plan:</th>
+                                        <td>{{ $billingData['plan'] }}</td>
+                                    </tr>
+                                    @endif
+                                    @if(isset($billingData['amount']))
+                                    <tr>
+                                        <th>Amount:</th>
+                                        <td>₹{{ number_format($billingData['amount'], 2) }}</td>
+                                    </tr>
+                                    @endif
+                                    @if(isset($billingData['status']))
+                                    <tr>
+                                        <th>Payment Status:</th>
+                                        <td>
+                                            <span class="badge bg-{{ $billingData['status'] === 'completed' || $billingData['status'] === 'verified' ? 'success' : 'warning' }}">
+                                                {{ ucfirst($billingData['status']) }}
+                                            </span>
+                                        </td>
+                                    </tr>
+                                    @endif
+                                </table>
+                                @endif
+                            </div>
+                        </div>
+                        <div class="mt-3 d-flex gap-2">
+                            <a href="{{ route('admin.applications.show', $application->id) }}" class="btn btn-primary">View Full Application Details</a>
+                            <form method="POST" action="{{ route('admin.applications.toggle-member-status', $application->id) }}" class="d-inline">
+                                @csrf
+                                @if($application->is_active)
+                                    <button type="submit" class="btn btn-danger" onclick="return confirm('Are you sure you want to mark this member as NOT LIVE?')">
+                                        Mark as Not Live
+                                    </button>
+                                @else
+                                    <button type="submit" class="btn btn-success" onclick="return confirm('Are you sure you want to mark this member as LIVE?')">
+                                        Mark as Live
+                                    </button>
+                                @endif
+                            </form>
+                        </div>
+                    </div>
                 </div>
+                @endforeach
             </div>
+        </div>
+    </div>
+</div>
+@else
+<div class="row">
+    <div class="col-12">
+        <div class="alert alert-info">
+            <strong>No Membership Found:</strong> This user does not have any applications with membership ID.
         </div>
     </div>
 </div>
 @endif
 
+@if(!$fromMembersPage)
 <div class="row">
     <div class="col-12">
         <div class="card">
@@ -392,5 +505,6 @@
         </div>
     </div>
 </div>
+@endif
 @endsection
 

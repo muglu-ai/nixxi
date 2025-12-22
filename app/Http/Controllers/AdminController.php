@@ -122,11 +122,10 @@ class AdminController extends Controller
                     ->where('is_active', false);
             })->distinct()->count();
             
-            // Recent Live Members (applications with status 'ip_assigned' in last 30 days and is_active = true)
+            // Recent Live Members (applications with membership_id and is_active = true, ordered by most recent)
             $recentLiveMembers = Application::with('user')
-                ->where('status', 'ip_assigned')
+                ->whereNotNull('membership_id')
                 ->where('is_active', true)
-                ->where('updated_at', '>=', now()->subDays(30))
                 ->orderBy('updated_at', 'desc')
                 ->take(10)
                 ->get();
@@ -269,7 +268,7 @@ class AdminController extends Controller
     /**
      * Display user details with full history.
      */
-    public function showUser($id)
+    public function showUser($id, Request $request)
     {
         try {
             $admin = $this->getCurrentAdmin();
@@ -283,6 +282,11 @@ class AdminController extends Controller
                     $query->whereNotNull('membership_id')->latest();
                 },
             ])->findOrFail($id);
+
+            // Check if this is a member (has applications with membership_id)
+            $isMember = $user->applications->whereNotNull('membership_id')->count() > 0;
+            // Check if accessed from members page
+            $fromMembersPage = $request->get('from', '') === 'members';
 
             // Get all admin actions related to this user
             $adminActions = AdminAction::where('actionable_type', Registration::class)
@@ -299,7 +303,7 @@ class AdminController extends Controller
                 ->latest()
                 ->get();
 
-            return view('admin.users.show', compact('user', 'adminActions', 'admin'));
+            return view('admin.users.show', compact('user', 'adminActions', 'admin', 'isMember', 'fromMembersPage'));
         } catch (QueryException $e) {
             Log::error('Database error loading user details: '.$e->getMessage());
             abort(503, 'Database connection error. Please try again later.');
