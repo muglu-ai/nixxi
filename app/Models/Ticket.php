@@ -16,6 +16,10 @@ class Ticket extends Model
         'description',
         'status',
         'priority',
+        'escalation_level',
+        'escalated_to',
+        'escalated_at',
+        'escalation_notes',
         'assigned_to',
         'assigned_by',
         'assigned_at',
@@ -29,6 +33,7 @@ class Ticket extends Model
         'assigned_at' => 'datetime',
         'resolved_at' => 'datetime',
         'closed_at' => 'datetime',
+        'escalated_at' => 'datetime',
     ];
 
     /**
@@ -81,6 +86,14 @@ class Ticket extends Model
     public function closedByAdmin(): BelongsTo
     {
         return $this->belongsTo(Admin::class, 'closed_by');
+    }
+
+    /**
+     * Get the admin to whom the ticket is escalated.
+     */
+    public function escalatedTo(): BelongsTo
+    {
+        return $this->belongsTo(Admin::class, 'escalated_to');
     }
 
     /**

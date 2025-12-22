@@ -26,11 +26,29 @@
                     <p><strong>Email:</strong> {{ $ticket->user->email ?? 'N/A' }}</p>
                     <p><strong>Type:</strong> <span class="badge bg-info">{{ $ticket->type_display }}</span></p>
                     <p><strong>Priority:</strong> <span class="badge bg-{{ $ticket->priority_badge_color }}">{{ ucfirst($ticket->priority) }}</span></p>
+                    @if($ticket->escalation_level !== 'none')
+                    <p><strong>Escalation:</strong> 
+                        <span class="badge bg-danger">
+                            @if($ticket->escalation_level === 'ix_head')
+                                ⚠️ Escalated to IX Head
+                            @elseif($ticket->escalation_level === 'ceo')
+                                🔴 Escalated to CEO
+                            @endif
+                        </span>
+                    </p>
+                    @endif
                 </div>
                 <div class="col-md-6">
                     <p><strong>Created:</strong> {{ $ticket->created_at->format('d M Y, h:i A') }}</p>
                     <p><strong>Assigned To:</strong> {{ $ticket->assignedAdmin ? $ticket->assignedAdmin->name : 'Not Assigned' }}</p>
                     <p><strong>Assigned By:</strong> {{ $ticket->assignedBy ? $ticket->assignedBy->name : 'N/A' }}</p>
+                    @if($ticket->escalated_at)
+                    <p><strong>Escalated:</strong> {{ $ticket->escalated_at->format('d M Y, h:i A') }}</p>
+                    <p><strong>Escalated To:</strong> {{ $ticket->escalatedTo->name ?? 'N/A' }}</p>
+                    @if($ticket->escalation_notes)
+                    <p><strong>Escalation Notes:</strong> {{ $ticket->escalation_notes }}</p>
+                    @endif
+                    @endif
                     @if($ticket->subject)
                     <p><strong>Subject:</strong> {{ $ticket->subject }}</p>
                     @endif

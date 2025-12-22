@@ -76,6 +76,16 @@
                                     <span class="badge bg-{{ $ticket->priority_badge_color }}">
                                         {{ ucfirst($ticket->priority) }}
                                     </span>
+                                    @if($ticket->escalation_level !== 'none')
+                                    <br>
+                                    <span class="badge bg-danger mt-1">
+                                        @if($ticket->escalation_level === 'ix_head')
+                                            ⚠️ Escalated to IX Head
+                                        @elseif($ticket->escalation_level === 'ceo')
+                                            🔴 Escalated to CEO
+                                        @endif
+                                    </span>
+                                    @endif
                                 </td>
                                 <td>{{ $ticket->created_at->format('d M Y') }}</td>
                                 <td>

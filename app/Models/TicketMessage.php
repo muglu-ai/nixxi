@@ -41,6 +41,10 @@ class TicketMessage extends Model
             $user = Registration::find($this->sender_id);
             return $user ? $user->fullname : 'User';
         } elseif ($this->sender_type === 'admin') {
+            if ($this->sender_id === null) {
+                // System message (escalation, etc.)
+                return 'System';
+            }
             $admin = Admin::find($this->sender_id);
             return $admin ? $admin->name : 'Admin';
         } elseif ($this->sender_type === 'superadmin') {

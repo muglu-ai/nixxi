@@ -13,3 +13,8 @@ Schedule::command('payments:send-reminders')
     ->daily()
     ->at('09:00')
     ->timezone('Asia/Kolkata');
+
+// Schedule ticket escalation to run every hour
+Schedule::command('tickets:escalate')
+    ->hourly()
+    ->timezone('Asia/Kolkata');
