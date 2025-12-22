@@ -115,6 +115,7 @@
                                     <option value="approved" {{ $user->status === 'approved' ? 'selected' : '' }}>Approved</option>
                                     <option value="rejected" {{ $user->status === 'rejected' ? 'selected' : '' }}>Rejected</option>
                                     <option value="active" {{ $user->status === 'active' ? 'selected' : '' }}>Active</option>
+                                    <option value="inactive" {{ $user->status === 'inactive' ? 'selected' : '' }}>Inactive (Deactivated)</option>
                                 </select>
                             </form>
                         </td>

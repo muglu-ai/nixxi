@@ -313,7 +313,25 @@ class SuperAdminController extends Controller
     public function users(Request $request)
     {
         try {
+            $filter = $request->get('filter', 'all'); // all, active, disconnected
+            
             $query = Registration::with(['messages', 'profileUpdateRequests']);
+            
+            // Apply member filter if provided
+            if ($filter === 'active') {
+                $query->whereHas('applications', function ($q) {
+                    $q->whereNotNull('membership_id')
+                        ->whereIn('status', ['ip_assigned', 'payment_verified', 'approved']);
+                });
+            } elseif ($filter === 'disconnected') {
+                $query->whereHas('applications', function ($q) {
+                    $q->whereNotNull('membership_id');
+                })
+                ->whereDoesntHave('applications', function ($q) {
+                    $q->whereNotNull('membership_id')
+                        ->whereIn('status', ['ip_assigned', 'payment_verified', 'approved']);
+                });
+            }
 
             // Search functionality
             if ($request->filled('search')) {
@@ -330,7 +348,7 @@ class SuperAdminController extends Controller
 
             $users = $query->latest()->paginate(20)->withQueryString();
 
-            return view('superadmin.users.index', compact('users'));
+            return view('superadmin.users.index', compact('users', 'filter'));
         } catch (QueryException $e) {
             Log::error('Database error loading users: '.$e->getMessage());
             abort(503, 'Database connection error. Please try again later.');

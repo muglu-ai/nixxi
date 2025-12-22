@@ -537,7 +537,7 @@ class AdminController extends Controller
     {
         try {
             $validated = $request->validate([
-                'status' => 'required|in:pending,approved,rejected,active',
+                'status' => 'required|in:pending,approved,rejected,active,inactive',
             ]);
 
             $user = Registration::findOrFail($userId);
@@ -553,7 +553,9 @@ class AdminController extends Controller
                 ['old_status' => $oldStatus, 'new_status' => $validated['status']]
             );
 
-            return back()->with('success', 'User status updated successfully!');
+            $statusMessage = $validated['status'] === 'inactive' ? 'Member deactivated successfully!' : 'User status updated successfully!';
+
+            return back()->with('success', $statusMessage);
         } catch (ValidationException $e) {
             return back()->withErrors($e->errors());
         } catch (QueryException $e) {
@@ -568,6 +570,58 @@ class AdminController extends Controller
             Log::error('Error updating user status: '.$e->getMessage());
 
             return back()->with('error', 'An error occurred. Please try again.');
+        }
+    }
+
+    /**
+     * Show members list with filters (active, disconnected, all).
+     */
+    public function members(Request $request)
+    {
+        try {
+            $admin = $this->getCurrentAdmin();
+            $filter = $request->get('filter', 'all'); // all, active, disconnected
+
+            $query = Registration::whereHas('applications', function ($query) {
+                $query->whereNotNull('membership_id');
+            });
+
+            if ($filter === 'active') {
+                $query->whereHas('applications', function ($q) {
+                    $q->whereNotNull('membership_id')
+                        ->whereIn('status', ['ip_assigned', 'payment_verified', 'approved']);
+                });
+            } elseif ($filter === 'disconnected') {
+                $query->whereHas('applications', function ($q) {
+                    $q->whereNotNull('membership_id');
+                })
+                ->whereDoesntHave('applications', function ($q) {
+                    $q->whereNotNull('membership_id')
+                        ->whereIn('status', ['ip_assigned', 'payment_verified', 'approved']);
+                });
+            }
+
+            // Search functionality
+            if ($request->filled('search')) {
+                $search = $request->input('search');
+                $query->where(function ($q) use ($search) {
+                    $q->where('fullname', 'like', "%{$search}%")
+                        ->orWhere('email', 'like', "%{$search}%")
+                        ->orWhere('registrationid', 'like', "%{$search}%")
+                        ->orWhere('pancardno', 'like', "%{$search}%");
+                });
+            }
+
+            $members = $query->with(['applications' => function ($q) {
+                $q->whereNotNull('membership_id')->latest();
+            }])->distinct()->orderBy('created_at', 'desc')->paginate(20)->withQueryString();
+
+            return view('admin.members.index', compact('members', 'admin', 'filter'));
+        } catch (Exception $e) {
+            Log::error('Error loading members: '.$e->getMessage());
+
+            return redirect()->route('admin.dashboard')
+                ->with('error', 'Unable to load members. Please try again.');
         }
     }
 
@@ -767,7 +821,8 @@ class AdminController extends Controller
                 $roleToUse = $admin->roles->first()->slug;
             }
 
-            // Filter applications based on selected role
+            // Show all applications but filter based on role for default view
+            // Admins can see all applications, but actions are restricted to their stage
             $query = Application::with([
                 'user',
                 'processor', 'finance', 'technical', // Legacy
@@ -775,99 +830,17 @@ class AdminController extends Controller
                 'statusHistory',
             ])->where('application_type', 'IX'); // Only show IX applications for new workflow
 
-            // New IX workflow roles
-            if ($roleToUse === 'ix_processor') {
-                if ($statusFilter === 'approved') {
-                    $query->where('status', 'approved');
-                } elseif ($statusFilter === 'pending') {
-                    $query->whereIn('status', ['submitted', 'resubmitted', 'processor_resubmission']);
-                } else {
-                    // Show all applications visible to IX Processor
-                    $query->whereIn('status', ['submitted', 'resubmitted', 'processor_resubmission', 'legal_sent_back', 'head_sent_back']);
-                }
-            } elseif ($roleToUse === 'ix_legal') {
-                if ($statusFilter === 'approved') {
-                    $query->where('status', 'approved');
-                } elseif ($statusFilter === 'pending') {
-                    $query->where('status', 'processor_forwarded_legal');
-                } else {
-                    $query->whereIn('status', ['processor_forwarded_legal', 'approved']);
-                }
-            } elseif ($roleToUse === 'ix_head') {
-                if ($statusFilter === 'approved') {
-                    $query->where('status', 'approved');
-                } elseif ($statusFilter === 'pending') {
-                    $query->where('status', 'legal_forwarded_head');
-                } else {
-                    $query->whereIn('status', ['legal_forwarded_head', 'approved']);
-                }
-            } elseif ($roleToUse === 'ceo') {
-                if ($statusFilter === 'approved') {
-                    $query->where('status', 'approved');
-                } elseif ($statusFilter === 'pending') {
-                    $query->where('status', 'head_forwarded_ceo');
-                } else {
-                    $query->whereIn('status', ['head_forwarded_ceo', 'ceo_approved', 'ceo_rejected', 'approved']);
-                }
-            } elseif ($roleToUse === 'nodal_officer') {
-                if ($statusFilter === 'approved') {
-                    $query->where('status', 'approved');
-                } elseif ($statusFilter === 'pending') {
-                    $query->where('status', 'ceo_approved');
-                } else {
-                    $query->whereIn('status', ['ceo_approved', 'port_assigned', 'port_hold', 'port_not_feasible', 'customer_denied', 'approved']);
-                }
-            } elseif ($roleToUse === 'ix_tech_team') {
-                if ($statusFilter === 'approved') {
-                    $query->where('status', 'approved');
-                } elseif ($statusFilter === 'pending') {
-                    $query->where('status', 'port_assigned');
-                } else {
-                    $query->whereIn('status', ['port_assigned', 'ip_assigned', 'approved']);
-                }
-            } elseif ($roleToUse === 'ix_account') {
-                if ($statusFilter === 'approved') {
-                    $query->where('status', 'approved');
-                } elseif ($statusFilter === 'pending') {
-                    $query->whereIn('status', ['ip_assigned', 'invoice_pending']);
-                } else {
-                    $query->whereIn('status', ['ip_assigned', 'invoice_pending', 'payment_verified', 'approved']);
-                }
-            } elseif ($roleToUse === 'processor') {
-                // Legacy processor role
-                if ($statusFilter === 'approved') {
-                    $query->where('status', 'approved');
-                } elseif ($statusFilter === 'pending') {
-                    $query->whereIn('status', ['pending', 'processor_review']);
-                } else {
-                    $query->whereIn('status', ['pending', 'processor_review', 'approved']);
-                }
-            } elseif ($roleToUse === 'finance') {
-                // Legacy finance role
-                if ($statusFilter === 'approved') {
-                    $query->where('status', 'approved');
-                } elseif ($statusFilter === 'pending') {
-                    $query->whereIn('status', ['processor_approved', 'finance_review']);
-                } else {
-                    $query->whereIn('status', ['processor_approved', 'finance_review', 'approved']);
-                }
-            } elseif ($roleToUse === 'technical') {
-                // Legacy technical role
-                if ($statusFilter === 'approved') {
-                    $query->where('status', 'approved');
-                } elseif ($statusFilter === 'pending') {
-                    $query->where('status', 'finance_approved');
-                } else {
-                    $query->whereIn('status', ['finance_approved', 'approved']);
-                }
-            } else {
-                // If no role selected, show all IX applications
-                if ($statusFilter === 'approved') {
-                    $query->where('status', 'approved');
-                } elseif ($statusFilter === 'pending') {
-                    $query->whereNotIn('status', ['approved', 'rejected', 'ceo_rejected']);
-                }
+            // Show all applications by default (admins can see all)
+            // Apply status filter if provided
+            if ($statusFilter === 'approved') {
+                $query->whereIn('status', ['approved', 'payment_verified']);
+            } elseif ($statusFilter === 'pending') {
+                $query->whereNotIn('status', ['approved', 'rejected', 'ceo_rejected', 'payment_verified']);
+            } elseif ($statusFilter === 'ip_assigned') {
+                $query->where('status', 'ip_assigned');
             }
+            // If no status filter, show all applications (admins can see all)
+            // Actions are restricted based on application stage in the show view
 
             // Search functionality
             if ($request->filled('search')) {
@@ -2612,10 +2585,33 @@ class AdminController extends Controller
             }
 
             $oldStatus = $application->status;
+            
+            // Update application status
             $application->update([
                 'status' => 'payment_verified',
                 'current_ix_account_id' => $admin->id,
             ]);
+
+            // Update payment status in application_data
+            $applicationData = $application->application_data ?? [];
+            if (isset($applicationData['payment'])) {
+                $applicationData['payment']['status'] = 'verified';
+                $applicationData['payment']['verified_at'] = now('Asia/Kolkata')->toDateTimeString();
+                $applicationData['payment']['verified_by'] = $admin->id;
+                $application->update(['application_data' => $applicationData]);
+            }
+
+            // Update payment transaction status if exists
+            $paymentTransaction = PaymentTransaction::where('application_id', $application->id)
+                ->latest()
+                ->first();
+            
+            if ($paymentTransaction && $paymentTransaction->payment_status !== 'success') {
+                $paymentTransaction->update([
+                    'payment_status' => 'success',
+                    'response_message' => 'Payment verified by IX Account - '.now('Asia/Kolkata')->format('Y-m-d H:i:s'),
+                ]);
+            }
 
             ApplicationStatusHistory::log(
                 $application->id,
@@ -2623,7 +2619,7 @@ class AdminController extends Controller
                 'payment_verified',
                 'admin',
                 $admin->id,
-                'Payment verified by IX Account'
+                'Payment verified by IX Account - Status changed from pending to verified'
             );
 
             Message::create([
@@ -2634,7 +2630,7 @@ class AdminController extends Controller
                 'sent_by' => 'admin',
             ]);
 
-            return back()->with('success', 'Payment verified!');
+            return back()->with('success', 'Payment verified successfully! Application status updated to verified.');
         } catch (Exception $e) {
             Log::error('Error verifying payment: '.$e->getMessage());
 

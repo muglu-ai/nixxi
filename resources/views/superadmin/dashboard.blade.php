@@ -148,22 +148,28 @@
                 <div class="card-body p-4">
                     <div class="row g-3">
                         <div class="col-4">
-                            <div class="text-center">
-                                <h6 class="text-muted mb-1" style="font-size: 0.75rem;">Total</h6>
-                                <h4 class="mb-0" style="color: #2c3e50; font-weight: 700;">{{ $totalMembers }}</h4>
-                            </div>
+                            <a href="{{ route('superadmin.users') }}" class="text-decoration-none">
+                                <div class="text-center p-2 rounded" style="transition: background-color 0.2s;" onmouseover="this.style.backgroundColor='#f8f9fa'" onmouseout="this.style.backgroundColor='transparent'">
+                                    <h6 class="text-muted mb-1" style="font-size: 0.75rem;">Total</h6>
+                                    <h4 class="mb-0" style="color: #2c3e50; font-weight: 700;">{{ $totalMembers }}</h4>
+                                </div>
+                            </a>
                         </div>
                         <div class="col-4">
-                            <div class="text-center">
-                                <h6 class="text-muted mb-1" style="font-size: 0.75rem;">Active</h6>
-                                <h4 class="mb-0 text-success" style="font-weight: 700;">{{ $activeMembers }}</h4>
-                            </div>
+                            <a href="{{ route('superadmin.users', ['filter' => 'active']) }}" class="text-decoration-none">
+                                <div class="text-center p-2 rounded" style="transition: background-color 0.2s;" onmouseover="this.style.backgroundColor='#f8f9fa'" onmouseout="this.style.backgroundColor='transparent'">
+                                    <h6 class="text-muted mb-1" style="font-size: 0.75rem;">Active</h6>
+                                    <h4 class="mb-0 text-success" style="font-weight: 700;">{{ $activeMembers }}</h4>
+                                </div>
+                            </a>
                         </div>
                         <div class="col-4">
-                            <div class="text-center">
-                                <h6 class="text-muted mb-1" style="font-size: 0.75rem;">Disconnected</h6>
-                                <h4 class="mb-0 text-danger" style="font-weight: 700;">{{ $disconnectedMembers }}</h4>
-                            </div>
+                            <a href="{{ route('superadmin.users', ['filter' => 'disconnected']) }}" class="text-decoration-none">
+                                <div class="text-center p-2 rounded" style="transition: background-color 0.2s;" onmouseover="this.style.backgroundColor='#f8f9fa'" onmouseout="this.style.backgroundColor='transparent'">
+                                    <h6 class="text-muted mb-1" style="font-size: 0.75rem;">Disconnected</h6>
+                                    <h4 class="mb-0 text-danger" style="font-weight: 700;">{{ $disconnectedMembers }}</h4>
+                                </div>
+                            </a>
                         </div>
                     </div>
                 </div>

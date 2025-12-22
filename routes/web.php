@@ -132,6 +132,9 @@ Route::prefix('admin')->name('admin.')->middleware(['admin'])->group(function ()
     Route::post('/users/{id}/update-status', [AdminController::class, 'updateUserStatus'])->name('users.update-status');
     Route::delete('/users/{id}', [AdminController::class, 'deleteUser'])->name('users.delete');
 
+    // Members management (users with membership_id)
+    Route::get('/members', [AdminController::class, 'members'])->name('members');
+
     // Profile update requests
     Route::get('/profile-update-requests', [AdminController::class, 'profileUpdateRequests'])->name('profile-update-requests');
     Route::post('/profile-updates/{id}/approve', [AdminController::class, 'approveProfileUpdate'])->name('profile-updates.approve');

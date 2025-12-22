@@ -214,6 +214,7 @@
         <div class="card shadow mb-4">
             <div class="card-header bg-success text-white">
                 <h5 class="mb-0">Actions</h5>
+                <small class="text-white-50">Actions are only available for applications in your stage</small>
             </div>
             <div class="card-body">
                 @php
@@ -223,6 +224,12 @@
                         $roleToUse = $admin->roles->first()->slug;
                     }
                 @endphp
+                
+                @if(!$roleToUse || ($application->application_type === 'IX' && !$application->isVisibleToIxProcessor() && !$application->isVisibleToIxLegal() && !$application->isVisibleToIxHead() && !$application->isVisibleToCeo() && !$application->isVisibleToNodalOfficer() && !$application->isVisibleToIxTechTeam() && !$application->isVisibleToIxAccount()))
+                    <div class="alert alert-info">
+                        <small>This application is not in your action stage. You can view all details but cannot perform actions.</small>
+                    </div>
+                @endif
 
                 @if($roleToUse === 'processor' && $application->isVisibleToProcessor())
                     <form method="POST" action="{{ route('admin.applications.approve-to-finance', $application->id) }}" class="mb-3">
