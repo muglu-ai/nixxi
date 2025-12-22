@@ -162,6 +162,14 @@ class Application extends Model
     }
 
     /**
+     * Get plan change requests for this application.
+     */
+    public function planChangeRequests(): HasMany
+    {
+        return $this->hasMany(PlanChangeRequest::class);
+    }
+
+    /**
      * Get the payment verification logs for this application.
      */
     public function paymentVerificationLogs(): HasMany

@@ -214,6 +214,14 @@ Route::prefix('admin')->name('admin.')->middleware(['admin'])->group(function ()
         Route::post('/{id}/close', [AdminGrievanceController::class, 'close'])->name('close');
     });
 
+    // Plan change routes
+    Route::prefix('plan-change')->name('plan-change.')->group(function () {
+        Route::get('/', [\App\Http\Controllers\AdminPlanChangeRequestController::class, 'index'])->name('index');
+        Route::get('/{id}', [\App\Http\Controllers\AdminPlanChangeRequestController::class, 'show'])->name('show');
+        Route::post('/{id}/approve', [\App\Http\Controllers\AdminPlanChangeRequestController::class, 'approve'])->name('approve');
+        Route::post('/{id}/reject', [\App\Http\Controllers\AdminPlanChangeRequestController::class, 'reject'])->name('reject');
+    });
+
     // IX Points routes
     Route::get('/ix-points', [AdminController::class, 'ixPoints'])->name('ix-points');
     Route::get('/ix-points/{id}', [AdminController::class, 'showIxPoint'])->name('ix-points.show');
@@ -342,7 +350,11 @@ Route::prefix('user')->name('user.')->middleware(['user.auth'])->group(function 
         Route::post('/{id}/reply', [UserGrievanceController::class, 'reply'])->name('reply');
     });
 
-    // Add more User routes here
+    // Plan change routes
+    Route::prefix('applications/{applicationId}/plan-change')->name('plan-change.')->group(function () {
+        Route::get('/create', [\App\Http\Controllers\PlanChangeRequestController::class, 'create'])->name('create');
+        Route::post('/', [\App\Http\Controllers\PlanChangeRequestController::class, 'store'])->name('store');
+    });
 });
 
 // Cookie-based login route (for payment callbacks - no auth required)

@@ -80,13 +80,38 @@ use Illuminate\Support\Facades\Storage;
                         @if($application->assigned_port_capacity)
                         <tr>
                             <th>Assigned Port Capacity:</th>
-                            <td><strong>{{ $application->assigned_port_capacity }}</strong></td>
+                            <td>
+                                <strong>{{ $application->assigned_port_capacity }}</strong>
+                                @if($application->application_type === 'IX' && $application->assigned_port_capacity && in_array($application->status, ['approved', 'payment_verified', 'ip_assigned', 'invoice_pending']))
+                                <a href="{{ route('user.plan-change.create', $application->id) }}" class="btn btn-sm btn-primary ms-2">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                                        <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z"/>
+                                        <path d="M7.002 11a1 1 0 1 1 2 0 1 1 0 0 1-2 0zM7.1 4.995a.905.905 0 1 1 1.8 0l-.35 3.507a.552.552 0 0 1-1.1 0L7.1 4.995z"/>
+                                    </svg>
+                                    Change Plan
+                                </a>
+                                @endif
+                            </td>
                         </tr>
                         @endif
                         @if($application->assigned_port_number)
                         <tr>
                             <th>Assigned Port Number:</th>
                             <td><strong>{{ $application->assigned_port_number }}</strong></td>
+                        </tr>
+                        @endif
+                        @php
+                            $pendingPlanChange = \App\Models\PlanChangeRequest::where('application_id', $application->id)
+                                ->where('status', 'pending')
+                                ->first();
+                        @endphp
+                        @if($pendingPlanChange)
+                        <tr>
+                            <th>Plan Change Request:</th>
+                            <td>
+                                <span class="badge bg-warning">Pending</span>
+                                <small class="text-muted ms-2">Requested: {{ $pendingPlanChange->new_port_capacity }} ({{ strtoupper($pendingPlanChange->new_billing_plan) }})</small>
+                            </td>
                         </tr>
                         @endif
                         @if($application->customer_id)
