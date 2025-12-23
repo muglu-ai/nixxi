@@ -2752,13 +2752,34 @@ class AdminController extends Controller
                 }
             }
 
+            // Validate baseCapacity exists
+            if (!$baseCapacity) {
+                Log::error("Missing port capacity for application {$application->id} during invoice generation", [
+                    'assigned_port_capacity' => $application->assigned_port_capacity,
+                    'port_selection' => $applicationData['port_selection'] ?? null,
+                ]);
+                return back()->with('error', 'Port capacity is not set for this application. Please assign port capacity first.');
+            }
+            
+            // Normalize basePlan to ensure it matches pricing plan format
+            $basePlanNormalized = strtolower(trim($basePlan));
+            if (in_array($basePlanNormalized, ['arc', 'annual'])) {
+                $basePlanNormalized = 'arc';
+            } elseif (in_array($basePlanNormalized, ['mrc', 'monthly'])) {
+                $basePlanNormalized = 'mrc';
+            } elseif ($basePlanNormalized === 'quarterly') {
+                $basePlanNormalized = 'quarterly';
+            } else {
+                $basePlanNormalized = 'mrc'; // Default fallback
+            }
+            
             $futureChanges = $approvedPlanChanges->filter(function ($c) use ($billingStartDate, $billingEndDate) {
                 return $c->effective_from && $c->effective_from->gte($billingStartDate) && $c->effective_from->lt($billingEndDate);
             })->values();
 
             $segmentStart = $billingStartDate->copy();
             $currentCapacity = $baseCapacity;
-            $currentPlan = $basePlan;
+            $currentPlan = $basePlanNormalized;
             $segments = [];
             $prorationTotal = 0.0;
             $totalDays = max(1, $billingEndDate->diffInDays($billingStartDate));
@@ -2812,18 +2833,90 @@ class AdminController extends Controller
 
             foreach ($futureChanges as $change) {
                 $segmentEnd = $change->effective_from->copy();
-                $addSegment($segmentStart, $segmentEnd, $currentCapacity, $currentPlan);
-                $currentCapacity = $change->new_port_capacity ?? $currentCapacity;
-                $currentPlan = $change->new_billing_plan ? strtolower($change->new_billing_plan) : $currentPlan;
+                
+                // Only create segment if dates are valid
+                if ($segmentEnd->gt($segmentStart)) {
+                    $addSegment($segmentStart, $segmentEnd, $currentCapacity, $currentPlan);
+                }
+                
+                // Update capacity only if it's a capacity change
+                if ($change->isCapacityChange() && $change->new_port_capacity) {
+                    $currentCapacity = $change->new_port_capacity;
+                    Log::info("Plan change {$change->id}: Capacity updated to {$currentCapacity}");
+                }
+                
+                // Update plan if billing plan changed
+                $planFromChange = $change->new_billing_plan ? strtolower(trim($change->new_billing_plan)) : null;
+                if ($planFromChange) {
+                    // Normalize plan from change
+                    if (in_array($planFromChange, ['arc', 'annual'])) {
+                        $currentPlan = 'arc';
+                    } elseif (in_array($planFromChange, ['mrc', 'monthly'])) {
+                        $currentPlan = 'mrc';
+                    } elseif ($planFromChange === 'quarterly') {
+                        $currentPlan = 'quarterly';
+                    } else {
+                        $currentPlan = 'mrc'; // Default fallback
+                    }
+                    Log::info("Plan change {$change->id}: Plan updated to {$currentPlan}");
+                }
+                
                 $segmentStart = $change->effective_from->copy();
             }
 
             // Final segment to billing end
             $addSegment($segmentStart, $billingEndDate->copy(), $currentCapacity, $currentPlan);
 
+            // Debug logging
+            Log::info("Invoice generation debug for application {$application->id}", [
+                'billingStartDate' => $billingStartDate->format('Y-m-d'),
+                'billingEndDate' => $billingEndDate->format('Y-m-d'),
+                'billingPlan' => $billingPlan,
+                'baseCapacity' => $baseCapacity,
+                'basePlan' => $basePlan,
+                'basePlanNormalized' => $basePlanNormalized,
+                'currentCapacity' => $currentCapacity,
+                'currentPlan' => $currentPlan,
+                'approvedPlanChangesCount' => $approvedPlanChanges->count(),
+                'approvedPlanChanges' => $approvedPlanChanges->map(function($c) {
+                    return [
+                        'id' => $c->id,
+                        'effective_from' => $c->effective_from ? $c->effective_from->format('Y-m-d') : null,
+                        'current_capacity' => $c->current_port_capacity,
+                        'new_capacity' => $c->new_port_capacity,
+                        'current_plan' => $c->current_billing_plan,
+                        'new_plan' => $c->new_billing_plan,
+                        'is_capacity_change' => $c->isCapacityChange(),
+                        'is_billing_cycle_change_only' => $c->isBillingCycleChangeOnly(),
+                    ];
+                })->toArray(),
+                'futureChangesCount' => $futureChanges->count(),
+                'futureChanges' => $futureChanges->map(function($c) {
+                    return [
+                        'id' => $c->id,
+                        'effective_from' => $c->effective_from ? $c->effective_from->format('Y-m-d') : null,
+                        'new_capacity' => $c->new_port_capacity,
+                        'new_plan' => $c->new_billing_plan,
+                    ];
+                })->toArray(),
+                'segmentsCount' => count($segments),
+                'segments' => $segments,
+                'prorationTotal' => $prorationTotal,
+                'location' => $location ? ['id' => $location->id, 'name' => $location->name, 'node_type' => $location->node_type] : null,
+            ]);
+
             if ($prorationTotal <= 0) {
-                Log::error("Invalid prorated total for application {$application->id}");
-                return back()->with('error', 'Unable to calculate charges. Please check plan and pricing configuration.');
+                Log::error("Invalid prorated total for application {$application->id}", [
+                    'prorationTotal' => $prorationTotal,
+                    'segmentsCount' => count($segments),
+                    'segments' => $segments,
+                    'baseCapacity' => $baseCapacity,
+                    'basePlan' => $basePlan,
+                    'currentCapacity' => $currentCapacity,
+                    'currentPlan' => $currentPlan,
+                    'location' => $location ? ['id' => $location->id, 'name' => $location->name, 'node_type' => $location->node_type] : null,
+                ]);
+                return back()->with('error', 'Unable to calculate charges. Please check plan and pricing configuration. Ensure port capacity and billing plan have valid pricing.');
             }
 
             // Calculate adjustments from previous billing period's plan changes (capacity changes only)
