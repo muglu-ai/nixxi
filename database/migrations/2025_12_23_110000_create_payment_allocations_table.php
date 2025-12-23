@@ -19,7 +19,7 @@ return new class extends Migration
             $table->decimal('allocated_amount', 10, 2);
             $table->string('payment_reference')->nullable(); // Payment ID/Reference from admin
             $table->text('notes')->nullable();
-            $table->foreignId('allocated_by')->constrained('admins')->onDelete('set null');
+            $table->foreignId('allocated_by')->nullable()->constrained('admins')->onDelete('set null');
             $table->timestamps();
             
             $table->index('invoice_id');
