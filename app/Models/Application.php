@@ -16,6 +16,9 @@ class Application extends Model
         'application_type',
         'status',
         'application_data',
+        'registration_details',
+        'kyc_details',
+        'authorized_representative_details',
         'rejection_reason',
         'resubmission_query',
         'current_processor_id',
@@ -48,6 +51,9 @@ class Application extends Model
 
     protected $casts = [
         'application_data' => 'array',
+        'registration_details' => 'array',
+        'kyc_details' => 'array',
+        'authorized_representative_details' => 'array',
         'is_active' => 'boolean',
         'service_activation_date' => 'date',
         'deactivated_at' => 'datetime:Asia/Kolkata',

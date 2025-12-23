@@ -374,8 +374,11 @@ class IxApplicationController extends Controller
 
         foreach ($documentFields as $field) {
             if ($request->hasFile($field)) {
-                $storedDocuments[$field] = $request->file($field)
-                    ->store($storagePrefix, 'public');
+                $file = $request->file($field);
+                $originalName = $file->getClientOriginalName();
+                $extension = $file->getClientOriginalExtension();
+                $fileName = 'IX-'.pathinfo($originalName, PATHINFO_FILENAME).'.'.$extension;
+                $storedDocuments[$field] = $file->storeAs($storagePrefix, $fileName, 'public');
             }
         }
 
@@ -650,6 +653,81 @@ class IxApplicationController extends Controller
             $gstVerificationId = $request->input('gstin_verification_id');
         }
 
+        // Prepare registration details
+        $registrationDetails = [
+            'registration_id' => $user->registrationid,
+            'registration_type' => $user->registration_type,
+            'pancardno' => $user->pancardno,
+            'fullname' => $user->fullname,
+            'email' => $user->email,
+            'mobile' => $user->mobile,
+            'dateofbirth' => $user->dateofbirth?->format('Y-m-d'),
+            'registrationdate' => $user->registrationdate?->format('Y-m-d'),
+            'registrationtime' => $user->registrationtime,
+            'pan_verified' => $user->pan_verified,
+            'email_verified' => $user->email_verified,
+            'mobile_verified' => $user->mobile_verified,
+            'status' => $user->status,
+        ];
+
+        // Get KYC details
+        $kycProfile = UserKycProfile::where('user_id', $userId)->latest()->first();
+        $kycDetails = null;
+        if ($kycProfile) {
+            $kycDetails = [
+                'is_msme' => $kycProfile->is_msme,
+                'gstin' => $kycProfile->gstin,
+                'gst_verified' => $kycProfile->gst_verified,
+                'udyam_number' => $kycProfile->udyam_number,
+                'udyam_verified' => $kycProfile->udyam_verified,
+                'cin' => $kycProfile->cin,
+                'mca_verified' => $kycProfile->mca_verified,
+                'contact_name' => $kycProfile->contact_name,
+                'contact_dob' => $kycProfile->contact_dob?->format('Y-m-d'),
+                'contact_pan' => $kycProfile->contact_pan,
+                'contact_email' => $kycProfile->contact_email,
+                'contact_mobile' => $kycProfile->contact_mobile,
+                'contact_name_pan_dob_verified' => $kycProfile->contact_name_pan_dob_verified,
+                'contact_email_verified' => $kycProfile->contact_email_verified,
+                'contact_mobile_verified' => $kycProfile->contact_mobile_verified,
+                'billing_address' => $kycProfile->billing_address,
+                'status' => $kycProfile->status,
+                'completed_at' => $kycProfile->completed_at?->format('Y-m-d H:i:s'),
+            ];
+        }
+
+        // Prepare authorized representative details
+        // For first application: use KYC contact details
+        // For subsequent applications: use form's authorized representative details
+        $isFirstApplication = !Application::where('user_id', $userId)
+            ->where('application_type', 'IX')
+            ->where('id', '!=', $existingDraft?->id ?? 0)
+            ->exists();
+
+        $authorizedRepresentativeDetails = null;
+        if ($isFirstApplication && $kycProfile) {
+            // First application: use KYC contact details
+            $authorizedRepresentativeDetails = [
+                'name' => $kycProfile->contact_name,
+                'pan' => $kycProfile->contact_pan,
+                'dob' => $kycProfile->contact_dob?->format('Y-m-d'),
+                'email' => $kycProfile->contact_email,
+                'mobile' => $kycProfile->contact_mobile,
+            ];
+        } elseif (isset($applicationData['representative'])) {
+            // Subsequent application: use form's authorized representative details from application_data
+            $authorizedRepresentativeDetails = $applicationData['representative'];
+        } elseif (isset($validated['representative_name'])) {
+            // Subsequent application: use form's authorized representative details from validated data
+            $authorizedRepresentativeDetails = [
+                'name' => $validated['representative_name'],
+                'pan' => isset($validated['representative_pan']) ? strtoupper(preg_replace('/[^A-Z0-9]/', '', $validated['representative_pan'])) : null,
+                'dob' => $validated['representative_dob'] ?? null,
+                'email' => isset($validated['representative_email']) ? strtolower(trim($validated['representative_email'])) : null,
+                'mobile' => isset($validated['representative_mobile']) ? preg_replace('/[^0-9]/', '', $validated['representative_mobile']) : null,
+            ];
+        }
+
         // Save or update application
         // For IX applications, keep as 'draft' until payment is made
         // Status will be changed to 'submitted' only after successful payment
@@ -657,6 +735,9 @@ class IxApplicationController extends Controller
             $application = $existingDraft;
             $updateData = [
                 'application_data' => $applicationData,
+                'registration_details' => $registrationDetails,
+                'kyc_details' => $kycDetails,
+                'authorized_representative_details' => $authorizedRepresentativeDetails,
                 'status' => $isDraft ? 'draft' : 'draft', // Keep as draft until payment
                 'submitted_at' => null, // Will be set after payment
             ];
@@ -672,6 +753,9 @@ class IxApplicationController extends Controller
                 'application_type' => 'IX',
                 'status' => $isDraft ? 'draft' : 'draft', // Keep as draft until payment
                 'application_data' => $applicationData,
+                'registration_details' => $registrationDetails,
+                'kyc_details' => $kycDetails,
+                'authorized_representative_details' => $authorizedRepresentativeDetails,
                 'submitted_at' => null, // Will be set after payment
             ];
             if ($gstVerificationId) {
@@ -2439,8 +2523,11 @@ class IxApplicationController extends Controller
 
         foreach ($documentFields as $field) {
             if ($request->hasFile($field)) {
-                $storedDocuments[$field] = $request->file($field)
-                    ->store($storagePrefix, 'public');
+                $file = $request->file($field);
+                $originalName = $file->getClientOriginalName();
+                $extension = $file->getClientOriginalExtension();
+                $fileName = 'IX-'.pathinfo($originalName, PATHINFO_FILENAME).'.'.$extension;
+                $storedDocuments[$field] = $file->storeAs($storagePrefix, $fileName, 'public');
             }
         }
 
@@ -2640,11 +2727,89 @@ class IxApplicationController extends Controller
             $gstVerificationId = $applicationData['gstin_verification_id'];
         }
 
+        // Prepare registration details
+        $registrationDetails = [
+            'registration_id' => $user->registrationid,
+            'registration_type' => $user->registration_type,
+            'pancardno' => $user->pancardno,
+            'fullname' => $user->fullname,
+            'email' => $user->email,
+            'mobile' => $user->mobile,
+            'dateofbirth' => $user->dateofbirth?->format('Y-m-d'),
+            'registrationdate' => $user->registrationdate?->format('Y-m-d'),
+            'registrationtime' => $user->registrationtime,
+            'pan_verified' => $user->pan_verified,
+            'email_verified' => $user->email_verified,
+            'mobile_verified' => $user->mobile_verified,
+            'status' => $user->status,
+        ];
+
+        // Get KYC details
+        $kycProfile = UserKycProfile::where('user_id', $userId)->latest()->first();
+        $kycDetails = null;
+        if ($kycProfile) {
+            $kycDetails = [
+                'is_msme' => $kycProfile->is_msme,
+                'gstin' => $kycProfile->gstin,
+                'gst_verified' => $kycProfile->gst_verified,
+                'udyam_number' => $kycProfile->udyam_number,
+                'udyam_verified' => $kycProfile->udyam_verified,
+                'cin' => $kycProfile->cin,
+                'mca_verified' => $kycProfile->mca_verified,
+                'contact_name' => $kycProfile->contact_name,
+                'contact_dob' => $kycProfile->contact_dob?->format('Y-m-d'),
+                'contact_pan' => $kycProfile->contact_pan,
+                'contact_email' => $kycProfile->contact_email,
+                'contact_mobile' => $kycProfile->contact_mobile,
+                'contact_name_pan_dob_verified' => $kycProfile->contact_name_pan_dob_verified,
+                'contact_email_verified' => $kycProfile->contact_email_verified,
+                'contact_mobile_verified' => $kycProfile->contact_mobile_verified,
+                'billing_address' => $kycProfile->billing_address,
+                'status' => $kycProfile->status,
+                'completed_at' => $kycProfile->completed_at?->format('Y-m-d H:i:s'),
+            ];
+        }
+
+        // Prepare authorized representative details
+        // For first application: use KYC contact details
+        // For subsequent applications: use form's authorized representative details
+        $isFirstApplication = !Application::where('user_id', $userId)
+            ->where('application_type', 'IX')
+            ->where('id', '!=', $existingDraft?->id ?? 0)
+            ->exists();
+
+        $authorizedRepresentativeDetails = null;
+        if ($isFirstApplication && $kycProfile) {
+            // First application: use KYC contact details
+            $authorizedRepresentativeDetails = [
+                'name' => $kycProfile->contact_name,
+                'pan' => $kycProfile->contact_pan,
+                'dob' => $kycProfile->contact_dob?->format('Y-m-d'),
+                'email' => $kycProfile->contact_email,
+                'mobile' => $kycProfile->contact_mobile,
+            ];
+        } elseif (isset($applicationData['representative'])) {
+            // Subsequent application: use form's authorized representative details from application_data
+            $authorizedRepresentativeDetails = $applicationData['representative'];
+        } elseif (isset($validated['representative_name'])) {
+            // Subsequent application: use form's authorized representative details from validated data
+            $authorizedRepresentativeDetails = [
+                'name' => $validated['representative_name'],
+                'pan' => isset($validated['representative_pan']) ? strtoupper(preg_replace('/[^A-Z0-9]/', '', $validated['representative_pan'])) : null,
+                'dob' => $validated['representative_dob'] ?? null,
+                'email' => isset($validated['representative_email']) ? strtolower(trim($validated['representative_email'])) : null,
+                'mobile' => isset($validated['representative_mobile']) ? preg_replace('/[^0-9]/', '', $validated['representative_mobile']) : null,
+            ];
+        }
+
         // Save or update application
         if ($existingDraft) {
             $application = $existingDraft;
             $updateData = [
                 'application_data' => $applicationData,
+                'registration_details' => $registrationDetails,
+                'kyc_details' => $kycDetails,
+                'authorized_representative_details' => $authorizedRepresentativeDetails,
                 'status' => 'draft',
                 'submitted_at' => null,
             ];
@@ -2660,6 +2825,9 @@ class IxApplicationController extends Controller
                 'application_type' => 'IX',
                 'status' => 'draft',
                 'application_data' => $applicationData,
+                'registration_details' => $registrationDetails,
+                'kyc_details' => $kycDetails,
+                'authorized_representative_details' => $authorizedRepresentativeDetails,
                 'submitted_at' => null,
             ];
             if ($gstVerificationId) {

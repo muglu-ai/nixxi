@@ -295,8 +295,11 @@ class BackendDataEntryController extends Controller
 
                 foreach ($documentFields as $field) {
                     if ($request->hasFile($field)) {
-                        $storedDocuments[$field] = $request->file($field)
-                            ->store($storagePrefix, 'public');
+                        $file = $request->file($field);
+                        $originalName = $file->getClientOriginalName();
+                        $extension = $file->getClientOriginalExtension();
+                        $fileName = 'IX-'.pathinfo($originalName, PATHINFO_FILENAME).'.'.$extension;
+                        $storedDocuments[$field] = $file->storeAs($storagePrefix, $fileName, 'public');
                     }
                 }
 
@@ -349,6 +352,76 @@ class BackendDataEntryController extends Controller
 
                 $applicationData['gst_verification_id'] = $gstVerification->id;
 
+                // Prepare registration details
+                $registrationDetails = [
+                    'registration_id' => $registrationId,
+                    'registration_type' => $validated['registration_type'],
+                    'pancardno' => $panNo,
+                    'fullname' => $fullName,
+                    'email' => $email,
+                    'mobile' => $mobile,
+                    'dateofbirth' => $validated['dateofbirth'],
+                    'registrationdate' => $registration->registrationdate,
+                    'registrationtime' => $registration->registrationtime,
+                    'pan_verified' => true,
+                    'email_verified' => true,
+                    'mobile_verified' => true,
+                    'status' => $registration->status,
+                ];
+
+                // Get or create KYC details
+                $kycProfile = UserKycProfile::where('user_id', $registration->id)->latest()->first();
+                $kycDetails = null;
+                if ($kycProfile) {
+                    $kycDetails = [
+                        'is_msme' => $kycProfile->is_msme,
+                        'gstin' => $kycProfile->gstin,
+                        'gst_verified' => $kycProfile->gst_verified,
+                        'udyam_number' => $kycProfile->udyam_number,
+                        'udyam_verified' => $kycProfile->udyam_verified,
+                        'cin' => $kycProfile->cin,
+                        'mca_verified' => $kycProfile->mca_verified,
+                        'contact_name' => $kycProfile->contact_name,
+                        'contact_dob' => $kycProfile->contact_dob?->format('Y-m-d'),
+                        'contact_pan' => $kycProfile->contact_pan,
+                        'contact_email' => $kycProfile->contact_email,
+                        'contact_mobile' => $kycProfile->contact_mobile,
+                        'contact_name_pan_dob_verified' => $kycProfile->contact_name_pan_dob_verified,
+                        'contact_email_verified' => $kycProfile->contact_email_verified,
+                        'contact_mobile_verified' => $kycProfile->contact_mobile_verified,
+                        'billing_address' => $kycProfile->billing_address,
+                        'status' => $kycProfile->status,
+                        'completed_at' => $kycProfile->completed_at?->format('Y-m-d H:i:s'),
+                    ];
+                }
+
+                // Prepare authorized representative details
+                // For first application: use KYC contact details
+                // For subsequent applications: use form's authorized representative details
+                $isFirstApplication = !Application::where('user_id', $registration->id)
+                    ->where('application_type', 'IX')
+                    ->exists();
+
+                if ($isFirstApplication && $kycProfile) {
+                    // First application: use KYC contact details
+                    $authorizedRepresentativeDetails = [
+                        'name' => $kycProfile->contact_name,
+                        'pan' => $kycProfile->contact_pan,
+                        'dob' => $kycProfile->contact_dob?->format('Y-m-d'),
+                        'email' => $kycProfile->contact_email,
+                        'mobile' => $kycProfile->contact_mobile,
+                    ];
+                } else {
+                    // Subsequent application: use form's authorized representative details
+                    $authorizedRepresentativeDetails = [
+                        'name' => $validated['representative_name'],
+                        'pan' => strtoupper(preg_replace('/[^A-Z0-9]/', '', $validated['representative_pan'])),
+                        'dob' => $validated['representative_dob'],
+                        'email' => strtolower(trim($validated['representative_email'])),
+                        'mobile' => preg_replace('/[^0-9]/', '', $validated['representative_mobile']),
+                    ];
+                }
+
                 // Get application pricing
                 $applicationPricing = IxApplicationPricing::getActive();
                 $applicationFee = $applicationPricing ? (float) $applicationPricing->total_amount : 1000.00;
@@ -378,6 +451,9 @@ class BackendDataEntryController extends Controller
                     'application_type' => 'IX',
                     'status' => 'submitted', // Directly submitted since payment is completed
                     'application_data' => $applicationData,
+                    'registration_details' => $registrationDetails,
+                    'kyc_details' => $kycDetails,
+                    'authorized_representative_details' => $authorizedRepresentativeDetails,
                     'gst_verification_id' => $gstVerification->id,
                     'is_active' => true, // Member is active by default
                     'submitted_at' => now('Asia/Kolkata'),

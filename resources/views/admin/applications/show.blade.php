@@ -181,6 +181,220 @@
             </div>
         </div>
 
+        @if($application->application_type === 'IX')
+        <!-- Registration Details -->
+        @if($application->registration_details)
+        <div class="card shadow mb-4">
+            <div class="card-header bg-secondary text-white">
+                <h5 class="mb-0">Registration Details</h5>
+            </div>
+            <div class="card-body">
+                @php
+                    $regDetails = $application->registration_details;
+                @endphp
+                <table class="table table-sm">
+                    <tr>
+                        <th width="200">Registration ID:</th>
+                        <td>{{ $regDetails['registration_id'] ?? 'N/A' }}</td>
+                    </tr>
+                    <tr>
+                        <th>Registration Type:</th>
+                        <td>{{ ucfirst($regDetails['registration_type'] ?? 'N/A') }}</td>
+                    </tr>
+                    <tr>
+                        <th>Full Name:</th>
+                        <td>{{ $regDetails['fullname'] ?? 'N/A' }}</td>
+                    </tr>
+                    <tr>
+                        <th>PAN Card:</th>
+                        <td>{{ $regDetails['pancardno'] ?? 'N/A' }}</td>
+                    </tr>
+                    <tr>
+                        <th>Email:</th>
+                        <td>{{ $regDetails['email'] ?? 'N/A' }}</td>
+                    </tr>
+                    <tr>
+                        <th>Mobile:</th>
+                        <td>{{ $regDetails['mobile'] ?? 'N/A' }}</td>
+                    </tr>
+                    <tr>
+                        <th>Date of Birth:</th>
+                        <td>{{ $regDetails['dateofbirth'] ?? 'N/A' }}</td>
+                    </tr>
+                    <tr>
+                        <th>Registration Date:</th>
+                        <td>{{ $regDetails['registrationdate'] ?? 'N/A' }}</td>
+                    </tr>
+                    <tr>
+                        <th>PAN Verified:</th>
+                        <td>
+                            @if($regDetails['pan_verified'] ?? false)
+                                <span class="badge bg-success">Yes</span>
+                            @else
+                                <span class="badge bg-danger">No</span>
+                            @endif
+                        </td>
+                    </tr>
+                    <tr>
+                        <th>Email Verified:</th>
+                        <td>
+                            @if($regDetails['email_verified'] ?? false)
+                                <span class="badge bg-success">Yes</span>
+                            @else
+                                <span class="badge bg-danger">No</span>
+                            @endif
+                        </td>
+                    </tr>
+                    <tr>
+                        <th>Mobile Verified:</th>
+                        <td>
+                            @if($regDetails['mobile_verified'] ?? false)
+                                <span class="badge bg-success">Yes</span>
+                            @else
+                                <span class="badge bg-danger">No</span>
+                            @endif
+                        </td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+        @endif
+
+        <!-- KYC Details -->
+        @if($application->kyc_details)
+        <div class="card shadow mb-4">
+            <div class="card-header bg-info text-white">
+                <h5 class="mb-0">KYC Details</h5>
+            </div>
+            <div class="card-body">
+                @php
+                    $kycDetails = $application->kyc_details;
+                @endphp
+                <table class="table table-sm">
+                    <tr>
+                        <th width="200">GSTIN:</th>
+                        <td>{{ $kycDetails['gstin'] ?? 'N/A' }}</td>
+                    </tr>
+                    <tr>
+                        <th>GST Verified:</th>
+                        <td>
+                            @if($kycDetails['gst_verified'] ?? false)
+                                <span class="badge bg-success">Yes</span>
+                            @else
+                                <span class="badge bg-danger">No</span>
+                            @endif
+                        </td>
+                    </tr>
+                    <tr>
+                        <th>Is MSME:</th>
+                        <td>
+                            @if($kycDetails['is_msme'] ?? false)
+                                <span class="badge bg-success">Yes</span>
+                            @else
+                                <span class="badge bg-secondary">No</span>
+                            @endif
+                        </td>
+                    </tr>
+                    @if($kycDetails['udyam_number'] ?? null)
+                    <tr>
+                        <th>UDYAM Number:</th>
+                        <td>{{ $kycDetails['udyam_number'] }}</td>
+                    </tr>
+                    <tr>
+                        <th>UDYAM Verified:</th>
+                        <td>
+                            @if($kycDetails['udyam_verified'] ?? false)
+                                <span class="badge bg-success">Yes</span>
+                            @else
+                                <span class="badge bg-danger">No</span>
+                            @endif
+                        </td>
+                    </tr>
+                    @endif
+                    @if($kycDetails['cin'] ?? null)
+                    <tr>
+                        <th>CIN:</th>
+                        <td>{{ $kycDetails['cin'] }}</td>
+                    </tr>
+                    <tr>
+                        <th>MCA Verified:</th>
+                        <td>
+                            @if($kycDetails['mca_verified'] ?? false)
+                                <span class="badge bg-success">Yes</span>
+                            @else
+                                <span class="badge bg-danger">No</span>
+                            @endif
+                        </td>
+                    </tr>
+                    @endif
+                    <tr>
+                        <th>Contact Name:</th>
+                        <td>{{ $kycDetails['contact_name'] ?? 'N/A' }}</td>
+                    </tr>
+                    <tr>
+                        <th>Contact PAN:</th>
+                        <td>{{ $kycDetails['contact_pan'] ?? 'N/A' }}</td>
+                    </tr>
+                    <tr>
+                        <th>Contact DOB:</th>
+                        <td>{{ $kycDetails['contact_dob'] ?? 'N/A' }}</td>
+                    </tr>
+                    <tr>
+                        <th>Contact Email:</th>
+                        <td>{{ $kycDetails['contact_email'] ?? 'N/A' }}</td>
+                    </tr>
+                    <tr>
+                        <th>Contact Mobile:</th>
+                        <td>{{ $kycDetails['contact_mobile'] ?? 'N/A' }}</td>
+                    </tr>
+                    @if($kycDetails['billing_address'] ?? null)
+                    <tr>
+                        <th>Billing Address:</th>
+                        <td>{{ is_array($kycDetails['billing_address']) ? json_encode($kycDetails['billing_address'], JSON_PRETTY_PRINT) : $kycDetails['billing_address'] }}</td>
+                    </tr>
+                    @endif
+                </table>
+            </div>
+        </div>
+        @endif
+
+        <!-- Authorized Representative Details -->
+        @if($application->authorized_representative_details)
+        <div class="card shadow mb-4">
+            <div class="card-header bg-warning text-dark">
+                <h5 class="mb-0">Authorized Representative Details</h5>
+            </div>
+            <div class="card-body">
+                @php
+                    $repDetails = $application->authorized_representative_details;
+                @endphp
+                <table class="table table-sm">
+                    <tr>
+                        <th width="200">Name:</th>
+                        <td>{{ $repDetails['name'] ?? 'N/A' }}</td>
+                    </tr>
+                    <tr>
+                        <th>PAN Card:</th>
+                        <td>{{ $repDetails['pan'] ?? 'N/A' }}</td>
+                    </tr>
+                    <tr>
+                        <th>Date of Birth:</th>
+                        <td>{{ $repDetails['dob'] ?? 'N/A' }}</td>
+                    </tr>
+                    <tr>
+                        <th>Email:</th>
+                        <td>{{ $repDetails['email'] ?? 'N/A' }}</td>
+                    </tr>
+                    <tr>
+                        <th>Mobile:</th>
+                        <td>{{ $repDetails['mobile'] ?? 'N/A' }}</td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+        @endif
+        @endif
+
         <!-- Status History -->
         <div class="card shadow">
             <div class="card-header bg-info text-white">
