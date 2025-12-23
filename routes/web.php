@@ -218,6 +218,7 @@ Route::prefix('admin')->name('admin.')->middleware(['admin'])->group(function ()
         Route::get('/', [AdminGrievanceController::class, 'index'])->name('index');
         Route::get('/{id}', [AdminGrievanceController::class, 'show'])->name('show');
         Route::post('/{id}/reply', [AdminGrievanceController::class, 'reply'])->name('reply');
+        Route::post('/{id}/forward', [AdminGrievanceController::class, 'forward'])->name('forward');
         Route::post('/{id}/resolve', [AdminGrievanceController::class, 'resolve'])->name('resolve');
         Route::post('/{id}/close', [AdminGrievanceController::class, 'close'])->name('close');
     });

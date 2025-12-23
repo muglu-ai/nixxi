@@ -24,7 +24,19 @@
                 <div class="col-md-6">
                     <p><strong>User:</strong> {{ $ticket->user->fullname ?? 'N/A' }}</p>
                     <p><strong>Email:</strong> {{ $ticket->user->email ?? 'N/A' }}</p>
-                    <p><strong>Type:</strong> <span class="badge bg-info">{{ $ticket->type_display }}</span></p>
+                    <p><strong>Category:</strong> 
+                        @if($ticket->category)
+                            <span class="badge bg-info">{{ ucfirst(str_replace('_', ' ', $ticket->category)) }}</span>
+                        @else
+                            <span class="badge bg-secondary">{{ $ticket->type_display }}</span>
+                        @endif
+                    </p>
+                    @if($ticket->sub_category)
+                    <p><strong>Sub Category:</strong> <span class="badge bg-info">{{ ucfirst(str_replace('_', ' ', $ticket->sub_category)) }}</span></p>
+                    @endif
+                    @if($ticket->assigned_role)
+                    <p><strong>Assigned Role:</strong> <span class="badge bg-primary">{{ ucfirst(str_replace('_', ' ', $ticket->assigned_role)) }}</span></p>
+                    @endif
                     <p><strong>Priority:</strong> <span class="badge bg-{{ $ticket->priority_badge_color }}">{{ ucfirst($ticket->priority) }}</span></p>
                     @if($ticket->escalation_level !== 'none')
                     <p><strong>Escalation:</strong> 
@@ -41,6 +53,10 @@
                 <div class="col-md-6">
                     <p><strong>Created:</strong> {{ $ticket->created_at->format('d M Y, h:i A') }}</p>
                     <p><strong>Assigned:</strong> {{ $ticket->assigned_at ? $ticket->assigned_at->format('d M Y, h:i A') : 'N/A' }}</p>
+                    @if($ticket->forwarded_at)
+                    <p><strong>Forwarded:</strong> {{ $ticket->forwarded_at->format('d M Y, h:i A') }}</p>
+                    <p><strong>Forwarded By:</strong> {{ $ticket->forwardedBy->name ?? 'N/A' }}</p>
+                    @endif
                     @if($ticket->escalated_at)
                     <p><strong>Escalated:</strong> {{ $ticket->escalated_at->format('d M Y, h:i A') }}</p>
                     <p><strong>Escalated To:</strong> {{ $ticket->escalatedTo->name ?? 'N/A' }}</p>
@@ -100,6 +116,41 @@
             </div>
         </div>
     </div>
+
+    <!-- Forward Ticket Form -->
+    @if($ticket->status !== 'closed' && !empty($forwardableRoles))
+    <div class="card shadow mb-3">
+        <div class="card-header bg-warning">
+            <h5 class="mb-0">Forward Ticket</h5>
+        </div>
+        <div class="card-body">
+            <form method="POST" action="{{ route('admin.grievance.forward', $ticket->id) }}">
+                @csrf
+                <div class="mb-3">
+                    <label for="target_role" class="form-label">Forward To Role <span class="text-danger">*</span></label>
+                    <select name="target_role" id="target_role" class="form-select @error('target_role') is-invalid @enderror" required>
+                        <option value="">Select Role</option>
+                        @foreach($forwardableRoles as $roleSlug => $roleName)
+                            <option value="{{ $roleSlug }}">{{ $roleName }}</option>
+                        @endforeach
+                    </select>
+                    @error('target_role')
+                        <div class="invalid-feedback">{{ $message }}</div>
+                    @enderror
+                    <small class="form-text text-muted">Select a role to forward this ticket to. Only roles you have permission to forward to are shown.</small>
+                </div>
+                <div class="mb-3">
+                    <label for="forwarding_notes" class="form-label">Forwarding Notes (Optional)</label>
+                    <textarea name="forwarding_notes" id="forwarding_notes" rows="3" class="form-control @error('forwarding_notes') is-invalid @enderror" placeholder="Add any notes about why you are forwarding this ticket..."></textarea>
+                    @error('forwarding_notes')
+                        <div class="invalid-feedback">{{ $message }}</div>
+                    @enderror
+                </div>
+                <button type="submit" class="btn btn-warning" onclick="return confirm('Are you sure you want to forward this ticket?')">Forward Ticket</button>
+            </form>
+        </div>
+    </div>
+    @endif
 
     <!-- Reply Form -->
     @if($ticket->status !== 'closed')

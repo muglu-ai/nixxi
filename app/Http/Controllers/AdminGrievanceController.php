@@ -6,6 +6,7 @@ use App\Models\Admin;
 use App\Models\Ticket;
 use App\Models\TicketAttachment;
 use App\Models\TicketMessage;
+use App\Services\TicketAssignmentService;
 use Exception;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -68,10 +69,13 @@ class AdminGrievanceController extends Controller
 
         $ticket = Ticket::where('id', (int) $id)
             ->where('assigned_to', $adminId)
-            ->with(['user', 'messages.attachments', 'attachments', 'assignedBy'])
+            ->with(['user', 'messages.attachments', 'attachments', 'assignedBy', 'forwardedBy'])
             ->firstOrFail();
 
-        return view('admin.grievance.show', compact('admin', 'ticket'));
+        // Get forwardable roles for this ticket
+        $forwardableRoles = TicketAssignmentService::getForwardableRoles($ticket, $admin);
+
+        return view('admin.grievance.show', compact('admin', 'ticket', 'forwardableRoles'));
     }
 
     /**
@@ -233,6 +237,71 @@ class AdminGrievanceController extends Controller
             ]);
 
             return back()->with('error', 'Failed to close ticket. Please try again.');
+        }
+    }
+
+    /**
+     * Forward a ticket to another admin with a specific role.
+     */
+    public function forward(Request $request, string $id): RedirectResponse
+    {
+        $adminId = session('admin_id');
+        $admin = Admin::find($adminId);
+
+        if (! $admin) {
+            return redirect()->route('admin.login')
+                ->with('error', 'Admin session expired. Please login again.');
+        }
+
+        $ticket = Ticket::where('id', (int) $id)
+            ->where('assigned_to', $adminId)
+            ->firstOrFail();
+
+        $validated = $request->validate([
+            'target_role' => 'required|string',
+            'forwarding_notes' => 'nullable|string|max:1000',
+        ]);
+
+        // Check if admin can forward to this role
+        if (! TicketAssignmentService::canForwardTo($ticket, $admin, $validated['target_role'])) {
+            return back()->with('error', 'You do not have permission to forward this ticket to the selected role.');
+        }
+
+        try {
+            $success = TicketAssignmentService::forwardTicket(
+                $ticket,
+                $admin,
+                $validated['target_role'],
+                $validated['forwarding_notes'] ?? null
+            );
+
+            if (! $success) {
+                return back()->with('error', 'Failed to forward ticket. Please try again.');
+            }
+
+            // Create internal message about forwarding
+            TicketMessage::create([
+                'ticket_id' => $ticket->id,
+                'sender_type' => 'admin',
+                'sender_id' => $adminId,
+                'message' => 'Ticket forwarded to '.$validated['target_role'].($validated['forwarding_notes'] ? "\n\nNotes: ".$validated['forwarding_notes'] : ''),
+                'is_internal' => true,
+            ]);
+
+            Log::info('Admin forwarded ticket', [
+                'ticket_id' => $ticket->ticket_id,
+                'admin_id' => $adminId,
+                'target_role' => $validated['target_role'],
+            ]);
+
+            return back()->with('success', 'Ticket forwarded successfully.');
+        } catch (Exception $e) {
+            Log::error('Error forwarding ticket', [
+                'error' => $e->getMessage(),
+                'ticket_id' => $ticket->id,
+            ]);
+
+            return back()->with('error', 'Failed to forward ticket. Please try again.');
         }
     }
 }

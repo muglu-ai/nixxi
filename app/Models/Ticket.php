@@ -12,6 +12,8 @@ class Ticket extends Model
         'ticket_id',
         'user_id',
         'type',
+        'category',
+        'sub_category',
         'subject',
         'description',
         'status',
@@ -21,8 +23,12 @@ class Ticket extends Model
         'escalated_at',
         'escalation_notes',
         'assigned_to',
+        'assigned_role',
         'assigned_by',
         'assigned_at',
+        'forwarded_by',
+        'forwarded_at',
+        'forwarding_notes',
         'resolved_at',
         'closed_at',
         'closed_by',
@@ -34,6 +40,7 @@ class Ticket extends Model
         'resolved_at' => 'datetime',
         'closed_at' => 'datetime',
         'escalated_at' => 'datetime',
+        'forwarded_at' => 'datetime',
     ];
 
     /**
@@ -94,6 +101,14 @@ class Ticket extends Model
     public function escalatedTo(): BelongsTo
     {
         return $this->belongsTo(Admin::class, 'escalated_to');
+    }
+
+    /**
+     * Get the admin who forwarded the ticket.
+     */
+    public function forwardedBy(): BelongsTo
+    {
+        return $this->belongsTo(Admin::class, 'forwarded_by');
     }
 
     /**

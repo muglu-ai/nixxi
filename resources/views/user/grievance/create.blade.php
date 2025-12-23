@@ -14,18 +14,24 @@
                     @csrf
                     
                     <div class="mb-3">
-                        <label for="type" class="form-label">Type <span class="text-danger">*</span></label>
-                        <select name="type" id="type" class="form-select @error('type') is-invalid @enderror" required>
-                            <option value="">Select Type</option>
-                            <option value="technical" {{ old('type') === 'technical' ? 'selected' : '' }}>Technical</option>
-                            <option value="billing" {{ old('type') === 'billing' ? 'selected' : '' }}>Billing</option>
-                            <option value="general_complaint" {{ old('type') === 'general_complaint' ? 'selected' : '' }}>General Complaint</option>
-                            <option value="feedback" {{ old('type') === 'feedback' ? 'selected' : '' }}>Feedback</option>
-                            <option value="suggestion" {{ old('type') === 'suggestion' ? 'selected' : '' }}>Suggestion</option>
-                            <option value="request" {{ old('type') === 'request' ? 'selected' : '' }}>Request</option>
-                            <option value="enquiry" {{ old('type') === 'enquiry' ? 'selected' : '' }}>Enquiry</option>
+                        <label for="category" class="form-label">Category <span class="text-danger">*</span></label>
+                        <select name="category" id="category" class="form-select @error('category') is-invalid @enderror" required>
+                            <option value="">Select Category</option>
+                            @foreach($categories as $key => $label)
+                                <option value="{{ $key }}" {{ old('category') === $key ? 'selected' : '' }}>{{ $label }}</option>
+                            @endforeach
                         </select>
-                        @error('type')
+                        @error('category')
+                            <div class="invalid-feedback">{{ $message }}</div>
+                        @enderror
+                    </div>
+
+                    <div class="mb-3" id="sub_category_container" style="display: none;">
+                        <label for="sub_category" class="form-label">Sub Category <span class="text-danger">*</span></label>
+                        <select name="sub_category" id="sub_category" class="form-select @error('sub_category') is-invalid @enderror">
+                            <option value="">Select Sub Category</option>
+                        </select>
+                        @error('sub_category')
                             <div class="invalid-feedback">{{ $message }}</div>
                         @enderror
                     </div>
@@ -88,5 +94,68 @@
         </div>
     </div>
 </div>
+
+@push('scripts')
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const categorySelect = document.getElementById('category');
+    const subCategoryContainer = document.getElementById('sub_category_container');
+    const subCategorySelect = document.getElementById('sub_category');
+
+    // Sub-categories mapping
+    const subCategories = {
+        'network_connectivity': {
+            'link_down': 'Link Down',
+            'speed_issue': 'Speed Issue',
+            'packet_drop_issue': 'Packet Drop Issue',
+            'specific_website_issue': 'Specific Website Issue'
+        },
+        'billing': {
+            'billing_issue': 'Billing Issue'
+        },
+        'request': {
+            'mac_change': 'MAC Change',
+            'upgrade_downgrade': 'Upgrade / Downgrade',
+            'profile_change': 'Profile Change'
+        },
+        'feedback_suggestion': {},
+        'other': {
+            'other': 'Other'
+        }
+    };
+
+    // Old value for restoration
+    const oldSubCategory = '{{ old('sub_category') }}';
+
+    categorySelect.addEventListener('change', function() {
+        const selectedCategory = this.value;
+        subCategorySelect.innerHTML = '<option value="">Select Sub Category</option>';
+
+        if (selectedCategory && subCategories[selectedCategory] && Object.keys(subCategories[selectedCategory]).length > 0) {
+            subCategoryContainer.style.display = 'block';
+            subCategorySelect.required = true;
+
+            for (const [key, label] of Object.entries(subCategories[selectedCategory])) {
+                const option = document.createElement('option');
+                option.value = key;
+                option.textContent = label;
+                if (oldSubCategory === key) {
+                    option.selected = true;
+                }
+                subCategorySelect.appendChild(option);
+            }
+        } else {
+            subCategoryContainer.style.display = 'none';
+            subCategorySelect.required = false;
+        }
+    });
+
+    // Trigger on page load if category is already selected
+    if (categorySelect.value) {
+        categorySelect.dispatchEvent(new Event('change'));
+    }
+});
+</script>
+@endpush
 @endsection
 

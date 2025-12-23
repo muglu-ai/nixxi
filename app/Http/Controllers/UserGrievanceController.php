@@ -6,6 +6,7 @@ use App\Models\Registration;
 use App\Models\Ticket;
 use App\Models\TicketAttachment;
 use App\Models\TicketMessage;
+use App\Services\TicketAssignmentService;
 use Exception;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -28,7 +29,9 @@ class UserGrievanceController extends Controller
                 ->with('error', 'User session expired. Please login again.');
         }
 
-        return view('user.grievance.create', compact('user'));
+        $categories = TicketAssignmentService::getCategories();
+
+        return view('user.grievance.create', compact('user', 'categories'));
     }
 
     /**
@@ -45,12 +48,19 @@ class UserGrievanceController extends Controller
         }
 
         $validated = $request->validate([
-            'type' => 'required|in:technical,billing,general_complaint,feedback,suggestion,request,enquiry',
+            'category' => 'required|in:network_connectivity,billing,request,feedback_suggestion,other',
+            'sub_category' => 'nullable|string|max:255',
             'subject' => 'nullable|string|max:255',
             'description' => 'required|string|min:10',
             'priority' => 'nullable|in:low,medium,high,urgent',
             'attachments.*' => 'nullable|file|mimes:jpg,jpeg,png,pdf,doc,docx|max:10240', // 10MB max
         ]);
+
+        // Validate sub_category based on category
+        $subCategories = TicketAssignmentService::getSubCategories($validated['category']);
+        if (! empty($subCategories) && (! isset($validated['sub_category']) || ! array_key_exists($validated['sub_category'], $subCategories))) {
+            return back()->withInput()->withErrors(['sub_category' => 'Please select a valid sub-category.']);
+        }
 
         try {
             // Generate ticket ID
@@ -60,12 +70,16 @@ class UserGrievanceController extends Controller
             $ticket = Ticket::create([
                 'ticket_id' => $ticketId,
                 'user_id' => $userId,
-                'type' => $validated['type'],
+                'category' => $validated['category'],
+                'sub_category' => $validated['sub_category'] ?? null,
                 'subject' => $validated['subject'] ?? null,
                 'description' => $validated['description'],
                 'priority' => $validated['priority'] ?? 'medium',
                 'status' => 'open',
             ]);
+
+            // Auto-assign ticket based on category and sub_category
+            TicketAssignmentService::assignTicket($ticket);
 
             // Create initial message
             $message = TicketMessage::create([
@@ -97,7 +111,8 @@ class UserGrievanceController extends Controller
             Log::info('New grievance ticket created', [
                 'ticket_id' => $ticketId,
                 'user_id' => $userId,
-                'type' => $validated['type'],
+                'category' => $validated['category'],
+                'sub_category' => $validated['sub_category'] ?? null,
             ]);
 
             return redirect()->route('user.grievance.index')
