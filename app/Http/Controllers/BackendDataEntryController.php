@@ -42,6 +42,10 @@ class BackendDataEntryController extends Controller
                 ->orderBy('node_type')
                 ->orderBy('display_order')
                 ->get()
+                ->filter(function ($pricing) {
+                    // Only include port capacities that have at least one valid pricing plan
+                    return $pricing->hasAnyPricing();
+                })
                 ->groupBy('node_type');
 
             $applicationPricing = IxApplicationPricing::getActive();

@@ -56,12 +56,16 @@ class PlanChangeRequestController extends Controller
             $portSelection = $appData['port_selection'] ?? [];
             $locationData = $appData['location'] ?? [];
 
-            // Get available port capacities
+            // Get available port capacities (only those with valid pricing)
             $nodeType = $locationData['node_type'] ?? 'edge';
             $availablePorts = IxPortPricing::where('node_type', $nodeType)
                 ->where('is_active', true)
                 ->orderBy('display_order')
-                ->get();
+                ->get()
+                ->filter(function ($pricing) {
+                    // Only include port capacities that have at least one valid pricing plan
+                    return $pricing->hasAnyPricing();
+                });
 
             return view('user.plan-change.create', compact('application', 'portSelection', 'availablePorts'));
         } catch (Exception $e) {
@@ -114,6 +118,12 @@ class PlanChangeRequestController extends Controller
                 ->firstOrFail();
 
             $newAmount = $newPricing->getAmountForPlan($validated['new_billing_plan']);
+            
+            // Validate that pricing exists for the selected plan
+            if ($newAmount === null) {
+                return back()->withInput()
+                    ->with('error', "Pricing is not available for port capacity '{$validated['new_port_capacity']}' with billing plan '{$validated['new_billing_plan']}'. Please select a different combination.");
+            }
 
             // Determine change type
             $changeType = $this->comparePortCapacity($currentPortCapacity, $validated['new_port_capacity']);

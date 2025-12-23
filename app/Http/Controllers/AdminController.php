@@ -2728,7 +2728,11 @@ class AdminController extends Controller
                     return null;
                 }
 
-                return (float) $pricing->getAmountForPlan($plan);
+                $amount = $pricing->getAmountForPlan($plan);
+                if ($amount === null) {
+                    return null;
+                }
+                return $amount;
             };
 
             // Proration segments with approved plan changes in the billing window
@@ -2776,7 +2780,7 @@ class AdminController extends Controller
                 }
                 $fullAmount = $getPortAmount($capacity, $plan);
                 if ($fullAmount === null || $fullAmount <= 0) {
-                    throw new Exception("No pricing found for capacity {$capacity} and plan {$plan}");
+                    throw new Exception("No pricing found for capacity {$capacity} and plan {$plan}. Please ensure pricing is configured for this combination.");
                 }
                 $segmentDays = $end->diffInDays($start);
                 

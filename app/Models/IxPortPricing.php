@@ -37,13 +37,56 @@ class IxPortPricing extends Model
         return $query->where('node_type', $nodeType);
     }
 
-    public function getAmountForPlan(string $plan): float
+    public function getAmountForPlan(string $plan): ?float
     {
-        return match ($plan) {
-            'arc' => (float) $this->price_arc,
-            'mrc' => (float) $this->price_mrc,
-            'quarterly' => (float) $this->price_quarterly,
-            default => 0.0,
+        $amount = match ($plan) {
+            'arc', 'annual' => $this->price_arc,
+            'mrc', 'monthly' => $this->price_mrc,
+            'quarterly' => $this->price_quarterly,
+            default => null,
         };
+        
+        // Return null if pricing is not set (null or 0)
+        if ($amount === null || (float)$amount <= 0) {
+            return null;
+        }
+        
+        return (float) $amount;
+    }
+
+    /**
+     * Check if pricing exists for a specific plan.
+     */
+    public function hasPricingForPlan(string $plan): bool
+    {
+        return $this->getAmountForPlan($plan) !== null;
+    }
+
+    /**
+     * Get available billing plans for this port capacity.
+     */
+    public function getAvailablePlans(): array
+    {
+        $plans = [];
+        
+        if ($this->hasPricingForPlan('arc')) {
+            $plans[] = 'arc';
+        }
+        if ($this->hasPricingForPlan('mrc')) {
+            $plans[] = 'mrc';
+        }
+        if ($this->hasPricingForPlan('quarterly')) {
+            $plans[] = 'quarterly';
+        }
+        
+        return $plans;
+    }
+
+    /**
+     * Check if this port capacity has any valid pricing.
+     */
+    public function hasAnyPricing(): bool
+    {
+        return !empty($this->getAvailablePlans());
     }
 }

@@ -163,6 +163,10 @@ class IxApplicationController extends Controller
             ->orderBy('display_order')
             ->orderBy('port_capacity')
             ->get()
+            ->filter(function ($pricing) {
+                // Only include port capacities that have at least one valid pricing plan
+                return $pricing->hasAnyPricing();
+            })
             ->groupBy('node_type');
 
         // Get active application pricing from database
@@ -242,6 +246,10 @@ class IxApplicationController extends Controller
             ->orderBy('display_order')
             ->orderBy('port_capacity')
             ->get()
+            ->filter(function ($pricing) {
+                // Only include port capacities that have at least one valid pricing plan
+                return $pricing->hasAnyPricing();
+            })
             ->groupBy('node_type');
 
         // Get KYC GST information
