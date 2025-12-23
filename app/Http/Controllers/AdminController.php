@@ -2604,58 +2604,68 @@ class AdminController extends Controller
                 default => 'mrc',
             };
             
+            // Check for existing invoice for the same billing period to prevent duplicates
+            // First, we need to determine what the billing period would be
+            $lastPaidInvoice = Invoice::where('application_id', $application->id)
+                ->where('status', 'paid')
+                ->latest('invoice_date')
+                ->first();
+            
             // Calculate billing period dates for invoice
             $billingStartDate = null;
             $billingEndDate = null;
             $dueDate = null;
             $billingPeriod = null;
             
-            if ($application->service_activation_date) {
-                // Always start from service_activation_date for current billing period
+            // Determine start date: first invoice uses service_activation_date, subsequent uses last invoice's due_date
+            if ($lastPaidInvoice && $lastPaidInvoice->due_date) {
+                // Subsequent invoice: start from last paid invoice's due date
+                $billingStartDate = \Carbon\Carbon::parse($lastPaidInvoice->due_date);
+                Log::info("Subsequent invoice for application {$application->id}: using last paid invoice due_date as start: {$billingStartDate->format('Y-m-d')}");
+            } elseif ($application->service_activation_date) {
+                // First invoice: start from service_activation_date
                 $billingStartDate = \Carbon\Carbon::parse($application->service_activation_date);
-                
-                // Calculate end date based on billing cycle
-                switch ($billingPlan) {
-                    case 'annual':
-                    case 'arc':
-                        $billingEndDate = $billingStartDate->copy()->addYear();
-                        $billingPeriod = $billingStartDate->format('Y');
-                        break;
-                    case 'quarterly':
-                        $billingEndDate = $billingStartDate->copy()->addMonths(3);
-                        $quarter = ceil($billingStartDate->month / 3);
-                        $billingPeriod = $billingStartDate->format('Y').'-Q'.$quarter;
-                        break;
-                    case 'monthly':
-                    case 'mrc':
-                    default:
-                        $billingEndDate = $billingStartDate->copy()->addMonth();
-                        $billingPeriod = $billingStartDate->format('Y-m');
-                        break;
-                }
-                
-                // Due date is the billing end date
-                $dueDate = $billingEndDate;
-                
-                Log::info("Billing period calculation for application {$application->id}: billingPlan='{$billingPlan}', startDate={$billingStartDate->format('Y-m-d')}, endDate={$billingEndDate->format('Y-m-d')}, dueDate={$dueDate->format('Y-m-d')}, billingPeriod='{$billingPeriod}'");
+                Log::info("First invoice for application {$application->id}: using service_activation_date as start: {$billingStartDate->format('Y-m-d')}");
             } else {
-                // Fallback: Calculate based on billing plan if no service activation date
-                $fallbackStartDate = now('Asia/Kolkata');
-                switch ($billingPlan) {
-                    case 'annual':
-                    case 'arc':
-                        $dueDate = $fallbackStartDate->copy()->addYear();
-                        break;
-                    case 'quarterly':
-                        $dueDate = $fallbackStartDate->copy()->addMonths(3);
-                        break;
-                    case 'monthly':
-                    case 'mrc':
-                    default:
-                        $dueDate = $fallbackStartDate->copy()->addMonth();
-                        break;
-                }
-                Log::warning("No service_activation_date for application {$application->id}, using fallback due date calculation: {$dueDate->format('Y-m-d')} for billing plan '{$billingPlan}'");
+                // Fallback: use current date
+                $billingStartDate = now('Asia/Kolkata');
+                Log::warning("No service_activation_date or previous invoice for application {$application->id}, using current date as start: {$billingStartDate->format('Y-m-d')}");
+            }
+            
+            // Calculate end date (due date) based on billing cycle
+            switch ($billingPlan) {
+                case 'annual':
+                case 'arc':
+                    $billingEndDate = $billingStartDate->copy()->addYear();
+                    $billingPeriod = $billingStartDate->format('Y');
+                    break;
+                case 'quarterly':
+                    $billingEndDate = $billingStartDate->copy()->addMonths(3);
+                    $quarter = ceil($billingStartDate->month / 3);
+                    $billingPeriod = $billingStartDate->format('Y').'-Q'.$quarter;
+                    break;
+                case 'monthly':
+                case 'mrc':
+                default:
+                    $billingEndDate = $billingStartDate->copy()->addMonth();
+                    $billingPeriod = $billingEndDate->format('Y-m');
+                    break;
+            }
+            
+            // Due date is the billing end date
+            $dueDate = $billingEndDate;
+            
+            Log::info("Billing period calculation for application {$application->id}: billingPlan='{$billingPlan}', startDate={$billingStartDate->format('Y-m-d')}, endDate={$billingEndDate->format('Y-m-d')}, dueDate={$dueDate->format('Y-m-d')}, billingPeriod='{$billingPeriod}'");
+            
+            // Check for duplicate invoice with same billing period
+            $existingInvoice = Invoice::where('application_id', $application->id)
+                ->where('billing_period', $billingPeriod)
+                ->where('status', '!=', 'cancelled')
+                ->first();
+            
+            if ($existingInvoice) {
+                Log::warning("Duplicate invoice attempt for application {$application->id}, billing period '{$billingPeriod}'. Existing invoice: {$existingInvoice->invoice_number}");
+                return back()->with('error', "An invoice for billing period '{$billingPeriod}' already exists (Invoice: {$existingInvoice->invoice_number}). Please check existing invoices.");
             }
             // Check for plan change requests (pending or approved with future effective_from)
             $pendingPlanChange = \App\Models\PlanChangeRequest::where('application_id', $application->id)
@@ -2907,6 +2917,8 @@ class AdminController extends Controller
                 'invoice_date' => now('Asia/Kolkata'),
                 'due_date' => $dueDateFormatted,
                 'billing_period' => $billingPeriod,
+                'billing_start_date' => $billingStartDate->format('Y-m-d'),
+                'billing_end_date' => $billingEndDate->format('Y-m-d'),
                 'amount' => $amount,
                 'gst_amount' => $gstAmount,
                 'total_amount' => $totalAmount,
@@ -2916,15 +2928,10 @@ class AdminController extends Controller
                 'generated_by' => $admin->id,
             ]);
             
-            Log::info("Invoice created successfully: ID={$invoice->id}, due_date={$invoice->due_date}");
+            Log::info("Invoice created successfully: ID={$invoice->id}, due_date={$invoice->due_date}, billing_start_date={$invoice->billing_start_date}, billing_end_date={$invoice->billing_end_date}");
             
-            // Update service_activation_date to billing end date for next billing cycle
-            if ($billingEndDate && $application->service_activation_date) {
-                $application->update([
-                    'service_activation_date' => $billingEndDate->format('Y-m-d'),
-                ]);
-                Log::info("Updated service_activation_date for application {$application->id} to {$billingEndDate->format('Y-m-d')} after invoice generation");
-            }
+            // Don't update service_activation_date - it should remain as the original activation date
+            // The billing dates are now stored in the invoice itself
             
             // Generate invoice PDF
             try {

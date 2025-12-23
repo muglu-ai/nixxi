@@ -351,8 +351,13 @@
             $billingCycle = 'monthly'; // Default fallback
         }
         
-        if ($invoice && $invoice->invoice_date) {
-            // Use invoice date as start date, or service activation date if this is first invoice
+        // Use stored billing dates from invoice if available
+        if ($invoice && $invoice->billing_start_date && $invoice->billing_end_date) {
+            $startDate = \Carbon\Carbon::parse($invoice->billing_start_date);
+            $endDate = \Carbon\Carbon::parse($invoice->billing_end_date);
+            $billingPeriodText = $startDate->format('d/m/Y') . ' to ' . $endDate->format('d/m/Y');
+        } elseif ($invoice && $invoice->invoice_date) {
+            // Fallback: calculate from invoice date if billing dates not stored
             $startDate = null;
             
             // Check if this is the first invoice (no previous paid invoices)

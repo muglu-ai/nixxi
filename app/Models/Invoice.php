@@ -13,6 +13,8 @@ class Invoice extends Model
         'invoice_date',
         'due_date',
         'billing_period',
+        'billing_start_date',
+        'billing_end_date',
         'amount',
         'gst_amount',
         'total_amount',
@@ -28,6 +30,8 @@ class Invoice extends Model
     protected $casts = [
         'invoice_date' => 'date',
         'due_date' => 'date',
+        'billing_start_date' => 'date',
+        'billing_end_date' => 'date',
         'amount' => 'decimal:2',
         'gst_amount' => 'decimal:2',
         'total_amount' => 'decimal:2',
