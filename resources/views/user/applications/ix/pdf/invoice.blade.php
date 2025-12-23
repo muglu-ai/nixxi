@@ -400,6 +400,9 @@
             $billingPeriodText = $invoiceDate . ' to ' . $dueDate;
         }
         
+        // Line items (proration segments)
+        $lineItems = $invoice->line_items ?? [];
+        
         // Get port capacity
         $portCapacity = $application->assigned_port_capacity ?? ($data['port_selection']['capacity'] ?? 'N/A');
         
@@ -433,14 +436,31 @@
             </tr>
         </thead>
         <tbody>
-            <tr>
-                <td>1</td>
-                <td>Port Charges For {{ $billingPeriodText }}</td>
-                <td>1</td>
-                <td>{{ $portCapacity }}</td>
-                <td>{{ number_format($amount, 2) }}</td>
-                <td>{{ number_format($amount, 2) }}</td>
-            </tr>
+            @php $itemIndex = 1; @endphp
+            @if(!empty($lineItems))
+                @foreach($lineItems as $item)
+                    <tr>
+                        <td>{{ $itemIndex++ }}</td>
+                        <td>
+                            Port Charges ({{ \Carbon\Carbon::parse($item['start'])->format('d/m/Y') }} to {{ \Carbon\Carbon::parse($item['end'])->format('d/m/Y') }})<br>
+                            Plan: {{ strtoupper($item['plan'] ?? '') }}
+                        </td>
+                        <td>1</td>
+                        <td>{{ $item['capacity'] ?? 'N/A' }}</td>
+                        <td>{{ number_format($item['amount_full'] ?? 0, 2) }}</td>
+                        <td>{{ number_format($item['amount_prorated'] ?? 0, 2) }}</td>
+                    </tr>
+                @endforeach
+            @else
+                <tr>
+                    <td>{{ $itemIndex++ }}</td>
+                    <td>Port Charges For {{ $billingPeriodText }}</td>
+                    <td>1</td>
+                    <td>{{ $portCapacity }}</td>
+                    <td>{{ number_format($amount, 2) }}</td>
+                    <td>{{ number_format($amount, 2) }}</td>
+                </tr>
+            @endif
         </tbody>
     </table>
 

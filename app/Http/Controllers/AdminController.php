@@ -2668,181 +2668,165 @@ class AdminController extends Controller
                 Log::warning("Duplicate invoice attempt for application {$application->id}, billing period '{$billingPeriod}'. Existing invoice: {$existingInvoice->invoice_number}");
                 return back()->with('error', "An invoice for billing period '{$billingPeriod}' already exists (Invoice: {$existingInvoice->invoice_number}). Please check existing invoices.");
             }
-            // Check for plan change requests (pending or approved with future effective_from)
-            $pendingPlanChange = \App\Models\PlanChangeRequest::where('application_id', $application->id)
-                ->where('status', 'pending')
-                ->latest()
-                ->first();
-            
-            $approvedPlanChange = null;
-            if (!$pendingPlanChange) {
-                // Check for approved plan change with future effective_from date
-                $approvedPlanChange = \App\Models\PlanChangeRequest::where('application_id', $application->id)
-                    ->where('status', 'approved')
-                    ->whereNotNull('effective_from')
-                    ->where('effective_from', '>', now('Asia/Kolkata'))
-                    ->latest()
-                    ->first();
-            }
-            
-            // Determine which port capacity to use for billing
-            if ($pendingPlanChange) {
-                // If there's a pending plan change, use current capacity (not the new one)
-                $portCapacity = $pendingPlanChange->current_port_capacity ?? $application->assigned_port_capacity ?? ($applicationData['port_selection']['capacity'] ?? null);
-                Log::info("Pending plan change found for application {$application->id}, using current capacity: {$portCapacity}");
-            } elseif ($approvedPlanChange) {
-                // Approved but not yet effective - use current capacity until effective_from date
-                $portCapacity = $approvedPlanChange->current_port_capacity ?? $application->assigned_port_capacity ?? ($applicationData['port_selection']['capacity'] ?? null);
-                Log::info("Approved plan change with future effective_from found for application {$application->id}, using current capacity: {$portCapacity} until {$approvedPlanChange->effective_from}");
-            } else {
-                // Check for approved plan change that has taken effect
-                $effectivePlanChange = \App\Models\PlanChangeRequest::where('application_id', $application->id)
-                    ->where('status', 'approved')
-                    ->where(function ($query) {
-                        $query->whereNull('effective_from')
-                            ->orWhere('effective_from', '<=', now('Asia/Kolkata'));
-                    })
-                    ->latest('effective_from')
-                    ->first();
-                
-                if ($effectivePlanChange && $effectivePlanChange->effective_from && $effectivePlanChange->effective_from <= now('Asia/Kolkata')) {
-                    // Use new capacity if effective_from has passed
-                    $portCapacity = $effectivePlanChange->new_port_capacity ?? $application->assigned_port_capacity ?? ($applicationData['port_selection']['capacity'] ?? null);
-                    Log::info("Effective plan change found for application {$application->id}, using new capacity: {$portCapacity} (effective from {$effectivePlanChange->effective_from})");
-                } else {
-                    // No plan change or not yet effective, use assigned capacity
-                    $portCapacity = $application->assigned_port_capacity ?? ($applicationData['port_selection']['capacity'] ?? null);
-                }
-            }
-            
-            // Get pricing for the port capacity
+            // Determine location
             $location = null;
             if (isset($applicationData['location']['id'])) {
                 $location = IxLocation::find($applicationData['location']['id']);
             }
-            
-            $portAmount = 0;
-            if ($location && $portCapacity) {
-                // Normalize port capacity format for matching (handle variations like "10Gig", "10 Gbps", "20Gig", etc.)
-                // Database stores as "20Gig", "10Gig", etc. (no space, "Gig" suffix)
-                $normalizedCapacity = trim($portCapacity);
-                
-                // Step 1: Remove all spaces
+            if (! $location) {
+                Log::error("Missing location for invoice generation for application {$application->id}");
+                return back()->with('error', 'Unable to calculate port charges. Location is missing.');
+            }
+
+            // Helper to normalize capacity and fetch amount
+            $getPortAmount = function ($capacity, $plan) use ($location) {
+                if (! $capacity) {
+                    return null;
+                }
+                $normalizedCapacity = trim($capacity);
                 $normalizedCapacity = preg_replace('/\s+/', '', $normalizedCapacity);
-                
-                // Step 2: Convert "Gbps" to "Gig" (database uses "Gig")
-                // Handle "20 Gbps" -> "20Gbps" -> "20Gig"
                 if (stripos($normalizedCapacity, 'Gbps') !== false || stripos($normalizedCapacity, 'gbps') !== false) {
                     $normalizedCapacity = str_ireplace(['Gbps', 'gbps', 'GBPS'], 'Gig', $normalizedCapacity);
                 }
-                
-                // Step 3: Ensure it ends with "Gig" or "M" (for capacities like "100M")
-                if (!preg_match('/(Gig|M)$/i', $normalizedCapacity)) {
-                    // If it doesn't end with Gig or M, it might be just a number, try adding "Gig"
+                if (! preg_match('/(Gig|M)$/i', $normalizedCapacity)) {
                     if (preg_match('/^\d+$/', $normalizedCapacity)) {
-                        $normalizedCapacity = $normalizedCapacity . 'Gig';
+                        $normalizedCapacity .= 'Gig';
                     }
                 }
-                
-                Log::info("Normalizing port capacity: '{$portCapacity}' -> '{$normalizedCapacity}' for location {$location->id} ({$location->name}), node_type {$location->node_type}");
-                
-                // Get pricing for this location and port capacity (exact match first)
+
                 $pricing = IxPortPricing::active()
                     ->where('node_type', $location->node_type)
                     ->where('port_capacity', $normalizedCapacity)
                     ->first();
-                
-                // If exact match not found, try original format and other variations
-                if (!$pricing) {
-                    // Try multiple normalization strategies
-                    // Try multiple normalization strategies
+
+                if (! $pricing) {
                     $variations = [
-                        trim($portCapacity), // Original with trimmed spaces: "20 Gbps"
-                        str_replace(' ', '', trim($portCapacity)), // Remove spaces: "20 Gbps" -> "20Gbps"
-                        preg_replace('/\s+/', '', trim($portCapacity)), // Remove all whitespace
-                        str_replace(['Gbps', 'gbps', 'GBPS'], 'Gig', str_replace(' ', '', trim($portCapacity))), // Remove space then convert: "20 Gbps" -> "20Gig"
-                        str_replace(['Gbps', 'gbps'], 'Gig', trim($portCapacity)), // Convert Gbps to Gig: "20Gbps" -> "20Gig"
-                        str_replace([' Gbps', 'Gbps', 'gbps'], 'Gig', trim($portCapacity)), // Convert with space: "20 Gbps" -> "20Gig"
+                        trim($capacity),
+                        str_replace(' ', '', trim($capacity)),
+                        preg_replace('/\s+/', '', trim($capacity)),
+                        str_replace(['Gbps', 'gbps', 'GBPS'], 'Gig', str_replace(' ', '', trim($capacity))),
+                        str_replace(['Gbps', 'gbps'], 'Gig', trim($capacity)),
+                        str_replace([' Gbps', 'Gbps', 'gbps'], 'Gig', trim($capacity)),
                     ];
-                    
+
                     foreach (array_unique($variations) as $variation) {
-                        if (empty($variation)) continue;
+                        if (empty($variation)) {
+                            continue;
+                        }
                         $pricing = IxPortPricing::active()
                             ->where('node_type', $location->node_type)
                             ->where('port_capacity', $variation)
                             ->first();
                         if ($pricing) {
-                            Log::info("Pricing found with variation: '{$variation}' for original '{$portCapacity}'");
                             break;
                         }
                     }
                 }
-                
-                if ($pricing) {
-                    $portAmount = (float) $pricing->getAmountForPlan($pricingPlan);
-                    Log::info("Pricing found for location {$location->id} ({$location->name}), node_type {$location->node_type}, port_capacity '{$portCapacity}' (normalized: '{$normalizedCapacity}'), plan {$pricingPlan}, amount: {$portAmount}");
-                } else {
-                    // Log available pricings for debugging
-                    $availablePricings = IxPortPricing::active()
-                        ->where('node_type', $location->node_type)
-                        ->pluck('port_capacity')
-                        ->toArray();
-                    Log::error("CRITICAL: No pricing found for location {$location->id} ({$location->name}), node_type {$location->node_type}, port_capacity '{$portCapacity}' (tried normalized: '{$normalizedCapacity}'). Available capacities: " . implode(', ', $availablePricings));
-                    
-                    // Don't use fallback - this is an error condition
-                    return back()->with('error', "No pricing found for port capacity '{$portCapacity}' at location '{$location->name}'. Please configure pricing in Super Admin panel.");
+
+                if (! $pricing) {
+                    return null;
                 }
-            } else {
-                // This should not happen if location and port capacity are properly set
-                Log::error("CRITICAL: Missing location or port capacity for invoice generation. Location: " . ($location ? "{$location->id}" : 'null') . ", Port Capacity: " . ($portCapacity ?? 'null'));
-                return back()->with('error', 'Unable to calculate port charges. Location or port capacity is missing.');
+
+                return (float) $pricing->getAmountForPlan($plan);
+            };
+
+            // Proration segments with approved plan changes in the billing window
+            $approvedPlanChanges = PlanChangeRequest::where('application_id', $application->id)
+                ->where('status', 'approved')
+                ->whereNotNull('effective_from')
+                ->orderBy('effective_from')
+                ->get();
+
+            // Determine starting capacity/plan at billingStartDate
+            $baseCapacity = $application->assigned_port_capacity ?? ($applicationData['port_selection']['capacity'] ?? null);
+            $basePlan = $billingPlan;
+            foreach ($approvedPlanChanges as $change) {
+                if ($change->effective_from && $change->effective_from->lt($billingStartDate)) {
+                    $baseCapacity = $change->new_port_capacity ?? $baseCapacity;
+                    $basePlan = $change->new_billing_plan ? strtolower($change->new_billing_plan) : $basePlan;
+                }
             }
-            
-            // Validate port amount is not zero or incorrect
-            if ($portAmount <= 0) {
-                Log::error("Invalid port amount calculated: {$portAmount} for application {$application->id}. Location: " . ($location ? "{$location->id} ({$location->node_type})" : 'null') . ", Port Capacity: " . ($portCapacity ?? 'null'));
-                return back()->with('error', 'Unable to calculate port charges. Please ensure port capacity and location are correctly configured.');
+
+            $futureChanges = $approvedPlanChanges->filter(function ($c) use ($billingStartDate, $billingEndDate) {
+                return $c->effective_from && $c->effective_from->gte($billingStartDate) && $c->effective_from->lt($billingEndDate);
+            })->values();
+
+            $segmentStart = $billingStartDate->copy();
+            $currentCapacity = $baseCapacity;
+            $currentPlan = $basePlan;
+            $segments = [];
+            $prorationTotal = 0.0;
+            $totalDays = max(1, $billingEndDate->diffInDays($billingStartDate));
+
+            $addSegment = function ($start, $end, $capacity, $plan) use ($getPortAmount, &$segments, &$prorationTotal, $totalDays) {
+                if ($end->lte($start)) {
+                    return;
+                }
+                $fullAmount = $getPortAmount($capacity, $plan);
+                if ($fullAmount === null || $fullAmount <= 0) {
+                    throw new Exception("No pricing found for capacity {$capacity} and plan {$plan}");
+                }
+                $segmentDays = $end->diffInDays($start);
+                $prorated = round(($fullAmount * $segmentDays) / $totalDays, 2);
+                $prorationTotal += $prorated;
+                $segments[] = [
+                    'start' => $start->format('Y-m-d'),
+                    'end' => $end->format('Y-m-d'),
+                    'capacity' => $capacity,
+                    'plan' => $plan,
+                    'days' => $segmentDays,
+                    'amount_full' => $fullAmount,
+                    'amount_prorated' => $prorated,
+                ];
+            };
+
+            foreach ($futureChanges as $change) {
+                $segmentEnd = $change->effective_from->copy();
+                $addSegment($segmentStart, $segmentEnd, $currentCapacity, $currentPlan);
+                $currentCapacity = $change->new_port_capacity ?? $currentCapacity;
+                $currentPlan = $change->new_billing_plan ? strtolower($change->new_billing_plan) : $currentPlan;
+                $segmentStart = $change->effective_from->copy();
             }
-            
+
+            // Final segment to billing end
+            $addSegment($segmentStart, $billingEndDate->copy(), $currentCapacity, $currentPlan);
+
+            if ($prorationTotal <= 0) {
+                Log::error("Invalid prorated total for application {$application->id}");
+                return back()->with('error', 'Unable to calculate charges. Please check plan and pricing configuration.');
+            }
+
             // Calculate GST based on state (IGST for non-Delhi, CGST+SGST for Delhi)
-            $gstState = null;
-            if ($location) {
-                $gstState = $location->state;
-            } else {
-                // Get from GST verification
-                $gstVerification = GstVerification::where('user_id', $application->user_id)
-                    ->where('is_verified', true)
-                    ->latest()
-                    ->first();
-                $gstState = $gstVerification?->state;
-            }
-            
+            $gstVerification = GstVerification::where('user_id', $application->user_id)
+                ->where('is_verified', true)
+                ->latest()
+                ->first();
+            $gstState = $location->state ?? ($gstVerification?->state);
+
             $gstPercentage = 18.00;
             $isDelhi = strtolower($gstState ?? '') === 'delhi' || strtolower($gstState ?? '') === 'new delhi';
-            
+
             if ($isDelhi) {
-                // CGST 9% + SGST 9% = 18% total
-                $cgstAmount = round(($portAmount * 9) / 100, 2);
-                $sgstAmount = round(($portAmount * 9) / 100, 2);
+                $cgstAmount = round(($prorationTotal * 9) / 100, 2);
+                $sgstAmount = round(($prorationTotal * 9) / 100, 2);
                 $gstAmount = $cgstAmount + $sgstAmount;
             } else {
-                // IGST 18%
-                $gstAmount = round(($portAmount * 18) / 100, 2);
+                $gstAmount = round(($prorationTotal * 18) / 100, 2);
                 $cgstAmount = 0;
                 $sgstAmount = 0;
             }
-            
-            $amount = $portAmount; // Only port charges, no application fee
+
+            $amount = $prorationTotal; // Prorated total
             $totalAmount = round($amount + $gstAmount, 2);
-            
-            // Validate calculations
+
             if ($amount <= 0 || $totalAmount <= 0) {
                 Log::error("Invalid invoice calculation for application {$application->id}: amount={$amount}, gstAmount={$gstAmount}, totalAmount={$totalAmount}");
                 return back()->with('error', 'Invalid invoice calculation. Please check port capacity and pricing configuration.');
             }
-            
-            // Log final invoice amounts for debugging
-            Log::info("Invoice calculation for application {$application->id}: portCapacity={$portCapacity}, portAmount={$portAmount}, amount={$amount}, gstAmount={$gstAmount}, totalAmount={$totalAmount}");
+
+            Log::info("Invoice calculation for application {$application->id}: prorated amount={$amount}, gstAmount={$gstAmount}, totalAmount={$totalAmount}", [
+                'segments' => $segments,
+            ]);
 
             // Generate invoice number (ensure uniqueness)
             $baseInvoiceNumber = 'NIXI-IX-'.date('y').'-'.(date('y') + 1).'/'.str_pad($application->id, 4, '0', STR_PAD_LEFT);
@@ -2920,6 +2904,7 @@ class AdminController extends Controller
                 'billing_period' => $billingPeriod,
                 'billing_start_date' => $billingStartDate->format('Y-m-d'),
                 'billing_end_date' => $billingEndDate->format('Y-m-d'),
+                'line_items' => $segments,
                 'amount' => $amount,
                 'gst_amount' => $gstAmount,
                 'total_amount' => $totalAmount,
