@@ -16,6 +16,7 @@ use App\Models\McaVerification;
 use App\Models\Message;
 use App\Models\PanVerification;
 use App\Models\Invoice;
+use App\Models\PaymentAllocation;
 use App\Models\PaymentTransaction;
 use App\Models\PaymentVerificationLog;
 use App\Models\PlanChangeRequest;
@@ -924,8 +925,12 @@ class AdminController extends Controller
                 session(['admin_selected_role' => $selectedRole]);
             }
 
-            // Get status filter if provided
+            // Get filters from request
             $statusFilter = $request->get('status');
+            $roleFilter = $request->get('role_filter'); // Filter by assigned role
+            $registrationFilter = $request->get('registration_filter'); // Filter by registration date
+            $isActiveFilter = $request->get('is_active'); // Filter by live status
+            $paymentStatusFilter = $request->get('payment_status'); // Filter by payment status
 
             // Determine which role to use for filtering
             $roleToUse = $selectedRole;
@@ -943,10 +948,6 @@ class AdminController extends Controller
                 'statusHistory',
             ])->where('application_type', 'IX'); // Only show IX applications for new workflow
 
-            // Show all applications by default (admins can see all)
-            // is_active now represents "live" status, not visibility
-            // All applications are visible, but marked as live/not live
-            
             // Apply status filter if provided
             if ($statusFilter === 'approved') {
                 $query->whereIn('status', ['approved', 'payment_verified']);
@@ -954,19 +955,68 @@ class AdminController extends Controller
                 $query->whereNotIn('status', ['approved', 'rejected', 'ceo_rejected', 'payment_verified']);
             } elseif ($statusFilter === 'ip_assigned') {
                 $query->where('status', 'ip_assigned');
+            } elseif ($statusFilter) {
+                $query->where('status', $statusFilter);
             }
-            // If no status filter, show all active applications (admins can see all)
-            // Actions are restricted based on application stage in the show view
+
+            // Filter by assigned role
+            if ($roleFilter) {
+                $roleSlugMap = [
+                    'ix_processor' => 'current_ix_processor_id',
+                    'ix_legal' => 'current_ix_legal_id',
+                    'ix_head' => 'current_ix_head_id',
+                    'ceo' => 'current_ceo_id',
+                    'nodal_officer' => 'current_nodal_officer_id',
+                    'ix_tech_team' => 'current_ix_tech_team_id',
+                    'ix_account' => 'current_ix_account_id',
+                ];
+                
+                if (isset($roleSlugMap[$roleFilter])) {
+                    $query->whereNotNull($roleSlugMap[$roleFilter]);
+                }
+            }
+
+            // Filter by registration date
+            if ($registrationFilter === 'today') {
+                $query->whereDate('created_at', today('Asia/Kolkata'));
+            } elseif ($registrationFilter === 'this_week') {
+                $query->whereBetween('created_at', [
+                    now('Asia/Kolkata')->startOfWeek(),
+                    now('Asia/Kolkata')->endOfWeek(),
+                ]);
+            } elseif ($registrationFilter === 'this_month') {
+                $query->whereMonth('created_at', now('Asia/Kolkata')->month)
+                      ->whereYear('created_at', now('Asia/Kolkata')->year);
+            } elseif ($registrationFilter === 'this_year') {
+                $query->whereYear('created_at', now('Asia/Kolkata')->year);
+            }
+
+            // Filter by live status (is_active)
+            if ($isActiveFilter === '1') {
+                $query->where('is_active', true);
+            } elseif ($isActiveFilter === '0') {
+                $query->where('is_active', false);
+            }
+
+            // Filter by payment status (check invoices)
+            if ($paymentStatusFilter) {
+                $query->whereHas('invoices', function ($q) use ($paymentStatusFilter) {
+                    $q->where('payment_status', $paymentStatusFilter);
+                });
+            }
 
             // Search functionality
             if ($request->filled('search')) {
                 $search = $request->input('search');
                 $query->where(function ($q) use ($search) {
                     $q->where('application_id', 'like', "%{$search}%")
+                        ->orWhere('membership_id', 'like', "%{$search}%")
+                        ->orWhere('customer_id', 'like', "%{$search}%")
                         ->orWhereHas('user', function ($userQuery) use ($search) {
                             $userQuery->where('fullname', 'like', "%{$search}%")
                                 ->orWhere('email', 'like', "%{$search}%")
-                                ->orWhere('registrationid', 'like', "%{$search}%");
+                                ->orWhere('registrationid', 'like', "%{$search}%")
+                                ->orWhere('mobile', 'like', "%{$search}%");
                         })
                         ->orWhere('status', 'like', "%{$search}%");
                 });
@@ -3090,6 +3140,35 @@ class AdminController extends Controller
                 ];
             }
             
+            // Check for carry-forward amount from previous unpaid invoices
+            $carryForwardAmount = 0.0;
+            $hasCarryForward = false;
+            
+            if ($lastPaidInvoice) {
+                // Check for unpaid/partial invoices before this billing period
+                $unpaidInvoices = Invoice::where('application_id', $application->id)
+                    ->where('id', '!=', $lastPaidInvoice->id)
+                    ->where(function ($q) {
+                        $q->where('payment_status', 'partial')
+                          ->orWhere(function ($q2) {
+                              $q2->where('payment_status', 'pending')
+                                 ->where('due_date', '<', now('Asia/Kolkata'));
+                          });
+                    })
+                    ->get();
+                
+                foreach ($unpaidInvoices as $unpaidInvoice) {
+                    $balance = $unpaidInvoice->getRemainingBalance();
+                    if ($balance > 0) {
+                        $carryForwardAmount += $balance;
+                        $hasCarryForward = true;
+                    }
+                }
+            }
+            
+            // Add carry-forward to total if exists
+            $finalTotalAmount = $totalAmount + $carryForwardAmount;
+            
             $invoice = Invoice::create([
                 'application_id' => $application->id,
                 'invoice_number' => $invoiceNumber,
@@ -3101,7 +3180,12 @@ class AdminController extends Controller
                 'line_items' => $lineItemsData,
                 'amount' => $amount,
                 'gst_amount' => $gstAmount,
-                'total_amount' => $totalAmount,
+                'total_amount' => $finalTotalAmount,
+                'paid_amount' => 0,
+                'balance_amount' => $finalTotalAmount,
+                'payment_status' => 'pending',
+                'carry_forward_amount' => $carryForwardAmount,
+                'has_carry_forward' => $hasCarryForward,
                 'currency' => 'INR',
                 'status' => 'pending',
                 'payu_payment_link' => json_encode($paymentData), // Store full payment data
@@ -3217,6 +3301,9 @@ class AdminController extends Controller
             // Update invoice as paid with manual details
             $invoice->update([
                 'status' => 'paid',
+                'payment_status' => 'paid',
+                'paid_amount' => $invoice->total_amount,
+                'balance_amount' => 0,
                 'paid_at' => now('Asia/Kolkata'),
                 'paid_by' => $admin->id,
                 'manual_payment_id' => $validated['payment_id'],
@@ -3282,6 +3369,193 @@ class AdminController extends Controller
             Log::error('Error marking invoice as paid manually: '.$e->getMessage());
 
             return back()->with('error', 'Unable to mark invoice as paid. Please try again.');
+        }
+    }
+
+    /**
+     * IX Account: Allocate partial payment across multiple invoices.
+     */
+    public function ixAccountAllocatePayment(Request $request)
+    {
+        try {
+            $admin = $this->getCurrentAdmin();
+
+            if (! $this->hasRole($admin, 'ix_account')) {
+                return back()->with('error', 'You do not have permission to perform this action.');
+            }
+
+            $validated = $request->validate([
+                'user_id' => 'required|exists:registrations,id',
+                'total_payment_amount' => 'required|numeric|min:0.01',
+                'payment_reference' => 'required|string|max:255',
+                'notes' => 'nullable|string|max:1000',
+                'allocations' => 'required|array|min:1',
+                'allocations.*.invoice_id' => 'required|exists:invoices,id',
+                'allocations.*.amount' => 'required|numeric|min:0.01',
+            ]);
+
+            $totalAllocated = array_sum(array_column($validated['allocations'], 'amount'));
+            
+            if (abs($totalAllocated - $validated['total_payment_amount']) > 0.01) {
+                return back()->with('error', "Total allocated amount (₹{$totalAllocated}) does not match payment amount (₹{$validated['total_payment_amount']}).");
+            }
+
+            DB::beginTransaction();
+
+            $user = Registration::findOrFail($validated['user_id']);
+            $allocatedInvoices = [];
+
+            foreach ($validated['allocations'] as $allocation) {
+                $invoice = Invoice::with('application')->findOrFail($allocation['invoice_id']);
+                
+                // Verify invoice belongs to user
+                if ($invoice->application->user_id != $validated['user_id']) {
+                    DB::rollBack();
+                    return back()->with('error', "Invoice {$invoice->invoice_number} does not belong to this user.");
+                }
+
+                $allocatedAmount = (float) $allocation['amount'];
+                $currentPaidAmount = (float) ($invoice->paid_amount ?? 0);
+                $newPaidAmount = $currentPaidAmount + $allocatedAmount;
+                $balanceAmount = max(0, (float)$invoice->total_amount - $newPaidAmount);
+
+                // Determine payment status
+                $paymentStatus = 'pending';
+                if ($newPaidAmount >= $invoice->total_amount) {
+                    $paymentStatus = 'paid';
+                    $balanceAmount = 0;
+                } elseif ($newPaidAmount > 0) {
+                    $paymentStatus = 'partial';
+                }
+
+                // Update invoice
+                $invoice->update([
+                    'paid_amount' => $newPaidAmount,
+                    'balance_amount' => $balanceAmount,
+                    'payment_status' => $paymentStatus,
+                    'status' => $paymentStatus === 'paid' ? 'paid' : $invoice->status,
+                    'paid_at' => $paymentStatus === 'paid' ? now('Asia/Kolkata') : $invoice->paid_at,
+                    'paid_by' => $paymentStatus === 'paid' ? $admin->id : $invoice->paid_by,
+                    'manual_payment_id' => $validated['payment_reference'],
+                    'manual_payment_notes' => $validated['notes'] ?? null,
+                ]);
+
+                // Create payment allocation record
+                PaymentAllocation::create([
+                    'invoice_id' => $invoice->id,
+                    'application_id' => $invoice->application_id,
+                    'user_id' => $validated['user_id'],
+                    'allocated_amount' => $allocatedAmount,
+                    'payment_reference' => $validated['payment_reference'],
+                    'notes' => $validated['notes'] ?? null,
+                    'allocated_by' => $admin->id,
+                ]);
+
+                $allocatedInvoices[] = $invoice->invoice_number;
+
+                // Create payment transaction record
+                PaymentTransaction::create([
+                    'user_id' => $validated['user_id'],
+                    'application_id' => $invoice->application_id,
+                    'transaction_id' => 'ALLOC-'.time().'-'.strtoupper(Str::random(6)),
+                    'payment_status' => 'success',
+                    'payment_mode' => 'manual',
+                    'payment_id' => $validated['payment_reference'],
+                    'amount' => $allocatedAmount,
+                    'currency' => 'INR',
+                    'product_info' => 'Partial payment allocation for invoice '.$invoice->invoice_number,
+                    'response_message' => $validated['notes'] ?? 'Payment allocated by IX Account',
+                ]);
+
+                // If invoice is now fully paid, create payment verification log
+                if ($paymentStatus === 'paid' && $invoice->billing_period) {
+                    $existingVerification = PaymentVerificationLog::where('application_id', $invoice->application_id)
+                        ->where('billing_period', $invoice->billing_period)
+                        ->first();
+
+                    if (! $existingVerification) {
+                        PaymentVerificationLog::create([
+                            'application_id' => $invoice->application_id,
+                            'verified_by' => $admin->id,
+                            'verification_type' => 'recurring',
+                            'billing_period' => $invoice->billing_period,
+                            'amount' => $invoice->total_amount,
+                            'currency' => 'INR',
+                            'payment_method' => 'manual',
+                            'notes' => $validated['notes'] ?? null,
+                            'verified_at' => now('Asia/Kolkata'),
+                        ]);
+                    }
+                }
+            }
+
+            DB::commit();
+
+            // Inform user via message
+            $invoiceList = implode(', ', $allocatedInvoices);
+            Message::create([
+                'user_id' => $validated['user_id'],
+                'subject' => 'Payment Allocated',
+                'message' => "Payment of ₹{$validated['total_payment_amount']} has been allocated to invoices: {$invoiceList}. Payment Reference: {$validated['payment_reference']}",
+                'is_read' => false,
+                'sent_by' => 'admin',
+            ]);
+
+            Log::info('Payment allocated successfully', [
+                'user_id' => $validated['user_id'],
+                'total_amount' => $validated['total_payment_amount'],
+                'invoices' => $allocatedInvoices,
+                'admin_id' => $admin->id,
+            ]);
+
+            return back()->with('success', "Payment of ₹{$validated['total_payment_amount']} allocated successfully to ".count($allocatedInvoices)." invoice(s).");
+        } catch (Exception $e) {
+            DB::rollBack();
+            Log::error('Error allocating payment: '.$e->getMessage());
+
+            return back()->with('error', 'Unable to allocate payment. Please try again.');
+        }
+    }
+
+    /**
+     * IX Account: Get user invoices for payment allocation.
+     */
+    public function getUserInvoicesForAllocation(Request $request, $userId)
+    {
+        try {
+            $admin = $this->getCurrentAdmin();
+
+            if (! $this->hasRole($admin, 'ix_account')) {
+                return response()->json(['error' => 'Unauthorized'], 403);
+            }
+
+            $user = Registration::findOrFail($userId);
+            
+            $invoices = Invoice::whereHas('application', function ($q) use ($userId) {
+                $q->where('user_id', $userId)
+                  ->where('application_type', 'IX')
+                  ->where('is_active', true);
+            })
+            ->whereIn('payment_status', ['pending', 'partial'])
+            ->orderBy('invoice_date', 'desc')
+            ->get()
+            ->map(function ($invoice) {
+                return [
+                    'id' => $invoice->id,
+                    'invoice_number' => $invoice->invoice_number,
+                    'application_id' => $invoice->application->application_id,
+                    'total_amount' => (float)$invoice->total_amount,
+                    'paid_amount' => (float)($invoice->paid_amount ?? 0),
+                    'balance_amount' => (float)($invoice->balance_amount ?? $invoice->total_amount),
+                    'due_date' => $invoice->due_date->format('Y-m-d'),
+                    'billing_period' => $invoice->billing_period,
+                ];
+            });
+
+            return response()->json(['invoices' => $invoices]);
+        } catch (Exception $e) {
+            Log::error('Error fetching user invoices: '.$e->getMessage());
+            return response()->json(['error' => 'Unable to fetch invoices'], 500);
         }
     }
 

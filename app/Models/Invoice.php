@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Invoice extends Model
 {
@@ -19,6 +20,11 @@ class Invoice extends Model
         'amount',
         'gst_amount',
         'total_amount',
+        'paid_amount',
+        'balance_amount',
+        'payment_status',
+        'carry_forward_amount',
+        'has_carry_forward',
         'currency',
         'status',
         'payu_payment_link',
@@ -40,6 +46,10 @@ class Invoice extends Model
         'amount' => 'decimal:2',
         'gst_amount' => 'decimal:2',
         'total_amount' => 'decimal:2',
+        'paid_amount' => 'decimal:2',
+        'balance_amount' => 'decimal:2',
+        'carry_forward_amount' => 'decimal:2',
+        'has_carry_forward' => 'boolean',
         'sent_at' => 'datetime:Asia/Kolkata',
         'paid_at' => 'datetime:Asia/Kolkata',
         'created_at' => 'datetime:Asia/Kolkata',
@@ -68,5 +78,37 @@ class Invoice extends Model
     public function paidBy(): BelongsTo
     {
         return $this->belongsTo(Admin::class, 'paid_by');
+    }
+
+    /**
+     * Get payment allocations for this invoice.
+     */
+    public function paymentAllocations(): HasMany
+    {
+        return $this->hasMany(PaymentAllocation::class);
+    }
+
+    /**
+     * Check if invoice is fully paid.
+     */
+    public function isFullyPaid(): bool
+    {
+        return $this->payment_status === 'paid' || ($this->paid_amount >= $this->total_amount && $this->total_amount > 0);
+    }
+
+    /**
+     * Check if invoice has partial payment.
+     */
+    public function hasPartialPayment(): bool
+    {
+        return $this->payment_status === 'partial' || ($this->paid_amount > 0 && $this->paid_amount < $this->total_amount);
+    }
+
+    /**
+     * Get remaining balance.
+     */
+    public function getRemainingBalance(): float
+    {
+        return max(0, (float)$this->total_amount - (float)$this->paid_amount);
     }
 }

@@ -225,6 +225,10 @@ Route::prefix('admin')->name('admin.')->middleware(['admin'])->group(function ()
 
     // IX Account invoice manual payment
     Route::post('/applications/invoice/{invoice}/mark-paid', [AdminController::class, 'ixAccountMarkInvoicePaid'])->name('applications.invoice.mark-paid');
+    
+    // IX Account payment allocation
+    Route::post('/applications/allocate-payment', [AdminController::class, 'ixAccountAllocatePayment'])->name('applications.allocate-payment');
+    Route::get('/applications/user/{userId}/invoices', [AdminController::class, 'getUserInvoicesForAllocation'])->name('applications.user.invoices');
 
     // Plan change routes
     Route::prefix('plan-change')->name('plan-change.')->group(function () {
