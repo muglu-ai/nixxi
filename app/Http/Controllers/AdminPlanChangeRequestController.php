@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Admin;
 use App\Models\Application;
 use App\Models\ApplicationStatusHistory;
+use App\Models\Invoice;
 use App\Models\Message;
 use App\Models\PlanChangeHistory;
 use App\Models\PlanChangeRequest;
@@ -105,33 +106,61 @@ class AdminPlanChangeRequestController extends Controller
 
             DB::beginTransaction();
 
+            $application = $planChangeRequest->application;
+            $appData = $application->application_data ?? [];
+            
+            // Determine effective_from date
+            // For billing cycle changes: effective after current paid period ends
+            // For capacity changes: can be immediate or future date
+            $effectiveFrom = $validated['effective_from'] ?? now('Asia/Kolkata');
+            
+            // If it's a billing cycle change only (no capacity change), 
+            // set effective_from to after current paid period
+            if ($planChangeRequest->isBillingCycleChangeOnly()) {
+                // Find the last paid invoice to determine when current paid period ends
+                $lastPaidInvoice = Invoice::where('application_id', $application->id)
+                    ->where('status', 'paid')
+                    ->latest('invoice_date')
+                    ->first();
+                
+                if ($lastPaidInvoice && $lastPaidInvoice->due_date) {
+                    // Billing cycle change takes effect after current paid period
+                    $effectiveFrom = \Carbon\Carbon::parse($lastPaidInvoice->due_date)->addDay();
+                    Log::info("Billing cycle change for application {$application->id}: will take effect after paid period ends on {$effectiveFrom->format('Y-m-d')}");
+                }
+            }
+
             // Update request status
             $planChangeRequest->update([
                 'status' => 'approved',
                 'admin_notes' => $validated['admin_notes'] ?? null,
                 'reviewed_by' => $adminId,
                 'reviewed_at' => now('Asia/Kolkata'),
-                'effective_from' => $validated['effective_from'] ?? now('Asia/Kolkata'),
+                'effective_from' => $effectiveFrom,
             ]);
 
-            // Update application data
-            $application = $planChangeRequest->application;
-            $appData = $application->application_data ?? [];
-            
-            // Update port selection in application_data
-            $appData['port_selection'] = [
-                'capacity' => $planChangeRequest->new_port_capacity,
-                'billing_plan' => $planChangeRequest->new_billing_plan,
-                'amount' => $planChangeRequest->new_amount,
-                'currency' => 'INR',
-            ];
+            // Update application data immediately for capacity changes
+            // For billing cycle changes, the new cycle will be used in next invoice generation
+            if ($planChangeRequest->isCapacityChange()) {
+                // Capacity change: update immediately
+                $appData['port_selection'] = [
+                    'capacity' => $planChangeRequest->new_port_capacity,
+                    'billing_plan' => $planChangeRequest->new_billing_plan ?? $appData['port_selection']['billing_plan'] ?? 'monthly',
+                    'amount' => $planChangeRequest->new_amount,
+                    'currency' => 'INR',
+                ];
 
-            // Update assigned port capacity
-            $application->update([
-                'application_data' => $appData,
-                'assigned_port_capacity' => $planChangeRequest->new_port_capacity,
-                'billing_cycle' => $planChangeRequest->new_billing_plan,
-            ]);
+                $application->update([
+                    'application_data' => $appData,
+                    'assigned_port_capacity' => $planChangeRequest->new_port_capacity,
+                ]);
+            } else {
+                // Billing cycle change only: update billing_cycle but it takes effect after current paid period
+                $application->update([
+                    'billing_cycle' => $planChangeRequest->new_billing_plan,
+                ]);
+                Log::info("Billing cycle change approved for application {$application->id}: new cycle '{$planChangeRequest->new_billing_plan}' will be used after {$effectiveFrom->format('Y-m-d')}");
+            }
 
             // Log application status history
             ApplicationStatusHistory::log(

@@ -436,20 +436,50 @@
             </tr>
         </thead>
         <tbody>
-            @php $itemIndex = 1; @endphp
-            @if(!empty($lineItems))
-                @foreach($lineItems as $item)
-                    <tr>
-                        <td>{{ $itemIndex++ }}</td>
-                        <td>
-                            Port Charges ({{ \Carbon\Carbon::parse($item['start'])->format('d/m/Y') }} to {{ \Carbon\Carbon::parse($item['end'])->format('d/m/Y') }})<br>
-                            Plan: {{ strtoupper($item['plan'] ?? '') }}
-                        </td>
-                        <td>1</td>
-                        <td>{{ $item['capacity'] ?? 'N/A' }}</td>
-                        <td>{{ number_format($item['amount_full'] ?? 0, 2) }}</td>
-                        <td>{{ number_format($item['amount_prorated'] ?? 0, 2) }}</td>
-                    </tr>
+            @php 
+                $itemIndex = 1;
+                // Extract adjustments and service items from line_items
+                $adjustments = [];
+                $prorationTotal = $amount;
+                $adjustmentTotal = 0;
+                $serviceItems = [];
+                
+                if (is_array($lineItems)) {
+                    // Check if metadata exists (new format with adjustments)
+                    if (isset($lineItems['_metadata'])) {
+                        $metadata = $lineItems['_metadata'];
+                        $adjustments = $metadata['adjustments'] ?? [];
+                        $prorationTotal = $metadata['proration_total'] ?? $amount;
+                        $adjustmentTotal = $metadata['adjustment_total'] ?? 0;
+                        // Get service items (all items except _metadata)
+                        $serviceItems = array_filter($lineItems, function($key) {
+                            return $key !== '_metadata';
+                        }, ARRAY_FILTER_USE_KEY);
+                    } else {
+                        // Old format: all items are service segments
+                        $serviceItems = $lineItems;
+                    }
+                }
+            @endphp
+            
+            {{-- Service/Port Charges Segments --}}
+            @if(!empty($serviceItems) && is_array($serviceItems))
+                @foreach($serviceItems as $item)
+                    @if(is_array($item) && isset($item['start']))
+                        <tr>
+                            <td>{{ $itemIndex++ }}</td>
+                            <td>
+                                Port Charges - {{ $item['capacity'] ?? 'N/A' }}<br>
+                                Plan: {{ $item['plan_label'] ?? (strtoupper($item['plan'] ?? 'N/A')) }}<br>
+                                Period: {{ \Carbon\Carbon::parse($item['start'])->format('d/m/Y') }} to {{ \Carbon\Carbon::parse($item['end'])->format('d/m/Y') }}
+                                ({{ $item['days'] ?? 0 }} days)
+                            </td>
+                            <td>1</td>
+                            <td>{{ $item['capacity'] ?? 'N/A' }}</td>
+                            <td>{{ number_format($item['amount_full'] ?? 0, 2) }}</td>
+                            <td>{{ number_format($item['amount_prorated'] ?? 0, 2) }}</td>
+                        </tr>
+                    @endif
                 @endforeach
             @else
                 <tr>
@@ -459,6 +489,38 @@
                     <td>{{ $portCapacity }}</td>
                     <td>{{ number_format($amount, 2) }}</td>
                     <td>{{ number_format($amount, 2) }}</td>
+                </tr>
+            @endif
+            
+            {{-- Adjustments from Previous Period --}}
+            @if(!empty($adjustments) && is_array($adjustments))
+                @foreach($adjustments as $adj)
+                    <tr>
+                        <td>{{ $itemIndex++ }}</td>
+                        <td>
+                            <strong>{{ ucfirst($adj['type'] ?? 'Adjustment') }} Adjustment</strong><br>
+                            <small class="text-muted">{{ $adj['description'] ?? 'Plan change adjustment' }}</small><br>
+                            @if(isset($adj['effective_from']) && $adj['effective_from'])
+                                <small class="text-muted">Effective from: {{ \Carbon\Carbon::parse($adj['effective_from'])->format('d/m/Y') }}</small>
+                            @endif
+                        </td>
+                        <td>-</td>
+                        <td>-</td>
+                        <td>-</td>
+                        <td>{{ number_format($adj['amount'] ?? 0, 2) }}</td>
+                    </tr>
+                @endforeach
+            @endif
+            
+            {{-- Subtotal Row --}}
+            @if(!empty($adjustments) && $adjustmentTotal != 0)
+                <tr style="background-color: #f8f9fa;">
+                    <td colspan="4" class="text-end"><strong>Subtotal (Service Charges)</strong></td>
+                    <td colspan="2" class="text-end"><strong>{{ number_format($prorationTotal, 2) }}</strong></td>
+                </tr>
+                <tr style="background-color: #f8f9fa;">
+                    <td colspan="4" class="text-end"><strong>Adjustments</strong></td>
+                    <td colspan="2" class="text-end"><strong>{{ number_format($adjustmentTotal, 2) }}</strong></td>
                 </tr>
             @endif
         </tbody>

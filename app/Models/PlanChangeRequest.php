@@ -25,6 +25,8 @@ class PlanChangeRequest extends Model
         'reviewed_by',
         'reviewed_at',
         'effective_from',
+        'adjustment_applied',
+        'adjustment_invoice_id',
     ];
 
     protected $casts = [
@@ -33,6 +35,7 @@ class PlanChangeRequest extends Model
         'adjustment_amount' => 'decimal:2',
         'reviewed_at' => 'datetime',
         'effective_from' => 'datetime',
+        'adjustment_applied' => 'boolean',
         'created_at' => 'datetime:Asia/Kolkata',
         'updated_at' => 'datetime:Asia/Kolkata',
     ];
@@ -67,5 +70,30 @@ class PlanChangeRequest extends Model
     public function history(): HasMany
     {
         return $this->hasMany(PlanChangeHistory::class, 'plan_change_request_id')->orderBy('created_at', 'desc');
+    }
+
+    /**
+     * Get the invoice where adjustment was applied.
+     */
+    public function adjustmentInvoice(): BelongsTo
+    {
+        return $this->belongsTo(Invoice::class, 'adjustment_invoice_id');
+    }
+
+    /**
+     * Check if this is a capacity change (upgrade/downgrade) vs billing cycle change.
+     */
+    public function isCapacityChange(): bool
+    {
+        return $this->current_port_capacity !== $this->new_port_capacity;
+    }
+
+    /**
+     * Check if this is a billing cycle change only.
+     */
+    public function isBillingCycleChangeOnly(): bool
+    {
+        return $this->current_port_capacity === $this->new_port_capacity 
+            && $this->current_billing_plan !== $this->new_billing_plan;
     }
 }

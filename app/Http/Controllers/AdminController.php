@@ -2758,7 +2758,18 @@ class AdminController extends Controller
             $prorationTotal = 0.0;
             $totalDays = max(1, $billingEndDate->diffInDays($billingStartDate));
 
-            $addSegment = function ($start, $end, $capacity, $plan) use ($getPortAmount, &$segments, &$prorationTotal, $totalDays) {
+            // Helper to get billing cycle period in days for proration
+            $getBillingCycleDays = function ($plan) {
+                $plan = strtolower(trim($plan));
+                return match($plan) {
+                    'annual', 'arc' => 365, // Annual period = 365 days
+                    'quarterly' => 90,      // Quarterly period = ~90 days (3 months)
+                    'monthly', 'mrc' => 30, // Monthly period = ~30 days
+                    default => 30,
+                };
+            };
+
+            $addSegment = function ($start, $end, $capacity, $plan) use ($getPortAmount, &$segments, &$prorationTotal, $getBillingCycleDays) {
                 if ($end->lte($start)) {
                     return;
                 }
@@ -2767,14 +2778,28 @@ class AdminController extends Controller
                     throw new Exception("No pricing found for capacity {$capacity} and plan {$plan}");
                 }
                 $segmentDays = $end->diffInDays($start);
-                $prorated = round(($fullAmount * $segmentDays) / $totalDays, 2);
+                
+                // Get the billing cycle period for this plan (annual=365, quarterly=90, monthly=30)
+                $billingCycleDays = $getBillingCycleDays($plan);
+                
+                // Prorate based on the plan's own billing cycle period, not the total billing period
+                // This handles cases like ARC (365 days) to MRC (30 days) correctly
+                $prorated = round(($fullAmount * $segmentDays) / $billingCycleDays, 2);
+                
                 $prorationTotal += $prorated;
                 $segments[] = [
                     'start' => $start->format('Y-m-d'),
                     'end' => $end->format('Y-m-d'),
                     'capacity' => $capacity,
                     'plan' => $plan,
+                    'plan_label' => match(strtolower($plan)) {
+                        'annual', 'arc' => 'Annual (ARC)',
+                        'quarterly' => 'Quarterly',
+                        'monthly', 'mrc' => 'Monthly (MRC)',
+                        default => ucfirst($plan),
+                    },
                     'days' => $segmentDays,
+                    'billing_cycle_days' => $billingCycleDays,
                     'amount_full' => $fullAmount,
                     'amount_prorated' => $prorated,
                 ];
@@ -2796,6 +2821,57 @@ class AdminController extends Controller
                 return back()->with('error', 'Unable to calculate charges. Please check plan and pricing configuration.');
             }
 
+            // Calculate adjustments from previous billing period's plan changes (capacity changes only)
+            // Adjustments are applied in the NEXT billing cycle after the change was effective
+            $adjustments = [];
+            $adjustmentTotal = 0.0;
+            
+            if ($lastPaidInvoice && $lastPaidInvoice->billing_start_date && $lastPaidInvoice->billing_end_date) {
+                // Find approved plan changes that were effective in the previous billing period
+                // but haven't been adjusted yet (capacity changes only, not billing cycle changes)
+                $previousPeriodStart = \Carbon\Carbon::parse($lastPaidInvoice->billing_start_date);
+                $previousPeriodEnd = \Carbon\Carbon::parse($lastPaidInvoice->billing_end_date);
+                
+                $pendingAdjustments = PlanChangeRequest::where('application_id', $application->id)
+                    ->where('status', 'approved')
+                    ->where('adjustment_applied', false)
+                    ->whereNotNull('effective_from')
+                    ->where(function ($query) use ($previousPeriodStart, $previousPeriodEnd) {
+                        // Changes that were effective during the previous billing period
+                        $query->whereBetween('effective_from', [$previousPeriodStart, $previousPeriodEnd])
+                            ->orWhere(function ($q) use ($previousPeriodStart, $previousPeriodEnd) {
+                                // Or changes that were effective before but adjustment not yet applied
+                                $q->where('effective_from', '<=', $previousPeriodEnd)
+                                  ->where('effective_from', '>=', $previousPeriodStart->copy()->subMonths(6)); // Within last 6 months
+                            });
+                    })
+                    ->get();
+                
+                foreach ($pendingAdjustments as $adjustment) {
+                    // Only apply adjustments for capacity changes (upgrade/downgrade)
+                    // Billing cycle changes don't create adjustments, they just change future billing
+                    if ($adjustment->isCapacityChange() && $adjustment->adjustment_amount != 0) {
+                        $adjustmentAmount = (float) $adjustment->adjustment_amount;
+                        $adjustmentTotal += $adjustmentAmount;
+                        
+                        $adjustments[] = [
+                            'plan_change_id' => $adjustment->id,
+                            'type' => $adjustment->change_type, // 'upgrade' or 'downgrade'
+                            'description' => $adjustment->change_type === 'upgrade' 
+                                ? "Upgrade adjustment: {$adjustment->current_port_capacity} → {$adjustment->new_port_capacity}"
+                                : "Downgrade adjustment: {$adjustment->current_port_capacity} → {$adjustment->new_port_capacity}",
+                            'effective_from' => $adjustment->effective_from ? $adjustment->effective_from->format('Y-m-d') : null,
+                            'amount' => $adjustmentAmount,
+                        ];
+                        
+                        Log::info("Adding adjustment for plan change {$adjustment->id}: {$adjustment->change_type}, amount: ₹{$adjustmentAmount}");
+                    }
+                }
+            }
+            
+            // Base amount is proration total + adjustments
+            $baseAmount = $prorationTotal + $adjustmentTotal;
+
             // Calculate GST based on state (IGST for non-Delhi, CGST+SGST for Delhi)
             $gstVerification = GstVerification::where('user_id', $application->user_id)
                 ->where('is_verified', true)
@@ -2807,16 +2883,16 @@ class AdminController extends Controller
             $isDelhi = strtolower($gstState ?? '') === 'delhi' || strtolower($gstState ?? '') === 'new delhi';
 
             if ($isDelhi) {
-                $cgstAmount = round(($prorationTotal * 9) / 100, 2);
-                $sgstAmount = round(($prorationTotal * 9) / 100, 2);
+                $cgstAmount = round(($baseAmount * 9) / 100, 2);
+                $sgstAmount = round(($baseAmount * 9) / 100, 2);
                 $gstAmount = $cgstAmount + $sgstAmount;
             } else {
-                $gstAmount = round(($prorationTotal * 18) / 100, 2);
+                $gstAmount = round(($baseAmount * 18) / 100, 2);
                 $cgstAmount = 0;
                 $sgstAmount = 0;
             }
 
-            $amount = $prorationTotal; // Prorated total
+            $amount = $baseAmount; // Prorated total + adjustments
             $totalAmount = round($amount + $gstAmount, 2);
 
             if ($amount <= 0 || $totalAmount <= 0) {
@@ -2824,8 +2900,9 @@ class AdminController extends Controller
                 return back()->with('error', 'Invalid invoice calculation. Please check port capacity and pricing configuration.');
             }
 
-            Log::info("Invoice calculation for application {$application->id}: prorated amount={$amount}, gstAmount={$gstAmount}, totalAmount={$totalAmount}", [
+            Log::info("Invoice calculation for application {$application->id}: prorated amount={$prorationTotal}, adjustments={$adjustmentTotal}, base amount={$baseAmount}, gstAmount={$gstAmount}, totalAmount={$totalAmount}", [
                 'segments' => $segments,
+                'adjustments' => $adjustments,
             ]);
 
             // Generate invoice number (ensure uniqueness)
@@ -2895,7 +2972,17 @@ class AdminController extends Controller
             
             Log::info("Creating invoice for application {$application->id}: invoiceNumber='{$invoiceNumber}', invoiceDate=" . now('Asia/Kolkata')->format('Y-m-d') . ", dueDate={$dueDateFormatted}, billingPeriod='{$billingPeriod}', billingPlan='{$billingPlan}'");
             
-            // Create invoice record
+            // Create invoice record with adjustments
+            // Structure line_items: segments array + adjustments metadata
+            $lineItemsData = $segments;
+            if (!empty($adjustments)) {
+                $lineItemsData['_metadata'] = [
+                    'adjustments' => $adjustments,
+                    'adjustment_total' => $adjustmentTotal,
+                    'proration_total' => $prorationTotal,
+                ];
+            }
+            
             $invoice = Invoice::create([
                 'application_id' => $application->id,
                 'invoice_number' => $invoiceNumber,
@@ -2904,7 +2991,7 @@ class AdminController extends Controller
                 'billing_period' => $billingPeriod,
                 'billing_start_date' => $billingStartDate->format('Y-m-d'),
                 'billing_end_date' => $billingEndDate->format('Y-m-d'),
-                'line_items' => $segments,
+                'line_items' => $lineItemsData,
                 'amount' => $amount,
                 'gst_amount' => $gstAmount,
                 'total_amount' => $totalAmount,
@@ -2913,6 +3000,17 @@ class AdminController extends Controller
                 'payu_payment_link' => json_encode($paymentData), // Store full payment data
                 'generated_by' => $admin->id,
             ]);
+            
+            // Mark adjustments as applied
+            if (!empty($adjustments)) {
+                foreach ($adjustments as $adj) {
+                    PlanChangeRequest::where('id', $adj['plan_change_id'])->update([
+                        'adjustment_applied' => true,
+                        'adjustment_invoice_id' => $invoice->id,
+                    ]);
+                }
+                Log::info("Marked " . count($adjustments) . " adjustments as applied for invoice {$invoice->id}");
+            }
             
             Log::info("Invoice created successfully: ID={$invoice->id}, due_date={$invoice->due_date}, billing_start_date={$invoice->billing_start_date}, billing_end_date={$invoice->billing_end_date}");
             
