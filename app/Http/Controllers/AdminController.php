@@ -2797,13 +2797,22 @@ class AdminController extends Controller
 
             $addSegment = function ($start, $end, $capacity, $plan) use ($getPortAmount, &$segments, &$prorationTotal, $getBillingCycleDays) {
                 if ($end->lte($start)) {
+                    Log::warning("Skipping segment: end date ({$end->format('Y-m-d')}) is before or equal to start date ({$start->format('Y-m-d')})");
                     return;
                 }
                 $fullAmount = $getPortAmount($capacity, $plan);
                 if ($fullAmount === null || $fullAmount <= 0) {
                     throw new Exception("No pricing found for capacity {$capacity} and plan {$plan}. Please ensure pricing is configured for this combination.");
                 }
-                $segmentDays = $end->diffInDays($start);
+                // Calculate days: diffInDays returns positive when called correctly
+                // $start->diffInDays($end) gives days from start to end (positive)
+                $segmentDays = $start->diffInDays($end);
+                
+                // Safety check: ensure positive days
+                if ($segmentDays <= 0) {
+                    Log::warning("Invalid segment days calculated: {$segmentDays} for start={$start->format('Y-m-d')}, end={$end->format('Y-m-d')}");
+                    return;
+                }
                 
                 // Get the billing cycle period for this plan (annual=365, quarterly=90, monthly=30)
                 $billingCycleDays = $getBillingCycleDays($plan);
