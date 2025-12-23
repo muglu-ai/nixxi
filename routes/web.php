@@ -223,6 +223,9 @@ Route::prefix('admin')->name('admin.')->middleware(['admin'])->group(function ()
         Route::post('/{id}/close', [AdminGrievanceController::class, 'close'])->name('close');
     });
 
+    // IX Account invoice manual payment
+    Route::post('/applications/invoice/{invoice}/mark-paid', [AdminController::class, 'ixAccountMarkInvoicePaid'])->name('applications.invoice.mark-paid');
+
     // Plan change routes
     Route::prefix('plan-change')->name('plan-change.')->group(function () {
         Route::get('/', [\App\Http\Controllers\AdminPlanChangeRequestController::class, 'index'])->name('index');

@@ -18,6 +18,7 @@ use App\Models\PanVerification;
 use App\Models\Invoice;
 use App\Models\PaymentTransaction;
 use App\Models\PaymentVerificationLog;
+use App\Models\PaymentVerificationLog;
 use App\Models\ProfileUpdateRequest;
 use App\Models\Registration;
 use App\Models\RocIecVerification;
@@ -35,6 +36,7 @@ use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use PDOException;
 
@@ -2989,6 +2991,108 @@ class AdminController extends Controller
             Log::error('Error generating invoice: '.$e->getMessage());
 
             return back()->with('error', 'An error occurred. Please try again.');
+        }
+    }
+
+    /**
+     * IX Account: Mark invoice as paid manually with payment ID and notes.
+     */
+    public function ixAccountMarkInvoicePaid(Request $request, $invoiceId)
+    {
+        try {
+            $admin = $this->getCurrentAdmin();
+
+            if (! $this->hasRole($admin, 'ix_account')) {
+                return back()->with('error', 'You do not have permission to perform this action.');
+            }
+
+            $invoice = Invoice::with('application.user')->findOrFail($invoiceId);
+
+            if (! $invoice->application || $invoice->application->application_type !== 'IX') {
+                return back()->with('error', 'Invalid invoice or application.');
+            }
+
+            if (! $invoice->application->is_active) {
+                return back()->with('error', 'Invoice can only be managed for LIVE applications.');
+            }
+
+            if ($invoice->status === 'paid') {
+                return back()->with('error', 'This invoice is already marked as paid.');
+            }
+
+            $validated = $request->validate([
+                'payment_id' => 'required|string|max:255',
+                'notes' => 'nullable|string|max:1000',
+            ]);
+
+            // Update invoice as paid with manual details
+            $invoice->update([
+                'status' => 'paid',
+                'paid_at' => now('Asia/Kolkata'),
+                'paid_by' => $admin->id,
+                'manual_payment_id' => $validated['payment_id'],
+                'manual_payment_notes' => $validated['notes'] ?? null,
+            ]);
+
+            // Create manual payment transaction record
+            PaymentTransaction::create([
+                'user_id' => $invoice->application->user_id,
+                'application_id' => $invoice->application_id,
+                'transaction_id' => 'MANUAL-'.time().'-'.strtoupper(Str::random(6)),
+                'payment_status' => 'success',
+                'payment_mode' => 'manual',
+                'payment_id' => $validated['payment_id'],
+                'amount' => $invoice->total_amount,
+                'currency' => 'INR',
+                'product_info' => 'Manual payment for invoice '.$invoice->invoice_number,
+                'response_message' => $validated['notes'] ?? 'Manual payment recorded by IX Account',
+            ]);
+
+            // Create payment verification log to avoid re-verification later
+            $billingPeriod = $invoice->billing_period;
+            $verificationType = $billingPeriod ? 'recurring' : 'initial';
+            $existingVerification = null;
+            if ($billingPeriod) {
+                $existingVerification = PaymentVerificationLog::where('application_id', $invoice->application_id)
+                    ->where('billing_period', $billingPeriod)
+                    ->first();
+            }
+
+            if (! $existingVerification) {
+                PaymentVerificationLog::create([
+                    'application_id' => $invoice->application_id,
+                    'verified_by' => $admin->id,
+                    'verification_type' => $verificationType,
+                    'billing_period' => $billingPeriod,
+                    'amount' => $invoice->total_amount,
+                    'currency' => 'INR',
+                    'payment_method' => 'manual',
+                    'notes' => $validated['notes'] ?? null,
+                    'verified_at' => now('Asia/Kolkata'),
+                ]);
+            }
+
+            // Inform user via message
+            Message::create([
+                'user_id' => $invoice->application->user_id,
+                'subject' => 'Payment Recorded',
+                'message' => "Your invoice {$invoice->invoice_number} has been marked as paid. Payment ID: {$validated['payment_id']}",
+                'is_read' => false,
+                'sent_by' => 'admin',
+            ]);
+
+            Log::info('Invoice marked as paid manually', [
+                'invoice_id' => $invoice->id,
+                'invoice_number' => $invoice->invoice_number,
+                'admin_id' => $admin->id,
+                'payment_id' => $validated['payment_id'],
+            ]);
+
+            return back()->with('success', 'Invoice marked as paid successfully.');
+        } catch (Exception $e) {
+            Log::error('Error marking invoice as paid manually: '.$e->getMessage());
+
+            return back()->with('error', 'Unable to mark invoice as paid. Please try again.');
         }
     }
 

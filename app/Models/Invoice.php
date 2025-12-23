@@ -21,10 +21,13 @@ class Invoice extends Model
         'currency',
         'status',
         'payu_payment_link',
+        'manual_payment_id',
+        'manual_payment_notes',
         'pdf_path',
         'generated_by',
         'sent_at',
         'paid_at',
+        'paid_by',
     ];
 
     protected $casts = [
@@ -55,5 +58,13 @@ class Invoice extends Model
     public function generatedBy(): BelongsTo
     {
         return $this->belongsTo(Admin::class, 'generated_by');
+    }
+
+    /**
+     * Admin who marked invoice as paid manually.
+     */
+    public function paidBy(): BelongsTo
+    {
+        return $this->belongsTo(Admin::class, 'paid_by');
     }
 }
