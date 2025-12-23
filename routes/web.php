@@ -227,6 +227,8 @@ Route::prefix('admin')->name('admin.')->middleware(['admin'])->group(function ()
     Route::post('/applications/invoice/{invoice}/mark-paid', [AdminController::class, 'ixAccountMarkInvoicePaid'])->name('applications.invoice.mark-paid');
     
     // IX Account payment allocation
+    Route::get('/applications/payment-allocation', [AdminController::class, 'showPaymentAllocationForm'])->name('applications.payment-allocation.form');
+    Route::get('/applications/search-users', [AdminController::class, 'searchUsersForAllocation'])->name('applications.search-users');
     Route::post('/applications/allocate-payment', [AdminController::class, 'ixAccountAllocatePayment'])->name('applications.allocate-payment');
     Route::get('/applications/user/{userId}/invoices', [AdminController::class, 'getUserInvoicesForAllocation'])->name('applications.user.invoices');
 

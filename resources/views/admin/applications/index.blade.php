@@ -17,30 +17,102 @@
     </div>
 </div>
 
-<!-- Search Form -->
+<!-- Filters and Search Form -->
 <div class="row mb-4">
     <div class="col-12">
-        <div class="card">
+        <div class="card border-0 shadow-sm" style="border-radius: 16px;">
             <div class="card-body">
                 <form method="GET" action="{{ route('admin.applications') }}" class="row g-3">
-                    <div class="col-md-10">
+                    @if(request('role'))
+                        <input type="hidden" name="role" value="{{ request('role') }}">
+                    @endif
+                    
+                    <!-- Search -->
+                    <div class="col-md-12 mb-3">
+                        <label class="form-label fw-bold">Search</label>
                         <input type="text" 
                                name="search" 
                                class="form-control" 
-                               placeholder="Search by application ID, applicant name, email, registration ID, or status..."
+                               placeholder="Search by application ID, applicant name, email, registration ID, membership ID, customer ID, mobile, or status..."
                                value="{{ request('search') }}">
                     </div>
-                    <div class="col-md-2">
-                        <button type="submit" class="btn btn-primary w-100">Search</button>
+                    
+                    <!-- Filters Row -->
+                    <div class="col-md-3">
+                        <label class="form-label fw-bold">Status</label>
+                        <select name="status" class="form-select">
+                            <option value="">All Status</option>
+                            <option value="approved" {{ request('status') === 'approved' ? 'selected' : '' }}>Approved</option>
+                            <option value="pending" {{ request('status') === 'pending' ? 'selected' : '' }}>Pending</option>
+                            <option value="ip_assigned" {{ request('status') === 'ip_assigned' ? 'selected' : '' }}>IP Assigned</option>
+                            <option value="invoice_pending" {{ request('status') === 'invoice_pending' ? 'selected' : '' }}>Invoice Pending</option>
+                            <option value="rejected" {{ request('status') === 'rejected' ? 'selected' : '' }}>Rejected</option>
+                        </select>
                     </div>
-                    @if(request('search'))
+                    
+                    <div class="col-md-3">
+                        <label class="form-label fw-bold">Assigned Role</label>
+                        <select name="role_filter" class="form-select">
+                            <option value="">All Roles</option>
+                            <option value="ix_processor" {{ request('role_filter') === 'ix_processor' ? 'selected' : '' }}>IX Processor</option>
+                            <option value="ix_legal" {{ request('role_filter') === 'ix_legal' ? 'selected' : '' }}>IX Legal</option>
+                            <option value="ix_head" {{ request('role_filter') === 'ix_head' ? 'selected' : '' }}>IX Head</option>
+                            <option value="ceo" {{ request('role_filter') === 'ceo' ? 'selected' : '' }}>CEO</option>
+                            <option value="nodal_officer" {{ request('role_filter') === 'nodal_officer' ? 'selected' : '' }}>Nodal Officer</option>
+                            <option value="ix_tech_team" {{ request('role_filter') === 'ix_tech_team' ? 'selected' : '' }}>IX Tech Team</option>
+                            <option value="ix_account" {{ request('role_filter') === 'ix_account' ? 'selected' : '' }}>IX Account</option>
+                        </select>
+                    </div>
+                    
+                    <div class="col-md-3">
+                        <label class="form-label fw-bold">Registration Date</label>
+                        <select name="registration_filter" class="form-select">
+                            <option value="">All Time</option>
+                            <option value="today" {{ request('registration_filter') === 'today' ? 'selected' : '' }}>Today</option>
+                            <option value="this_week" {{ request('registration_filter') === 'this_week' ? 'selected' : '' }}>This Week</option>
+                            <option value="this_month" {{ request('registration_filter') === 'this_month' ? 'selected' : '' }}>This Month</option>
+                            <option value="this_year" {{ request('registration_filter') === 'this_year' ? 'selected' : '' }}>This Year</option>
+                        </select>
+                    </div>
+                    
+                    <div class="col-md-3">
+                        <label class="form-label fw-bold">Live Status</label>
+                        <select name="is_active" class="form-select">
+                            <option value="">All</option>
+                            <option value="1" {{ request('is_active') === '1' ? 'selected' : '' }}>Live</option>
+                            <option value="0" {{ request('is_active') === '0' ? 'selected' : '' }}>Not Live</option>
+                        </select>
+                    </div>
+                    
+                    <div class="col-md-3">
+                        <label class="form-label fw-bold">Payment Status</label>
+                        <select name="payment_status" class="form-select">
+                            <option value="">All</option>
+                            <option value="pending" {{ request('payment_status') === 'pending' ? 'selected' : '' }}>Pending</option>
+                            <option value="partial" {{ request('payment_status') === 'partial' ? 'selected' : '' }}>Partial</option>
+                            <option value="paid" {{ request('payment_status') === 'paid' ? 'selected' : '' }}>Paid</option>
+                            <option value="overdue" {{ request('payment_status') === 'overdue' ? 'selected' : '' }}>Overdue</option>
+                        </select>
+                    </div>
+                    
+                    <!-- Action Buttons -->
+                    <div class="col-md-12">
+                        <button type="submit" class="btn btn-primary">Apply Filters</button>
+                        <a href="{{ route('admin.applications', ['role' => request('role')]) }}" class="btn btn-outline-secondary">Clear Filters</a>
+                    </div>
+                    
+                    @if(request('search') || request('status') || request('role_filter') || request('registration_filter') || request('is_active') || request('payment_status'))
                         <div class="col-12">
-                            <a href="{{ route('admin.applications') }}" class="btn btn-sm btn-outline-secondary">Clear Search</a>
-                            <small class="text-muted ms-2">Showing results for: <strong>{{ request('search') }}</strong></small>
+                            <small class="text-muted">
+                                Active filters: 
+                                @if(request('search'))<span class="badge bg-info">{{ request('search') }}</span>@endif
+                                @if(request('status'))<span class="badge bg-info">Status: {{ request('status') }}</span>@endif
+                                @if(request('role_filter'))<span class="badge bg-info">Role: {{ request('role_filter') }}</span>@endif
+                                @if(request('registration_filter'))<span class="badge bg-info">Date: {{ request('registration_filter') }}</span>@endif
+                                @if(request('is_active'))<span class="badge bg-info">Live: {{ request('is_active') === '1' ? 'Yes' : 'No' }}</span>@endif
+                                @if(request('payment_status'))<span class="badge bg-info">Payment: {{ request('payment_status') }}</span>@endif
+                            </small>
                         </div>
-                    @endif
-                    @if(request('role'))
-                        <input type="hidden" name="role" value="{{ request('role') }}">
                     @endif
                 </form>
             </div>

@@ -3518,6 +3518,71 @@ class AdminController extends Controller
     }
 
     /**
+     * IX Account: Show payment allocation form.
+     */
+    public function showPaymentAllocationForm(Request $request)
+    {
+        try {
+            $admin = $this->getCurrentAdmin();
+
+            if (! $this->hasRole($admin, 'ix_account')) {
+                return redirect()->route('admin.dashboard')
+                    ->with('error', 'You do not have permission to access this page.');
+            }
+
+            return view('admin.payment-allocation.form', compact('admin'));
+        } catch (Exception $e) {
+            Log::error('Error loading payment allocation form: '.$e->getMessage());
+
+            return redirect()->route('admin.dashboard')
+                ->with('error', 'Unable to load payment allocation form. Please try again.');
+        }
+    }
+
+    /**
+     * IX Account: Search users for payment allocation (JSON API).
+     */
+    public function searchUsersForAllocation(Request $request)
+    {
+        try {
+            $admin = $this->getCurrentAdmin();
+
+            if (! $this->hasRole($admin, 'ix_account')) {
+                return response()->json(['error' => 'Unauthorized'], 403);
+            }
+
+            $query = $request->input('q', '');
+            
+            if (strlen($query) < 2) {
+                return response()->json(['users' => []]);
+            }
+
+            $users = Registration::where(function ($q) use ($query) {
+                $q->where('fullname', 'like', "%{$query}%")
+                  ->orWhere('email', 'like', "%{$query}%")
+                  ->orWhere('mobile', 'like', "%{$query}%")
+                  ->orWhere('registrationid', 'like', "%{$query}%");
+            })
+            ->limit(20)
+            ->get()
+            ->map(function ($user) {
+                return [
+                    'id' => $user->id,
+                    'name' => $user->fullname,
+                    'email' => $user->email,
+                    'mobile' => $user->mobile,
+                    'registration_id' => $user->registrationid,
+                ];
+            });
+
+            return response()->json(['users' => $users]);
+        } catch (Exception $e) {
+            Log::error('Error searching users for allocation: '.$e->getMessage());
+            return response()->json(['error' => 'Unable to search users'], 500);
+        }
+    }
+
+    /**
      * IX Account: Get user invoices for payment allocation.
      */
     public function getUserInvoicesForAllocation(Request $request, $userId)
