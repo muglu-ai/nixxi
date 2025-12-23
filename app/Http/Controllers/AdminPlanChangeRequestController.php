@@ -112,7 +112,9 @@ class AdminPlanChangeRequestController extends Controller
             // Determine effective_from date
             // For billing cycle changes: effective after current paid period ends
             // For capacity changes: can be immediate or future date
-            $effectiveFrom = $validated['effective_from'] ?? now('Asia/Kolkata');
+            $effectiveFrom = $validated['effective_from'] 
+                ? \Carbon\Carbon::parse($validated['effective_from']) 
+                : now('Asia/Kolkata');
             
             // If it's a billing cycle change only (no capacity change), 
             // set effective_from to after current paid period
