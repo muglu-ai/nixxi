@@ -2835,10 +2835,17 @@ class AdminController extends Controller
                 $basePlanNormalized = 'mrc';
             }
             
-            // Get changes that occur DURING this billing period (between start and end)
+            // Get changes that occur DURING this billing period (between start and end, excluding end date)
+            // Changes on the end date should apply to the NEXT billing period, not this one
             $futureChanges = $approvedPlanChanges->filter(function ($c) use ($billingStartDate, $billingEndDate) {
                 return $c->effective_from && $c->effective_from->gte($billingStartDate) && $c->effective_from->lt($billingEndDate);
-            })->values();
+            })->sortBy('effective_from')->values();
+            
+            // Log all changes for debugging
+            Log::info("Billing period: {$billingStartDate->format('Y-m-d')} to {$billingEndDate->format('Y-m-d')}, Base capacity: {$baseCapacity}, Changes in period: " . $futureChanges->count());
+            foreach ($futureChanges as $change) {
+                Log::info("Plan change in period: {$change->current_port_capacity} → {$change->new_port_capacity} effective from {$change->effective_from->format('Y-m-d')} (ID: {$change->id})");
+            }
 
             $segmentStart = $billingStartDate->copy();
             $currentCapacity = $baseCapacity;
@@ -2912,15 +2919,16 @@ class AdminController extends Controller
             foreach ($futureChanges as $change) {
                 $changeDate = $change->effective_from->copy();
                 
-                // Only process if change date is after segment start and before billing end
-                if ($changeDate->gt($segmentStart) && $changeDate->lt($billingEndDate)) {
+                // Process if change date is after segment start and on or before billing end
+                if ($changeDate->gt($segmentStart) && $changeDate->lte($billingEndDate)) {
                     // Add segment for the period before this change
                     $addSegment($segmentStart, $changeDate, $currentCapacity, $currentPlan);
                     
                     // Update capacity if this is a capacity change
                     if ($change->isCapacityChange() && $change->new_port_capacity) {
+                        $oldCapacity = $currentCapacity;
                         $currentCapacity = $change->new_port_capacity;
-                        Log::info("Port capacity change during billing: {$change->current_port_capacity} → {$change->new_port_capacity} effective from {$changeDate->format('Y-m-d')}");
+                        Log::info("Port capacity change during billing: {$oldCapacity} → {$currentCapacity} effective from {$changeDate->format('Y-m-d')}");
                     }
                     
                     // Billing cycle changes should NOT apply during current billing cycle
@@ -2933,8 +2941,9 @@ class AdminController extends Controller
             }
 
             // Add final segment from last change (or start) to billing end date
-            // Only add if there's remaining time
+            // Only add if there's remaining time and we haven't reached the end
             if ($segmentStart->lt($billingEndDate)) {
+                Log::info("Adding final segment: {$segmentStart->format('Y-m-d')} to {$billingEndDate->format('Y-m-d')} with capacity {$currentCapacity}");
                 $addSegment($segmentStart, $billingEndDate->copy(), $currentCapacity, $currentPlan);
             }
             
