@@ -18,3 +18,9 @@ Schedule::command('payments:send-reminders')
 Schedule::command('tickets:escalate')
     ->hourly()
     ->timezone('Asia/Kolkata');
+
+// Schedule plan changes auto-update to run daily
+Schedule::command('plan-changes:auto-update')
+    ->daily()
+    ->at('00:01')
+    ->timezone('Asia/Kolkata');

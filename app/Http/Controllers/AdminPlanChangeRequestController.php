@@ -141,26 +141,11 @@ class AdminPlanChangeRequestController extends Controller
                 'effective_from' => $effectiveFrom,
             ]);
 
-            // Update application data immediately for capacity changes
-            // For billing cycle changes, the new cycle will be used in next invoice generation
+            // DO NOT update application immediately - it will be auto-updated when effective_from date arrives
+            // This allows users to see when their plan will change and prevents multiple changes before effective date
             if ($planChangeRequest->isCapacityChange()) {
-                // Capacity change: update immediately
-                $appData['port_selection'] = [
-                    'capacity' => $planChangeRequest->new_port_capacity,
-                    'billing_plan' => $planChangeRequest->new_billing_plan ?? $appData['port_selection']['billing_plan'] ?? 'monthly',
-                    'amount' => $planChangeRequest->new_amount,
-                    'currency' => 'INR',
-                ];
-
-                $application->update([
-                    'application_data' => $appData,
-                    'assigned_port_capacity' => $planChangeRequest->new_port_capacity,
-                ]);
+                Log::info("Plan change approved for application {$application->id}: {$planChangeRequest->current_port_capacity} → {$planChangeRequest->new_port_capacity} will take effect on {$effectiveFrom->format('Y-m-d')}. Application will be auto-updated on that date.");
             } else {
-                // Billing cycle change only: update billing_cycle but it takes effect after current paid period
-                $application->update([
-                    'billing_cycle' => $planChangeRequest->new_billing_plan,
-                ]);
                 Log::info("Billing cycle change approved for application {$application->id}: new cycle '{$planChangeRequest->new_billing_plan}' will be used after {$effectiveFrom->format('Y-m-d')}");
             }
 

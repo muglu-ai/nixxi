@@ -51,10 +51,32 @@ class PlanChangeRequestController extends Controller
                     ->with('error', 'You already have a pending plan change request for this application.');
             }
 
+            // Check if there's an approved request that hasn't taken effect yet
+            $approvedNotEffective = PlanChangeRequest::where('application_id', $applicationId)
+                ->where('status', 'approved')
+                ->whereNotNull('effective_from')
+                ->where('effective_from', '>', now('Asia/Kolkata'))
+                ->latest('effective_from')
+                ->first();
+
+            if ($approvedNotEffective) {
+                $effectiveDate = \Carbon\Carbon::parse($approvedNotEffective->effective_from)->format('d/m/Y');
+                return redirect()->route('user.applications.show', $applicationId)
+                    ->with('error', "You cannot request a new plan change until your approved plan change takes effect on {$effectiveDate}. Your plan will be automatically updated from {$approvedNotEffective->current_port_capacity} to {$approvedNotEffective->new_port_capacity} on that date.");
+            }
+
             // Get current port details
             $appData = $application->application_data ?? [];
             $portSelection = $appData['port_selection'] ?? [];
             $locationData = $appData['location'] ?? [];
+
+            // Check if there's an approved request that hasn't taken effect yet
+            $approvedNotEffective = PlanChangeRequest::where('application_id', $applicationId)
+                ->where('status', 'approved')
+                ->whereNotNull('effective_from')
+                ->where('effective_from', '>', now('Asia/Kolkata'))
+                ->latest('effective_from')
+                ->first();
 
             // Get available port capacities (only those with valid pricing)
             $nodeType = $locationData['node_type'] ?? 'edge';
@@ -67,7 +89,7 @@ class PlanChangeRequestController extends Controller
                     return $pricing->hasAnyPricing();
                 });
 
-            return view('user.plan-change.create', compact('application', 'portSelection', 'availablePorts'));
+            return view('user.plan-change.create', compact('application', 'portSelection', 'availablePorts', 'approvedNotEffective'));
         } catch (Exception $e) {
             Log::error('Error loading plan change form: '.$e->getMessage());
 
@@ -100,6 +122,20 @@ class PlanChangeRequestController extends Controller
                 'new_billing_plan' => 'required|in:arc,mrc,quarterly',
                 'reason' => 'required|string|min:10|max:500',
             ]);
+
+            // Check if there's an approved request that hasn't taken effect yet
+            $approvedNotEffective = PlanChangeRequest::where('application_id', $applicationId)
+                ->where('status', 'approved')
+                ->whereNotNull('effective_from')
+                ->where('effective_from', '>', now('Asia/Kolkata'))
+                ->latest('effective_from')
+                ->first();
+
+            if ($approvedNotEffective) {
+                $effectiveDate = \Carbon\Carbon::parse($approvedNotEffective->effective_from)->format('d/m/Y');
+                return back()->withInput()
+                    ->with('error', "You cannot request a new plan change until your approved plan change takes effect on {$effectiveDate}. Your plan will be automatically updated from {$approvedNotEffective->current_port_capacity} to {$approvedNotEffective->new_port_capacity} on that date.");
+            }
 
             // Get current port details
             $appData = $application->application_data ?? [];

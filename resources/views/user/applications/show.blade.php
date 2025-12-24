@@ -82,7 +82,25 @@ use Illuminate\Support\Facades\Storage;
                             <th>Assigned Port Capacity:</th>
                             <td>
                                 <strong>{{ $application->assigned_port_capacity }}</strong>
-                                @if($application->application_type === 'IX' && $application->assigned_port_capacity && in_array($application->status, ['approved', 'payment_verified', 'ip_assigned', 'invoice_pending']))
+                                @php
+                                    $pendingPlanChange = \App\Models\PlanChangeRequest::where('application_id', $application->id)
+                                        ->where('status', 'pending')
+                                        ->first();
+                                    
+                                    $approvedNotEffective = \App\Models\PlanChangeRequest::where('application_id', $application->id)
+                                        ->where('status', 'approved')
+                                        ->whereNotNull('effective_from')
+                                        ->where('effective_from', '>', now('Asia/Kolkata'))
+                                        ->latest('effective_from')
+                                        ->first();
+                                    
+                                    $canChangePlan = $application->application_type === 'IX' 
+                                        && $application->assigned_port_capacity 
+                                        && in_array($application->status, ['approved', 'payment_verified', 'ip_assigned', 'invoice_pending'])
+                                        && !$pendingPlanChange 
+                                        && !$approvedNotEffective;
+                                @endphp
+                                @if($canChangePlan)
                                 <a href="{{ route('user.plan-change.create', $application->id) }}" class="btn btn-sm btn-primary ms-2">
                                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
                                         <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z"/>
@@ -90,6 +108,14 @@ use Illuminate\Support\Facades\Storage;
                                     </svg>
                                     Change Plan
                                 </a>
+                                @elseif($approvedNotEffective)
+                                <span class="badge bg-info ms-2" title="Plan change is scheduled">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16" class="me-1">
+                                        <path d="M8 3.5a.5.5 0 0 0-1 0V9a.5.5 0 0 0 .252.434l3.5 2a.5.5 0 0 0 .496-.868L8 8.71V3.5z"/>
+                                        <path d="M8 16A8 8 0 1 0 8 0a8 8 0 0 0 0 16zm7-8A7 7 0 1 1 1 8a7 7 0 0 1 14 0z"/>
+                                    </svg>
+                                    Change Scheduled
+                                </span>
                                 @endif
                             </td>
                         </tr>
@@ -101,16 +127,47 @@ use Illuminate\Support\Facades\Storage;
                         </tr>
                         @endif
                         @php
-                            $pendingPlanChange = \App\Models\PlanChangeRequest::where('application_id', $application->id)
-                                ->where('status', 'pending')
-                                ->first();
+                            if (!isset($pendingPlanChange)) {
+                                $pendingPlanChange = \App\Models\PlanChangeRequest::where('application_id', $application->id)
+                                    ->where('status', 'pending')
+                                    ->first();
+                            }
+                            
+                            if (!isset($approvedNotEffective)) {
+                                $approvedNotEffective = \App\Models\PlanChangeRequest::where('application_id', $application->id)
+                                    ->where('status', 'approved')
+                                    ->whereNotNull('effective_from')
+                                    ->where('effective_from', '>', now('Asia/Kolkata'))
+                                    ->latest('effective_from')
+                                    ->first();
+                            }
                         @endphp
                         @if($pendingPlanChange)
                         <tr>
                             <th>Plan Change Request:</th>
                             <td>
-                                <span class="badge bg-warning">Pending</span>
+                                <span class="badge bg-warning">Pending Approval</span>
                                 <small class="text-muted ms-2">Requested: {{ $pendingPlanChange->new_port_capacity }} ({{ strtoupper($pendingPlanChange->new_billing_plan) }})</small>
+                            </td>
+                        </tr>
+                        @endif
+                        @if($approvedNotEffective)
+                        <tr>
+                            <th>Upcoming Plan Change:</th>
+                            <td>
+                                <span class="badge bg-success">Approved</span>
+                                <small class="text-muted ms-2">
+                                    Will change from <strong>{{ $approvedNotEffective->current_port_capacity }}</strong> to <strong>{{ $approvedNotEffective->new_port_capacity }}</strong> 
+                                    on <strong>{{ \Carbon\Carbon::parse($approvedNotEffective->effective_from)->format('d/m/Y') }}</strong>
+                                </small>
+                                <br>
+                                <small class="text-info mt-1 d-block">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="currentColor" viewBox="0 0 16 16" class="me-1">
+                                        <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z"/>
+                                        <path d="m8.93 6.588-2.29.287-.082.38.45.083c.294.07.352.176.288.469l-.738 3.468c-.194.897.105 1.319.808 1.319.545 0 1.178-.252 1.465-.598l.088-.416c-.2.176-.492.246-.686.246-.275 0-.375-.193-.304-.533L8.93 6.588zM9 4.5a1 1 0 1 1-2 0 1 1 0 0 1 2 0z"/>
+                                    </svg>
+                                    Your plan will be automatically updated on this date. You cannot request another change until then.
+                                </small>
                             </td>
                         </tr>
                         @endif

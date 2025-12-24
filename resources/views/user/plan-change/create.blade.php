@@ -19,6 +19,28 @@
 
 <div class="row">
     <div class="col-md-8">
+        @if($approvedNotEffective)
+        <div class="alert alert-info mb-4">
+            <h6 class="alert-heading">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" viewBox="0 0 16 16" class="me-2">
+                    <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z"/>
+                    <path d="m8.93 6.588-2.29.287-.082.38.45.083c.294.07.352.176.288.469l-.738 3.468c-.194.897.105 1.319.808 1.319.545 0 1.178-.252 1.465-.598l.088-.416c-.2.176-.492.246-.686.246-.275 0-.375-.193-.304-.533L8.93 6.588zM9 4.5a1 1 0 1 1-2 0 1 1 0 0 1 2 0z"/>
+                </svg>
+                Plan Change Already Approved
+            </h6>
+            <p class="mb-2">
+                You have an approved plan change that will take effect on <strong>{{ \Carbon\Carbon::parse($approvedNotEffective->effective_from)->format('d/m/Y') }}</strong>.
+            </p>
+            <p class="mb-0">
+                <strong>Change:</strong> {{ $approvedNotEffective->current_port_capacity }} → {{ $approvedNotEffective->new_port_capacity }} 
+                ({{ strtoupper($approvedNotEffective->new_billing_plan) }})
+            </p>
+            <p class="mb-0 mt-2">
+                <small>Your plan will be automatically updated on the effective date. You cannot request another change until then.</small>
+            </p>
+        </div>
+        @endif
+
         <div class="card shadow-sm mb-4">
             <div class="card-header bg-primary text-white">
                 <h5 class="mb-0">Current Plan Details</h5>
@@ -35,6 +57,20 @@
             </div>
         </div>
 
+        @if($approvedNotEffective)
+        <div class="card shadow-sm">
+            <div class="card-header bg-secondary text-white">
+                <h5 class="mb-0">Request New Plan</h5>
+            </div>
+            <div class="card-body">
+                <div class="alert alert-warning">
+                    <strong>Cannot Submit New Request:</strong> You have an approved plan change that will take effect on {{ \Carbon\Carbon::parse($approvedNotEffective->effective_from)->format('d/m/Y') }}. 
+                    Please wait until that date to request another change.
+                </div>
+                <a href="{{ route('user.applications.show', $application->id) }}" class="btn btn-secondary">Back to Application</a>
+            </div>
+        </div>
+        @else
         <div class="card shadow-sm">
             <div class="card-header bg-info text-white">
                 <h5 class="mb-0">Request New Plan</h5>
@@ -105,6 +141,7 @@
                 </form>
             </div>
         </div>
+        @endif
     </div>
 </div>
 
