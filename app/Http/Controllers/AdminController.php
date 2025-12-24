@@ -2781,15 +2781,42 @@ class AdminController extends Controller
             $approvedPlanChanges = PlanChangeRequest::where('application_id', $application->id)
                 ->where('status', 'approved')
                 ->whereNotNull('effective_from')
-                ->orderBy('effective_from')
+                ->orderBy('effective_from', 'asc')
                 ->get();
 
-            $baseCapacity = $application->assigned_port_capacity ?? ($applicationData['port_selection']['capacity'] ?? null);
+            // Determine the capacity at the START of the billing period
             $basePlan = $billingPlan;
-            foreach ($approvedPlanChanges as $change) {
-                if ($change->effective_from && $change->effective_from->lt($billingStartDate)) {
-                    $baseCapacity = $change->new_port_capacity ?? $baseCapacity;
-                    $basePlan = $change->new_billing_plan ? strtolower($change->new_billing_plan) : $basePlan;
+            
+            // Find the first change that occurs DURING this billing period
+            $firstChangeInPeriod = $approvedPlanChanges
+                ->filter(function ($change) use ($billingStartDate, $billingEndDate) {
+                    return $change->effective_from && $change->effective_from->gte($billingStartDate) && $change->effective_from->lt($billingEndDate);
+                })
+                ->sortBy('effective_from')
+                ->first();
+            
+            if ($firstChangeInPeriod && $firstChangeInPeriod->isCapacityChange()) {
+                // If there's a capacity change during this period, the capacity at START is the CURRENT capacity from that change
+                $baseCapacity = $firstChangeInPeriod->current_port_capacity;
+                Log::info("Capacity change during billing period: Starting with {$baseCapacity} (will change to {$firstChangeInPeriod->new_port_capacity} on {$firstChangeInPeriod->effective_from->format('Y-m-d')})");
+            } else {
+                // No capacity change during this period, find the most recent change before this period
+                $lastChangeBeforePeriod = $approvedPlanChanges
+                    ->filter(function ($change) use ($billingStartDate) {
+                        return $change->effective_from && $change->effective_from->lt($billingStartDate);
+                    })
+                    ->sortByDesc('effective_from')
+                    ->first();
+                
+                if ($lastChangeBeforePeriod && $lastChangeBeforePeriod->new_port_capacity) {
+                    // Use the capacity from the last change before this period
+                    $baseCapacity = $lastChangeBeforePeriod->new_port_capacity;
+                    if ($lastChangeBeforePeriod->new_billing_plan) {
+                        $basePlan = strtolower($lastChangeBeforePeriod->new_billing_plan);
+                    }
+                } else {
+                    // No changes, use initial capacity from application
+                    $baseCapacity = $applicationData['port_selection']['capacity'] ?? $application->assigned_port_capacity ?? null;
                 }
             }
 
@@ -2808,6 +2835,7 @@ class AdminController extends Controller
                 $basePlanNormalized = 'mrc';
             }
             
+            // Get changes that occur DURING this billing period (between start and end)
             $futureChanges = $approvedPlanChanges->filter(function ($c) use ($billingStartDate, $billingEndDate) {
                 return $c->effective_from && $c->effective_from->gte($billingStartDate) && $c->effective_from->lt($billingEndDate);
             })->values();
@@ -2846,51 +2874,77 @@ class AdminController extends Controller
                 }
                 
                 $prorationTotal += $prorated;
+                
+                // Create user-friendly description
+                $planLabel = match(strtolower($plan)) {
+                    'annual', 'arc' => 'Annual (ARC)',
+                    'quarterly' => 'Quarterly',
+                    'monthly', 'mrc' => 'Monthly (MRC)',
+                    default => ucfirst($plan),
+                };
+                
+                $startFormatted = \Carbon\Carbon::parse($start)->format('d/m/Y');
+                $endFormatted = \Carbon\Carbon::parse($end)->format('d/m/Y');
+                
+                $description = "IX Service - {$capacity} Port Capacity ({$planLabel})";
+                if ($segmentDays < $billingCycleDays) {
+                    $description .= " - Period: {$startFormatted} to {$endFormatted} ({$segmentDays} days)";
+                }
+                
                 $segments[] = [
                     'start' => $start->format('Y-m-d'),
                     'end' => $end->format('Y-m-d'),
                     'capacity' => $capacity,
                     'plan' => $plan,
-                    'plan_label' => match(strtolower($plan)) {
-                        'annual', 'arc' => 'Annual (ARC)',
-                        'quarterly' => 'Quarterly',
-                        'monthly', 'mrc' => 'Monthly (MRC)',
-                        default => ucfirst($plan),
-                    },
+                    'plan_label' => $planLabel,
                     'days' => $segmentDays,
                     'billing_cycle_days' => $billingCycleDays,
                     'amount_full' => $fullAmount,
                     'amount_prorated' => $prorated,
-                    'description' => "IX Service - {$capacity} Port Capacity ({$plan})",
+                    'description' => $description,
                     'quantity' => 1,
                     'rate' => $fullAmount,
                     'amount' => $prorated,
                 ];
             };
 
+            // Process changes in chronological order
             foreach ($futureChanges as $change) {
-                $segmentEnd = $change->effective_from->copy();
-                if ($segmentEnd->gt($segmentStart)) {
+                $changeDate = $change->effective_from->copy();
+                
+                // Only process if change date is after segment start and before billing end
+                if ($changeDate->gt($segmentStart) && $changeDate->lt($billingEndDate)) {
                     // Add segment for the period before this change
-                    $addSegment($segmentStart, $segmentEnd, $currentCapacity, $currentPlan);
+                    $addSegment($segmentStart, $changeDate, $currentCapacity, $currentPlan);
+                    
+                    // Update capacity if this is a capacity change
+                    if ($change->isCapacityChange() && $change->new_port_capacity) {
+                        $currentCapacity = $change->new_port_capacity;
+                        Log::info("Port capacity change during billing: {$change->current_port_capacity} → {$change->new_port_capacity} effective from {$changeDate->format('Y-m-d')}");
+                    }
+                    
+                    // Billing cycle changes should NOT apply during current billing cycle
+                    // They will only affect the NEXT billing cycle calculation
+                    // So we keep using the current plan for the rest of this billing period
+                    
+                    // Move segment start to the change date
+                    $segmentStart = $changeDate;
                 }
-                
-                // Port capacity changes apply immediately during the billing cycle
-                if ($change->isCapacityChange() && $change->new_port_capacity) {
-                    $currentCapacity = $change->new_port_capacity;
-                }
-                
-                // Billing cycle changes should NOT apply during current billing cycle
-                // They will only affect the NEXT billing cycle calculation
-                // So we keep using the current plan for the rest of this billing period
-                // The new billing cycle will be used when calculating the next invoice
-                
-                $segmentStart = $change->effective_from->copy();
             }
 
             // Add final segment from last change (or start) to billing end date
-            // Use current capacity (may have changed) but keep current plan (billing cycle doesn't change mid-cycle)
-            $addSegment($segmentStart, $billingEndDate->copy(), $currentCapacity, $currentPlan);
+            // Only add if there's remaining time
+            if ($segmentStart->lt($billingEndDate)) {
+                $addSegment($segmentStart, $billingEndDate->copy(), $currentCapacity, $currentPlan);
+            }
+            
+            // Remove any duplicate or zero-day segments
+            $segments = array_filter($segments, function($seg) {
+                return isset($seg['days']) && $seg['days'] > 0 && isset($seg['amount']) && $seg['amount'] > 0;
+            });
+            
+            // Re-index array to ensure proper ordering
+            $segments = array_values($segments);
 
             if ($prorationTotal <= 0) {
                 return ['error' => 'Unable to calculate charges. Please check plan and pricing configuration.'];
