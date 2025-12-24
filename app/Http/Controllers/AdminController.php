@@ -2819,7 +2819,16 @@ class AdminController extends Controller
                 $segmentDays = $start->diffInDays($end);
                 if ($segmentDays <= 0) return;
                 $billingCycleDays = $getBillingCycleDays($plan);
-                $prorated = round(($fullAmount * $segmentDays) / $billingCycleDays, 2);
+                
+                // For monthly plans, use full amount if period is close to a month (28-31 days)
+                // For other plans, prorate based on actual days
+                $planLower = strtolower($plan);
+                if (in_array($planLower, ['monthly', 'mrc']) && $segmentDays >= 28 && $segmentDays <= 31) {
+                    $prorated = $fullAmount; // Use full monthly rate
+                } else {
+                    $prorated = round(($fullAmount * $segmentDays) / $billingCycleDays, 2);
+                }
+                
                 $prorationTotal += $prorated;
                 $segments[] = [
                     'start' => $start->format('Y-m-d'),
