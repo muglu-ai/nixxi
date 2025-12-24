@@ -226,6 +226,13 @@ Route::prefix('admin')->name('admin.')->middleware(['admin'])->group(function ()
     // IX Account invoice manual payment
     Route::post('/applications/invoice/{invoice}/mark-paid', [AdminController::class, 'ixAccountMarkInvoicePaid'])->name('applications.invoice.mark-paid');
     
+    // IX Account invoice management
+    Route::get('/applications/invoice/{invoice}/edit', [AdminController::class, 'ixAccountEditInvoice'])->name('applications.invoice.edit');
+    Route::put('/applications/invoice/{invoice}', [AdminController::class, 'ixAccountUpdateInvoice'])->name('applications.invoice.update');
+    Route::delete('/applications/invoice/{invoice}', [AdminController::class, 'ixAccountDeleteInvoice'])->name('applications.invoice.delete');
+    Route::post('/applications/invoice/{invoice}/change-status', [AdminController::class, 'ixAccountChangeInvoiceStatus'])->name('applications.invoice.change-status');
+    Route::post('/applications/invoice/{invoice}/mark-unpaid', [AdminController::class, 'ixAccountMarkInvoiceUnpaid'])->name('applications.invoice.mark-unpaid');
+    
     // IX Account payment allocation
     Route::get('/applications/payment-allocation', [AdminController::class, 'showPaymentAllocationForm'])->name('applications.payment-allocation.form');
     Route::get('/applications/search-users', [AdminController::class, 'searchUsersForAllocation'])->name('applications.search-users');

@@ -21,6 +21,7 @@ use App\Models\PaymentTransaction;
 use App\Models\PaymentVerificationLog;
 use App\Models\PlanChangeRequest;
 use App\Models\ProfileUpdateRequest;
+use App\Http\Requests\UpdateInvoiceRequest;
 use App\Models\Registration;
 use App\Models\RocIecVerification;
 use App\Models\Ticket;
@@ -4264,6 +4265,287 @@ class AdminController extends Controller
             
             default:
                 return $billingPeriod;
+        }
+    }
+
+    /**
+     * IX Account: Show invoice edit form.
+     */
+    public function ixAccountEditInvoice($invoiceId)
+    {
+        try {
+            $admin = $this->getCurrentAdmin();
+
+            if (! $this->hasRole($admin, 'ix_account')) {
+                return back()->with('error', 'You do not have permission to perform this action.');
+            }
+
+            $invoice = Invoice::with(['application.user', 'generatedBy', 'paidBy'])
+                ->whereHas('application', function ($q) {
+                    $q->where('application_type', 'IX');
+                })
+                ->findOrFail($invoiceId);
+
+            if (! $invoice->application->is_active) {
+                return back()->with('error', 'Invoice can only be managed for LIVE applications.');
+            }
+
+            return view('admin.invoices.edit', compact('invoice', 'admin'));
+        } catch (Exception $e) {
+            Log::error('Error loading invoice edit form: '.$e->getMessage());
+
+            return back()->with('error', 'Unable to load invoice edit form.');
+        }
+    }
+
+    /**
+     * IX Account: Update invoice.
+     */
+    public function ixAccountUpdateInvoice(\App\Http\Requests\UpdateInvoiceRequest $request, $invoiceId)
+    {
+        try {
+            $admin = $this->getCurrentAdmin();
+
+            if (! $this->hasRole($admin, 'ix_account')) {
+                return back()->with('error', 'You do not have permission to perform this action.');
+            }
+
+            $invoice = Invoice::with('application')
+                ->whereHas('application', function ($q) {
+                    $q->where('application_type', 'IX');
+                })
+                ->findOrFail($invoiceId);
+
+            if (! $invoice->application->is_active) {
+                return back()->with('error', 'Invoice can only be managed for LIVE applications.');
+            }
+
+            $validated = $request->validated();
+
+            // Prepare line items
+            $lineItems = [];
+            if (isset($validated['line_items']) && is_array($validated['line_items'])) {
+                foreach ($validated['line_items'] as $item) {
+                    if (!empty($item['description'])) {
+                        $lineItems[] = [
+                            'description' => $item['description'],
+                            'quantity' => $item['quantity'] ?? 1,
+                            'rate' => $item['rate'] ?? 0,
+                            'amount' => $item['amount'] ?? 0,
+                        ];
+                    }
+                }
+            }
+
+            // Update invoice
+            $invoice->update([
+                'invoice_date' => $validated['invoice_date'],
+                'due_date' => $validated['due_date'],
+                'billing_period' => $validated['billing_period'] ?? $invoice->billing_period,
+                'billing_start_date' => $validated['billing_start_date'] ?? $invoice->billing_start_date,
+                'billing_end_date' => $validated['billing_end_date'] ?? $invoice->billing_end_date,
+                'line_items' => !empty($lineItems) ? $lineItems : $invoice->line_items,
+                'amount' => $validated['amount'],
+                'gst_amount' => $validated['gst_amount'],
+                'total_amount' => $validated['total_amount'],
+                'paid_amount' => $validated['paid_amount'],
+                'balance_amount' => $validated['balance_amount'],
+                'payment_status' => $validated['payment_status'],
+                'status' => $validated['status'],
+                'carry_forward_amount' => $validated['carry_forward_amount'] ?? 0,
+                'has_carry_forward' => $validated['has_carry_forward'] ?? false,
+                'manual_payment_id' => $validated['manual_payment_id'] ?? $invoice->manual_payment_id,
+                'manual_payment_notes' => $validated['manual_payment_notes'] ?? $invoice->manual_payment_notes,
+                'paid_at' => $validated['payment_status'] === 'paid' && !$invoice->paid_at ? now('Asia/Kolkata') : ($validated['payment_status'] !== 'paid' ? null : $invoice->paid_at),
+                'paid_by' => $validated['payment_status'] === 'paid' && !$invoice->paid_by ? $admin->id : ($validated['payment_status'] !== 'paid' ? null : $invoice->paid_by),
+            ]);
+
+            // Log status change
+            ApplicationStatusHistory::log(
+                $invoice->application_id,
+                $invoice->application->status,
+                $invoice->application->status,
+                'admin',
+                $admin->id,
+                "Invoice {$invoice->invoice_number} updated by IX Account"
+            );
+
+            return redirect()->route('admin.applications.show', $invoice->application_id)
+                ->with('success', 'Invoice updated successfully.');
+        } catch (Exception $e) {
+            Log::error('Error updating invoice: '.$e->getMessage());
+
+            return back()->with('error', 'Unable to update invoice. Please try again.');
+        }
+    }
+
+    /**
+     * IX Account: Delete invoice.
+     */
+    public function ixAccountDeleteInvoice($invoiceId)
+    {
+        try {
+            $admin = $this->getCurrentAdmin();
+
+            if (! $this->hasRole($admin, 'ix_account')) {
+                return back()->with('error', 'You do not have permission to perform this action.');
+            }
+
+            $invoice = Invoice::with('application')
+                ->whereHas('application', function ($q) {
+                    $q->where('application_type', 'IX');
+                })
+                ->findOrFail($invoiceId);
+
+            if (! $invoice->application->is_active) {
+                return back()->with('error', 'Invoice can only be managed for LIVE applications.');
+            }
+
+            $applicationId = $invoice->application_id;
+            $invoiceNumber = $invoice->invoice_number;
+
+            // Delete related records
+            $invoice->paymentAllocations()->delete();
+            PaymentTransaction::where('invoice_id', $invoice->id)->delete();
+
+            // Delete invoice
+            $invoice->delete();
+
+            // Log status change
+            ApplicationStatusHistory::log(
+                $applicationId,
+                $invoice->application->status,
+                $invoice->application->status,
+                'admin',
+                $admin->id,
+                "Invoice {$invoiceNumber} deleted by IX Account"
+            );
+
+            return redirect()->route('admin.applications.show', $applicationId)
+                ->with('success', 'Invoice deleted successfully.');
+        } catch (Exception $e) {
+            Log::error('Error deleting invoice: '.$e->getMessage());
+
+            return back()->with('error', 'Unable to delete invoice. Please try again.');
+        }
+    }
+
+    /**
+     * IX Account: Change invoice status.
+     */
+    public function ixAccountChangeInvoiceStatus(Request $request, $invoiceId)
+    {
+        try {
+            $admin = $this->getCurrentAdmin();
+
+            if (! $this->hasRole($admin, 'ix_account')) {
+                return back()->with('error', 'You do not have permission to perform this action.');
+            }
+
+            $validated = $request->validate([
+                'status' => 'required|in:pending,paid,overdue,cancelled',
+                'payment_status' => 'required|in:pending,partial,paid,overdue,cancelled',
+            ]);
+
+            $invoice = Invoice::with('application')
+                ->whereHas('application', function ($q) {
+                    $q->where('application_type', 'IX');
+                })
+                ->findOrFail($invoiceId);
+
+            if (! $invoice->application->is_active) {
+                return back()->with('error', 'Invoice can only be managed for LIVE applications.');
+            }
+
+            $oldStatus = $invoice->status;
+            $oldPaymentStatus = $invoice->payment_status;
+
+            $updateData = [
+                'status' => $validated['status'],
+                'payment_status' => $validated['payment_status'],
+            ];
+
+            // Update paid_at and paid_by if marking as paid
+            if ($validated['payment_status'] === 'paid' && $oldPaymentStatus !== 'paid') {
+                $updateData['paid_at'] = now('Asia/Kolkata');
+                $updateData['paid_by'] = $admin->id;
+                $updateData['paid_amount'] = $invoice->total_amount;
+                $updateData['balance_amount'] = 0;
+            } elseif ($validated['payment_status'] !== 'paid' && $oldPaymentStatus === 'paid') {
+                $updateData['paid_at'] = null;
+                $updateData['paid_by'] = null;
+            }
+
+            $invoice->update($updateData);
+
+            // Log status change
+            ApplicationStatusHistory::log(
+                $invoice->application_id,
+                $invoice->application->status,
+                $invoice->application->status,
+                'admin',
+                $admin->id,
+                "Invoice {$invoice->invoice_number} status changed from {$oldStatus}/{$oldPaymentStatus} to {$validated['status']}/{$validated['payment_status']} by IX Account"
+            );
+
+            return back()->with('success', 'Invoice status updated successfully.');
+        } catch (Exception $e) {
+            Log::error('Error changing invoice status: '.$e->getMessage());
+
+            return back()->with('error', 'Unable to update invoice status. Please try again.');
+        }
+    }
+
+    /**
+     * IX Account: Mark invoice as unpaid.
+     */
+    public function ixAccountMarkInvoiceUnpaid($invoiceId)
+    {
+        try {
+            $admin = $this->getCurrentAdmin();
+
+            if (! $this->hasRole($admin, 'ix_account')) {
+                return back()->with('error', 'You do not have permission to perform this action.');
+            }
+
+            $invoice = Invoice::with('application')
+                ->whereHas('application', function ($q) {
+                    $q->where('application_type', 'IX');
+                })
+                ->findOrFail($invoiceId);
+
+            if (! $invoice->application->is_active) {
+                return back()->with('error', 'Invoice can only be managed for LIVE applications.');
+            }
+
+            $oldStatus = $invoice->status;
+            $oldPaymentStatus = $invoice->payment_status;
+
+            // Reset payment details
+            $invoice->update([
+                'status' => 'pending',
+                'payment_status' => 'pending',
+                'paid_amount' => 0,
+                'balance_amount' => $invoice->total_amount,
+                'paid_at' => null,
+                'paid_by' => null,
+            ]);
+
+            // Log status change
+            ApplicationStatusHistory::log(
+                $invoice->application_id,
+                $invoice->application->status,
+                $invoice->application->status,
+                'admin',
+                $admin->id,
+                "Invoice {$invoice->invoice_number} marked as unpaid by IX Account (was {$oldStatus}/{$oldPaymentStatus})"
+            );
+
+            return back()->with('success', 'Invoice marked as unpaid successfully.');
+        } catch (Exception $e) {
+            Log::error('Error marking invoice as unpaid: '.$e->getMessage());
+
+            return back()->with('error', 'Unable to mark invoice as unpaid. Please try again.');
         }
     }
 
