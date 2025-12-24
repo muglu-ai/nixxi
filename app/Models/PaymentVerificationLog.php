@@ -12,7 +12,9 @@ class PaymentVerificationLog extends Model
         'verified_by',
         'verification_type',
         'billing_period',
+        'payment_id',
         'amount',
+        'amount_captured',
         'currency',
         'payment_method',
         'notes',
@@ -21,6 +23,7 @@ class PaymentVerificationLog extends Model
 
     protected $casts = [
         'amount' => 'decimal:2',
+        'amount_captured' => 'decimal:2',
         'verified_at' => 'datetime:Asia/Kolkata',
         'created_at' => 'datetime:Asia/Kolkata',
         'updated_at' => 'datetime:Asia/Kolkata',

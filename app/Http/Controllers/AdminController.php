@@ -1081,6 +1081,7 @@ class AdminController extends Controller
             $canVerifyPayment = false;
             $paymentVerificationMessage = null;
             $currentBillingPeriod = null;
+            $currentInvoice = null;
             
             if ($selectedRole === 'ix_account' && $application->is_active && $application->isVisibleToIxAccount()) {
                 if ($application->service_activation_date && $application->billing_cycle) {
@@ -1090,6 +1091,12 @@ class AdminController extends Controller
                         if (!$canVerifyPayment) {
                             $periodLabel = $this->getBillingPeriodLabel($application->billing_cycle, $currentBillingPeriod);
                             $paymentVerificationMessage = "Payment for this {$periodLabel} has already been verified.";
+                        } else {
+                            // Get invoice for current billing period if exists
+                            $currentInvoice = \App\Models\Invoice::where('application_id', $application->id)
+                                ->where('billing_period', $currentBillingPeriod)
+                                ->where('status', '!=', 'cancelled')
+                                ->first();
                         }
                     }
                 } else {
@@ -1099,7 +1106,7 @@ class AdminController extends Controller
             }
 
             // Admin can view all applications, but can only take actions on applications for their selected role
-            return view('admin.applications.show', compact('application', 'admin', 'selectedRole', 'canVerifyPayment', 'paymentVerificationMessage', 'currentBillingPeriod'));
+            return view('admin.applications.show', compact('application', 'admin', 'selectedRole', 'canVerifyPayment', 'paymentVerificationMessage', 'currentBillingPeriod', 'currentInvoice'));
         } catch (QueryException $e) {
             Log::error('Database error loading application: '.$e->getMessage());
             abort(503, 'Database connection error. Please try again later.');
@@ -3144,25 +3151,28 @@ class AdminController extends Controller
             $carryForwardAmount = 0.0;
             $hasCarryForward = false;
             
+            // Build query for unpaid/partial invoices
+            $unpaidInvoicesQuery = Invoice::where('application_id', $application->id)
+                ->where(function ($q) {
+                    $q->where('payment_status', 'partial')
+                      ->orWhere(function ($q2) {
+                          $q2->where('payment_status', 'pending')
+                             ->where('due_date', '<', now('Asia/Kolkata'));
+                      });
+                });
+            
+            // Exclude last paid invoice if it exists
             if ($lastPaidInvoice) {
-                // Check for unpaid/partial invoices before this billing period
-                $unpaidInvoices = Invoice::where('application_id', $application->id)
-                    ->where('id', '!=', $lastPaidInvoice->id)
-                    ->where(function ($q) {
-                        $q->where('payment_status', 'partial')
-                          ->orWhere(function ($q2) {
-                              $q2->where('payment_status', 'pending')
-                                 ->where('due_date', '<', now('Asia/Kolkata'));
-                          });
-                    })
-                    ->get();
-                
-                foreach ($unpaidInvoices as $unpaidInvoice) {
-                    $balance = $unpaidInvoice->getRemainingBalance();
-                    if ($balance > 0) {
-                        $carryForwardAmount += $balance;
-                        $hasCarryForward = true;
-                    }
+                $unpaidInvoicesQuery->where('id', '!=', $lastPaidInvoice->id);
+            }
+            
+            $unpaidInvoices = $unpaidInvoicesQuery->get();
+            
+            foreach ($unpaidInvoices as $unpaidInvoice) {
+                $balance = $unpaidInvoice->getRemainingBalance();
+                if ($balance > 0) {
+                    $carryForwardAmount += $balance;
+                    $hasCarryForward = true;
                 }
             }
             
@@ -4057,7 +4067,7 @@ class AdminController extends Controller
     }
 
     /**
-     * IX Account: Verify Payment (supports recurring payments).
+     * IX Account: Verify Payment (supports recurring payments and partial payments).
      */
     public function ixAccountVerifyPayment(Request $request, $id)
     {
@@ -4079,10 +4089,18 @@ class AdminController extends Controller
                 return back()->with('error', 'This application is not available for Account review.');
             }
 
+            // Validate input
+            $validated = $request->validate([
+                'payment_id' => 'required|string|max:255',
+                'amount_captured' => 'required|numeric|min:0',
+                'notes' => 'nullable|string|max:1000',
+            ]);
+
             // Check if this is initial or recurring payment
             $isInitialPayment = !$application->service_activation_date;
             $billingPeriod = null;
             $verificationType = 'initial';
+            $invoice = null;
 
             if (!$isInitialPayment) {
                 $billingPeriod = $this->getCurrentBillingPeriod($application);
@@ -4094,12 +4112,78 @@ class AdminController extends Controller
                         $periodLabel = $this->getBillingPeriodLabel($application->billing_cycle, $billingPeriod);
                         return back()->with('error', "Payment for this {$periodLabel} has already been verified.");
                     }
+
+                    // Find invoice for this billing period
+                    $invoice = Invoice::where('application_id', $application->id)
+                        ->where('billing_period', $billingPeriod)
+                        ->where('status', '!=', 'cancelled')
+                        ->first();
+
+                    if (!$invoice) {
+                        return back()->with('error', 'No invoice found for this billing period. Please generate an invoice first.');
+                    }
+
+                    // Validate amount_captured doesn't exceed balance
+                    $balanceAmount = $invoice->balance_amount ?? $invoice->total_amount;
+                    if ($validated['amount_captured'] > $balanceAmount) {
+                        return back()->with('error', "Amount captured (₹{$validated['amount_captured']}) cannot exceed the balance amount (₹{$balanceAmount}).");
+                    }
                 }
             }
 
-            // Get payment amount
-            $applicationData = $application->application_data ?? [];
-            $amount = $applicationData['payment']['total_amount'] ?? $applicationData['payment']['amount'] ?? 0;
+            // Get expected payment amount (from invoice if available, otherwise from application data)
+            $expectedAmount = 0;
+            if ($invoice) {
+                $expectedAmount = $invoice->balance_amount ?? $invoice->total_amount;
+            } else {
+                $applicationData = $application->application_data ?? [];
+                $expectedAmount = $applicationData['payment']['total_amount'] ?? $applicationData['payment']['amount'] ?? 0;
+            }
+
+            $amountCaptured = (float) $validated['amount_captured'];
+            $isPartialPayment = $amountCaptured < $expectedAmount;
+
+            // Update invoice if it exists (for recurring payments)
+            if ($invoice) {
+                $currentPaidAmount = (float) ($invoice->paid_amount ?? 0);
+                $newPaidAmount = $currentPaidAmount + $amountCaptured;
+                $balanceAmount = max(0, (float)$invoice->total_amount - $newPaidAmount);
+
+                // Determine payment status
+                $paymentStatus = 'pending';
+                if ($newPaidAmount >= $invoice->total_amount) {
+                    $paymentStatus = 'paid';
+                    $balanceAmount = 0;
+                } elseif ($newPaidAmount > 0) {
+                    $paymentStatus = 'partial';
+                }
+
+                // Update invoice
+                $invoice->update([
+                    'paid_amount' => $newPaidAmount,
+                    'balance_amount' => $balanceAmount,
+                    'payment_status' => $paymentStatus,
+                    'status' => $paymentStatus === 'paid' ? 'paid' : $invoice->status,
+                    'paid_at' => $paymentStatus === 'paid' ? now('Asia/Kolkata') : $invoice->paid_at,
+                    'paid_by' => $paymentStatus === 'paid' ? $admin->id : $invoice->paid_by,
+                    'manual_payment_id' => $validated['payment_id'],
+                    'manual_payment_notes' => $validated['notes'] ?? null,
+                ]);
+
+                // Create payment transaction record
+                \App\Models\PaymentTransaction::create([
+                    'application_id' => $application->id,
+                    'invoice_id' => $invoice->id,
+                    'transaction_id' => $validated['payment_id'],
+                    'amount' => $amountCaptured,
+                    'currency' => 'INR',
+                    'payment_method' => 'manual',
+                    'payment_status' => 'success',
+                    'payment_mode' => 'manual',
+                    'transaction_date' => now('Asia/Kolkata'),
+                    'notes' => $validated['notes'] ?? null,
+                ]);
+            }
             
             // Create payment verification log
             $verificationLog = \App\Models\PaymentVerificationLog::create([
@@ -4107,37 +4191,54 @@ class AdminController extends Controller
                 'verified_by' => $admin->id,
                 'verification_type' => $verificationType,
                 'billing_period' => $billingPeriod,
-                'amount' => $amount,
+                'payment_id' => $validated['payment_id'],
+                'amount' => $expectedAmount,
+                'amount_captured' => $amountCaptured,
                 'currency' => 'INR',
                 'payment_method' => 'manual',
-                'notes' => $request->input('notes'),
+                'notes' => $validated['notes'],
                 'verified_at' => now('Asia/Kolkata'),
             ]);
 
             // Log status change
+            $statusMessage = $verificationType === 'initial' 
+                ? 'Initial payment verified by IX Account'
+                : "Recurring payment verified for {$billingPeriod} by IX Account";
+            
+            if ($isPartialPayment) {
+                $statusMessage .= " (Partial: ₹{$amountCaptured} of ₹{$expectedAmount})";
+            }
+
             ApplicationStatusHistory::log(
                 $application->id,
                 $application->status,
                 $application->status, // Keep same status, don't change application status
                 'admin',
                 $admin->id,
-                $verificationType === 'initial' 
-                    ? 'Initial payment verified by IX Account'
-                    : "Recurring payment verified for {$billingPeriod} by IX Account"
+                $statusMessage
             );
 
             // Send message to user
             $periodLabel = $billingPeriod ? $this->getBillingPeriodLabel($application->billing_cycle, $billingPeriod) : 'initial';
+            $messageText = "Payment has been verified for your application {$application->application_id} ({$periodLabel} payment).";
+            if ($isPartialPayment) {
+                $messageText .= " Amount captured: ₹{$amountCaptured} of ₹{$expectedAmount}. Balance: ₹" . number_format($expectedAmount - $amountCaptured, 2);
+            }
+            
             Message::create([
                 'user_id' => $application->user_id,
-                'subject' => 'Payment Verified',
-                'message' => "Payment has been verified for your application {$application->application_id} ({$periodLabel} payment).",
+                'subject' => 'Payment Verified' . ($isPartialPayment ? ' (Partial)' : ''),
+                'message' => $messageText,
                 'is_read' => false,
                 'sent_by' => 'admin',
             ]);
 
             $periodLabel = $billingPeriod ? $this->getBillingPeriodLabel($application->billing_cycle, $billingPeriod) : 'initial';
-            return back()->with('success', "Payment verified successfully for {$periodLabel} period!");
+            $successMessage = $isPartialPayment 
+                ? "Partial payment verified successfully for {$periodLabel} period! Amount captured: ₹{$amountCaptured} of ₹{$expectedAmount}. Balance: ₹" . number_format($expectedAmount - $amountCaptured, 2)
+                : "Payment verified successfully for {$periodLabel} period!";
+            
+            return back()->with('success', $successMessage);
         } catch (Exception $e) {
             Log::error('Error verifying payment: '.$e->getMessage());
 

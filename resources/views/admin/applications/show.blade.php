@@ -922,6 +922,25 @@
                             @if(isset($canVerifyPayment) && $canVerifyPayment)
                                 <form method="POST" action="{{ route('admin.applications.ix-account.verify-payment', $application->id) }}" class="mb-3">
                                     @csrf
+                                    @if(isset($currentInvoice))
+                                        <div class="alert alert-info mb-2 small">
+                                            <strong>Expected Amount:</strong> ₹{{ number_format($currentInvoice->balance_amount ?? $currentInvoice->total_amount, 2) }}
+                                            @if($currentInvoice->has_carry_forward && $currentInvoice->carry_forward_amount > 0)
+                                                <br><small class="text-muted">(Includes carry-forward: ₹{{ number_format($currentInvoice->carry_forward_amount, 2) }})</small>
+                                            @endif
+                                        </div>
+                                    @endif
+                                    <div class="mb-2">
+                                        <label for="payment_id" class="form-label small">Payment ID <span class="text-danger">*</span>:</label>
+                                        <input type="text" name="payment_id" id="payment_id" class="form-control form-control-sm" required placeholder="Enter payment ID/transaction ID">
+                                    </div>
+                                    <div class="mb-2">
+                                        <label for="amount_captured" class="form-label small">Amount Captured (₹) <span class="text-danger">*</span>:</label>
+                                        <input type="number" name="amount_captured" id="amount_captured" class="form-control form-control-sm" step="0.01" min="0" required placeholder="0.00" value="{{ isset($currentInvoice) ? ($currentInvoice->balance_amount ?? $currentInvoice->total_amount) : '' }}">
+                                        @if(isset($currentInvoice))
+                                            <small class="text-muted">Balance amount: ₹{{ number_format($currentInvoice->balance_amount ?? $currentInvoice->total_amount, 2) }}</small>
+                                        @endif
+                                    </div>
                                     <div class="mb-2">
                                         <label for="verification_notes" class="form-label small">Notes (Optional):</label>
                                         <textarea name="notes" id="verification_notes" class="form-control form-control-sm" rows="2" placeholder="Add any notes about this payment verification..."></textarea>
@@ -952,15 +971,28 @@
                                                     @if($log->billing_period)
                                                         - {{ $log->billing_period }}
                                                     @endif
+                                                    @if($log->amount_captured && $log->amount_captured < $log->amount)
+                                                        <span class="badge bg-warning text-dark ms-1">Partial</span>
+                                                    @endif
                                                 </span>
                                                 <span class="text-muted">{{ $log->verified_at->format('d M Y') }}</span>
                                             </div>
                                             <div class="text-muted">
-                                                ₹{{ number_format($log->amount, 2) }} 
-                                                @if($log->verifiedBy)
-                                                    by {{ $log->verifiedBy->name }}
+                                                @if($log->amount_captured)
+                                                    ₹{{ number_format($log->amount_captured, 2) }} 
+                                                    @if($log->amount_captured < $log->amount)
+                                                        of ₹{{ number_format($log->amount, 2) }}
+                                                    @endif
                                                 @else
-                                                    (Auto-verified via PayU)
+                                                    ₹{{ number_format($log->amount, 2) }}
+                                                @endif
+                                                @if($log->payment_id)
+                                                    <br><small class="text-muted">Payment ID: {{ $log->payment_id }}</small>
+                                                @endif
+                                                @if($log->verifiedBy)
+                                                    <br><small>by {{ $log->verifiedBy->name }}</small>
+                                                @else
+                                                    <br><small>(Auto-verified via PayU)</small>
                                                 @endif
                                             </div>
                                         </div>
