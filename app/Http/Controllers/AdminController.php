@@ -2693,6 +2693,22 @@ class AdminController extends Controller
                 $billingStartDate = now('Asia/Kolkata');
             }
             
+            // Check if there's an approved billing cycle change that should take effect for this next invoice
+            // (i.e., effective_from is before or equal to billingStartDate)
+            $billingCycleChange = PlanChangeRequest::where('application_id', $application->id)
+                ->where('status', 'approved')
+                ->whereNotNull('effective_from')
+                ->whereNotNull('new_billing_plan')
+                ->where('effective_from', '<=', $billingStartDate)
+                ->orderBy('effective_from', 'desc')
+                ->first();
+            
+            // Use new billing cycle if change is effective, otherwise use current
+            if ($billingCycleChange && $billingCycleChange->new_billing_plan) {
+                $billingPlan = strtolower(trim($billingCycleChange->new_billing_plan));
+                Log::info("Using new billing cycle '{$billingPlan}' for next invoice (effective from {$billingCycleChange->effective_from})");
+            }
+            
             switch ($billingPlan) {
                 case 'annual':
                 case 'arc':
@@ -2855,26 +2871,25 @@ class AdminController extends Controller
             foreach ($futureChanges as $change) {
                 $segmentEnd = $change->effective_from->copy();
                 if ($segmentEnd->gt($segmentStart)) {
+                    // Add segment for the period before this change
                     $addSegment($segmentStart, $segmentEnd, $currentCapacity, $currentPlan);
                 }
+                
+                // Port capacity changes apply immediately during the billing cycle
                 if ($change->isCapacityChange() && $change->new_port_capacity) {
                     $currentCapacity = $change->new_port_capacity;
                 }
-                $planFromChange = $change->new_billing_plan ? strtolower(trim($change->new_billing_plan)) : null;
-                if ($planFromChange) {
-                    if (in_array($planFromChange, ['arc', 'annual'])) {
-                        $currentPlan = 'arc';
-                    } elseif (in_array($planFromChange, ['mrc', 'monthly'])) {
-                        $currentPlan = 'mrc';
-                    } elseif ($planFromChange === 'quarterly') {
-                        $currentPlan = 'quarterly';
-                    } else {
-                        $currentPlan = 'mrc';
-                    }
-                }
+                
+                // Billing cycle changes should NOT apply during current billing cycle
+                // They will only affect the NEXT billing cycle calculation
+                // So we keep using the current plan for the rest of this billing period
+                // The new billing cycle will be used when calculating the next invoice
+                
                 $segmentStart = $change->effective_from->copy();
             }
 
+            // Add final segment from last change (or start) to billing end date
+            // Use current capacity (may have changed) but keep current plan (billing cycle doesn't change mid-cycle)
             $addSegment($segmentStart, $billingEndDate->copy(), $currentCapacity, $currentPlan);
 
             if ($prorationTotal <= 0) {
