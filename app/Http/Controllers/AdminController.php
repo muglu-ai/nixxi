@@ -3098,12 +3098,20 @@ class AdminController extends Controller
             $prorationTotal = 0.0;
             $carryForwardInvoices = [];
             
-            // If using form data, calculate proration from segments; otherwise use from invoiceData
+            // If using form data, calculate from line items; otherwise use from invoiceData
             if ($request->has('line_items')) {
-                // Calculate proration total from segments
-                foreach ($segments as $segment) {
-                    $prorationTotal += $segment['amount'] ?? 0;
+                // Calculate base amount from ALL line items (excluding carry forward)
+                $prorationTotal = 0.0;
+                $adjustmentTotal = 0.0;
+                
+                foreach ($validated['line_items'] as $item) {
+                    $itemAmount = (float)($item['amount'] ?? 0);
+                    // Check if this is a carry forward item (will be added separately)
+                    if (!isset($item['is_carry_forward']) || !$item['is_carry_forward']) {
+                        $prorationTotal += $itemAmount;
+                    }
                 }
+                
                 // Recalculate carry forward for form data
                 $lastPaidInvoice = Invoice::where('application_id', $application->id)
                     ->where('status', 'paid')
@@ -3125,6 +3133,10 @@ class AdminController extends Controller
                 
                 $unpaidInvoices = $unpaidInvoicesQuery->get();
                 
+                $carryForwardAmount = 0.0;
+                $hasCarryForward = false;
+                $carryForwardInvoices = [];
+                
                 foreach ($unpaidInvoices as $unpaidInvoice) {
                     $balance = $unpaidInvoice->getRemainingBalance();
                     if ($balance > 0) {
@@ -3138,6 +3150,25 @@ class AdminController extends Controller
                     }
                 }
                 
+                // Recalculate base amount, GST, and totals from line items
+                $baseAmount = $prorationTotal + $adjustmentTotal;
+                
+                $gstVerification = GstVerification::where('user_id', $application->user_id)
+                    ->where('is_verified', true)
+                    ->latest()
+                    ->first();
+                $location = IxLocation::find($application->application_data['location']['id'] ?? null);
+                $gstState = $location->state ?? ($gstVerification?->state);
+                $isDelhi = strtolower($gstState ?? '') === 'delhi' || strtolower($gstState ?? '') === 'new delhi';
+                
+                if ($isDelhi) {
+                    $gstAmount = round(($baseAmount * 9) / 100, 2) * 2; // CGST + SGST
+                } else {
+                    $gstAmount = round(($baseAmount * 18) / 100, 2);
+                }
+                
+                $amount = $baseAmount;
+                $totalAmount = round($amount + $gstAmount, 2);
                 $finalTotalAmount = $totalAmount + $carryForwardAmount;
             } else {
                 // Use from calculated data
@@ -4650,6 +4681,46 @@ class AdminController extends Controller
                 Storage::disk('public')->delete($invoice->pdf_path);
             }
 
+            // If this invoice had carry forward, restore previous invoices' status
+            if ($invoice->has_carry_forward && $invoice->carry_forward_amount > 0) {
+                // Find invoices that were marked as paid due to this invoice's carry forward
+                $forwardedInvoices = Invoice::where('application_id', $invoice->application_id)
+                    ->where('forwarded_to_invoice_date', $invoice->invoice_date)
+                    ->where('forwarded_amount', '>', 0)
+                    ->get();
+                
+                foreach ($forwardedInvoices as $forwardedInvoice) {
+                    // Restore original status based on forwarded amount
+                    $forwardedAmount = $forwardedInvoice->forwarded_amount;
+                    $originalTotal = $forwardedInvoice->total_amount;
+                    // When forwarded, paid_amount was set to total_amount, so original paid = total - forwarded
+                    $originalPaid = $originalTotal - $forwardedAmount;
+                    $originalBalance = $forwardedAmount; // The forwarded amount was the balance
+                    
+                    // Determine original payment status
+                    $originalPaymentStatus = 'pending';
+                    if ($originalPaid > 0 && $originalPaid < $originalTotal) {
+                        $originalPaymentStatus = 'partial';
+                    } elseif ($originalPaid >= $originalTotal) {
+                        $originalPaymentStatus = 'paid';
+                    }
+                    
+                    $forwardedInvoice->update([
+                        'payment_status' => $originalPaymentStatus,
+                        'status' => $originalPaymentStatus === 'paid' ? 'paid' : 'pending',
+                        'paid_amount' => max(0, $originalPaid),
+                        'balance_amount' => $originalBalance,
+                        'forwarded_amount' => null,
+                        'forwarded_to_invoice_date' => null,
+                        'paid_at' => $originalPaymentStatus === 'paid' ? $forwardedInvoice->paid_at : null,
+                        'paid_by' => $originalPaymentStatus === 'paid' ? $forwardedInvoice->paid_by : null,
+                        'manual_payment_notes' => preg_replace('/\s*\|\s*Amount forwarded to invoice.*$/i', '', $forwardedInvoice->manual_payment_notes ?? ''),
+                    ]);
+                    
+                    Log::info("Restored invoice {$forwardedInvoice->invoice_number} status after deleting invoice {$invoice->invoice_number}. Original Paid: {$originalPaid}, Balance: {$originalBalance}, Status: {$originalPaymentStatus}");
+                }
+            }
+            
             // Delete related records
             $invoice->paymentAllocations()->delete();
             // PaymentTransaction doesn't have invoice_id, delete by application_id and transaction matching invoice number
