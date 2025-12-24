@@ -465,20 +465,33 @@
             {{-- Service/Port Charges Segments --}}
             @if(!empty($serviceItems) && is_array($serviceItems))
                 @foreach($serviceItems as $item)
-                    @if(is_array($item) && isset($item['start']))
-                        <tr>
-                            <td>{{ $itemIndex++ }}</td>
-                            <td>
-                                Port Charges - {{ $item['capacity'] ?? 'N/A' }}<br>
-                                Plan: {{ $item['plan_label'] ?? (strtoupper($item['plan'] ?? 'N/A')) }}<br>
-                                Period: {{ \Carbon\Carbon::parse($item['start'])->format('d/m/Y') }} to {{ \Carbon\Carbon::parse($item['end'])->format('d/m/Y') }}
-                                ({{ $item['days'] ?? 0 }} days)
-                            </td>
-                            <td>1</td>
-                            <td>{{ $item['capacity'] ?? 'N/A' }}</td>
-                            <td>{{ number_format($item['amount_full'] ?? 0, 2) }}</td>
-                            <td>{{ number_format($item['amount_prorated'] ?? 0, 2) }}</td>
-                        </tr>
+                    @if(is_array($item))
+                        @if(isset($item['start']))
+                            {{-- Old format: proration segments with start/end dates --}}
+                            <tr>
+                                <td>{{ $itemIndex++ }}</td>
+                                <td>
+                                    Port Charges - {{ $item['capacity'] ?? 'N/A' }}<br>
+                                    Plan: {{ $item['plan_label'] ?? (strtoupper($item['plan'] ?? 'N/A')) }}<br>
+                                    Period: {{ \Carbon\Carbon::parse($item['start'])->format('d/m/Y') }} to {{ \Carbon\Carbon::parse($item['end'])->format('d/m/Y') }}
+                                    ({{ $item['days'] ?? 0 }} days)
+                                </td>
+                                <td>1</td>
+                                <td>{{ $item['capacity'] ?? 'N/A' }}</td>
+                                <td>{{ number_format($item['amount_full'] ?? 0, 2) }}</td>
+                                <td>{{ number_format($item['amount_prorated'] ?? 0, 2) }}</td>
+                            </tr>
+                        @elseif(isset($item['description']))
+                            {{-- New format: line items with description, quantity, rate, amount --}}
+                            <tr>
+                                <td>{{ $itemIndex++ }}</td>
+                                <td>{{ $item['description'] ?? 'Service Charge' }}</td>
+                                <td>{{ number_format($item['quantity'] ?? 1, 2) }}</td>
+                                <td>{{ $portCapacity }}</td>
+                                <td>{{ number_format($item['rate'] ?? 0, 2) }}</td>
+                                <td>{{ number_format($item['amount'] ?? 0, 2) }}</td>
+                            </tr>
+                        @endif
                     @endif
                 @endforeach
             @else
