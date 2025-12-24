@@ -2668,14 +2668,25 @@ class AdminController extends Controller
                 $billingPlan = 'monthly';
             }
             
+            // Get the latest invoice (any status except cancelled) to determine next billing cycle
+            $latestInvoice = Invoice::where('application_id', $application->id)
+                ->where('status', '!=', 'cancelled')
+                ->latest('invoice_date')
+                ->first();
+            
+            // Also get last paid invoice for carry-forward calculations
             $lastPaidInvoice = Invoice::where('application_id', $application->id)
                 ->where('status', 'paid')
                 ->latest('invoice_date')
                 ->first();
             
             $billingStartDate = null;
-            if ($lastPaidInvoice && $lastPaidInvoice->due_date) {
-                $billingStartDate = \Carbon\Carbon::parse($lastPaidInvoice->due_date);
+            if ($latestInvoice && $latestInvoice->billing_end_date) {
+                // Use the billing_end_date of the latest invoice as the start for the next cycle
+                $billingStartDate = \Carbon\Carbon::parse($latestInvoice->billing_end_date)->addDay();
+            } elseif ($latestInvoice && $latestInvoice->due_date) {
+                // Fallback to due_date if billing_end_date is not available
+                $billingStartDate = \Carbon\Carbon::parse($latestInvoice->due_date)->addDay();
             } elseif ($application->service_activation_date) {
                 $billingStartDate = \Carbon\Carbon::parse($application->service_activation_date);
             } else {
