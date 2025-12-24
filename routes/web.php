@@ -210,7 +210,8 @@ Route::prefix('admin')->name('admin.')->middleware(['admin'])->group(function ()
     Route::post('/applications/{id}/ix-tech-team/assign-ip', [AdminController::class, 'ixTechTeamAssignIp'])->name('applications.ix-tech-team.assign-ip');
 
     // IX Account routes
-    Route::post('/applications/{id}/ix-account/generate-invoice', [AdminController::class, 'ixAccountGenerateInvoice'])->name('applications.ix-account.generate-invoice');
+    Route::get('/applications/{id}/ix-account/generate-invoice', [AdminController::class, 'ixAccountShowInvoiceForm'])->name('applications.ix-account.generate-invoice');
+    Route::post('/applications/{id}/ix-account/generate-invoice', [AdminController::class, 'ixAccountGenerateInvoice'])->name('applications.ix-account.generate-invoice.store');
     Route::post('/applications/{id}/ix-account/verify-payment', [AdminController::class, 'ixAccountVerifyPayment'])->name('applications.ix-account.verify-payment');
 
     // Grievance routes

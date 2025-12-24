@@ -2614,6 +2614,361 @@ class AdminController extends Controller
     }
 
     /**
+     * IX Account: Show invoice generation form with prefilled details.
+     */
+    public function ixAccountShowInvoiceForm($id)
+    {
+        try {
+            $admin = $this->getCurrentAdmin();
+
+            if (! $this->hasRole($admin, 'ix_account')) {
+                return back()->with('error', 'You do not have permission to perform this action.');
+            }
+
+            $application = Application::with('user')->where('application_type', 'IX')->findOrFail($id);
+
+            if (!$application->is_active) {
+                return back()->with('error', 'Invoice can only be generated for LIVE applications.');
+            }
+
+            if (! $application->isVisibleToIxAccount()) {
+                return back()->with('error', 'This application is not available for Account review.');
+            }
+
+            // Calculate invoice details (same logic as generate, but don't create invoice)
+            $invoiceData = $this->calculateInvoiceDetails($application);
+            
+            if (isset($invoiceData['error'])) {
+                return back()->with('error', $invoiceData['error']);
+            }
+
+            return view('admin.invoices.create', compact('application', 'admin', 'invoiceData'));
+        } catch (Exception $e) {
+            Log::error('Error loading invoice form: '.$e->getMessage());
+            return back()->with('error', 'Unable to load invoice form.');
+        }
+    }
+
+    /**
+     * Calculate invoice details (extracted for reuse in form and generation).
+     */
+    private function calculateInvoiceDetails(Application $application): array
+    {
+        try {
+            $applicationData = $application->application_data ?? [];
+            $billingPlanRaw = $application->billing_cycle ?? ($applicationData['port_selection']['billing_plan'] ?? 'monthly');
+            $billingPlan = strtolower(trim($billingPlanRaw));
+            if (in_array($billingPlan, ['arc', 'annual'])) {
+                $billingPlan = 'annual';
+            } elseif (in_array($billingPlan, ['mrc', 'monthly'])) {
+                $billingPlan = 'monthly';
+            } elseif ($billingPlan === 'quarterly') {
+                $billingPlan = 'quarterly';
+            } else {
+                $billingPlan = 'monthly';
+            }
+            
+            $lastPaidInvoice = Invoice::where('application_id', $application->id)
+                ->where('status', 'paid')
+                ->latest('invoice_date')
+                ->first();
+            
+            $billingStartDate = null;
+            if ($lastPaidInvoice && $lastPaidInvoice->due_date) {
+                $billingStartDate = \Carbon\Carbon::parse($lastPaidInvoice->due_date);
+            } elseif ($application->service_activation_date) {
+                $billingStartDate = \Carbon\Carbon::parse($application->service_activation_date);
+            } else {
+                $billingStartDate = now('Asia/Kolkata');
+            }
+            
+            switch ($billingPlan) {
+                case 'annual':
+                case 'arc':
+                    $billingEndDate = $billingStartDate->copy()->addYear();
+                    $billingPeriod = $billingStartDate->format('Y');
+                    break;
+                case 'quarterly':
+                    $billingEndDate = $billingStartDate->copy()->addMonths(3);
+                    $quarter = ceil($billingStartDate->month / 3);
+                    $billingPeriod = $billingStartDate->format('Y').'-Q'.$quarter;
+                    break;
+                case 'monthly':
+                case 'mrc':
+                default:
+                    $billingEndDate = $billingStartDate->copy()->addMonth();
+                    $billingPeriod = $billingEndDate->format('Y-m');
+                    break;
+            }
+            
+            $dueDate = $billingEndDate;
+            
+            $existingInvoice = Invoice::where('application_id', $application->id)
+                ->where('billing_period', $billingPeriod)
+                ->where('status', '!=', 'cancelled')
+                ->first();
+            
+            if ($existingInvoice) {
+                return ['error' => "An invoice for billing period '{$billingPeriod}' already exists (Invoice: {$existingInvoice->invoice_number})."];
+            }
+            
+            $location = null;
+            if (isset($applicationData['location']['id'])) {
+                $location = IxLocation::find($applicationData['location']['id']);
+            }
+            if (! $location) {
+                return ['error' => 'Unable to calculate port charges. Location is missing.'];
+            }
+
+            $getPortAmount = function ($capacity, $plan) use ($location) {
+                if (! $capacity) return null;
+                $normalizedCapacity = trim($capacity);
+                $normalizedCapacity = preg_replace('/\s+/', '', $normalizedCapacity);
+                if (stripos($normalizedCapacity, 'Gbps') !== false) {
+                    $normalizedCapacity = str_ireplace(['Gbps', 'gbps', 'GBPS'], 'Gig', $normalizedCapacity);
+                }
+                if (! preg_match('/(Gig|M)$/i', $normalizedCapacity)) {
+                    if (preg_match('/^\d+$/', $normalizedCapacity)) {
+                        $normalizedCapacity .= 'Gig';
+                    }
+                }
+                $pricing = IxPortPricing::active()
+                    ->where('node_type', $location->node_type)
+                    ->where('port_capacity', $normalizedCapacity)
+                    ->first();
+                if (! $pricing) {
+                    $variations = [trim($capacity), str_replace(' ', '', trim($capacity)), preg_replace('/\s+/', '', trim($capacity)), str_replace(['Gbps', 'gbps', 'GBPS'], 'Gig', str_replace(' ', '', trim($capacity)))];
+                    foreach (array_unique($variations) as $variation) {
+                        if (empty($variation)) continue;
+                        $pricing = IxPortPricing::active()
+                            ->where('node_type', $location->node_type)
+                            ->where('port_capacity', $variation)
+                            ->first();
+                        if ($pricing) break;
+                    }
+                }
+                if (! $pricing) return null;
+                return $pricing->getAmountForPlan($plan);
+            };
+
+            $approvedPlanChanges = PlanChangeRequest::where('application_id', $application->id)
+                ->where('status', 'approved')
+                ->whereNotNull('effective_from')
+                ->orderBy('effective_from')
+                ->get();
+
+            $baseCapacity = $application->assigned_port_capacity ?? ($applicationData['port_selection']['capacity'] ?? null);
+            $basePlan = $billingPlan;
+            foreach ($approvedPlanChanges as $change) {
+                if ($change->effective_from && $change->effective_from->lt($billingStartDate)) {
+                    $baseCapacity = $change->new_port_capacity ?? $baseCapacity;
+                    $basePlan = $change->new_billing_plan ? strtolower($change->new_billing_plan) : $basePlan;
+                }
+            }
+
+            if (!$baseCapacity) {
+                return ['error' => 'Port capacity is not set for this application. Please assign port capacity first.'];
+            }
+            
+            $basePlanNormalized = strtolower(trim($basePlan));
+            if (in_array($basePlanNormalized, ['arc', 'annual'])) {
+                $basePlanNormalized = 'arc';
+            } elseif (in_array($basePlanNormalized, ['mrc', 'monthly'])) {
+                $basePlanNormalized = 'mrc';
+            } elseif ($basePlanNormalized === 'quarterly') {
+                $basePlanNormalized = 'quarterly';
+            } else {
+                $basePlanNormalized = 'mrc';
+            }
+            
+            $futureChanges = $approvedPlanChanges->filter(function ($c) use ($billingStartDate, $billingEndDate) {
+                return $c->effective_from && $c->effective_from->gte($billingStartDate) && $c->effective_from->lt($billingEndDate);
+            })->values();
+
+            $segmentStart = $billingStartDate->copy();
+            $currentCapacity = $baseCapacity;
+            $currentPlan = $basePlanNormalized;
+            $segments = [];
+            $prorationTotal = 0.0;
+
+            $getBillingCycleDays = function ($plan) {
+                $plan = strtolower(trim($plan));
+                return match($plan) {
+                    'annual', 'arc' => 365,
+                    'quarterly' => 90,
+                    'monthly', 'mrc' => 30,
+                    default => 30,
+                };
+            };
+
+            $addSegment = function ($start, $end, $capacity, $plan) use ($getPortAmount, &$segments, &$prorationTotal, $getBillingCycleDays) {
+                if ($end->lte($start)) return;
+                $fullAmount = $getPortAmount($capacity, $plan);
+                if ($fullAmount === null || $fullAmount <= 0) return;
+                $segmentDays = $start->diffInDays($end);
+                if ($segmentDays <= 0) return;
+                $billingCycleDays = $getBillingCycleDays($plan);
+                $prorated = round(($fullAmount * $segmentDays) / $billingCycleDays, 2);
+                $prorationTotal += $prorated;
+                $segments[] = [
+                    'start' => $start->format('Y-m-d'),
+                    'end' => $end->format('Y-m-d'),
+                    'capacity' => $capacity,
+                    'plan' => $plan,
+                    'plan_label' => match(strtolower($plan)) {
+                        'annual', 'arc' => 'Annual (ARC)',
+                        'quarterly' => 'Quarterly',
+                        'monthly', 'mrc' => 'Monthly (MRC)',
+                        default => ucfirst($plan),
+                    },
+                    'days' => $segmentDays,
+                    'billing_cycle_days' => $billingCycleDays,
+                    'amount_full' => $fullAmount,
+                    'amount_prorated' => $prorated,
+                    'description' => "IX Service - {$capacity} Port Capacity ({$plan})",
+                    'quantity' => 1,
+                    'rate' => $fullAmount,
+                    'amount' => $prorated,
+                ];
+            };
+
+            foreach ($futureChanges as $change) {
+                $segmentEnd = $change->effective_from->copy();
+                if ($segmentEnd->gt($segmentStart)) {
+                    $addSegment($segmentStart, $segmentEnd, $currentCapacity, $currentPlan);
+                }
+                if ($change->isCapacityChange() && $change->new_port_capacity) {
+                    $currentCapacity = $change->new_port_capacity;
+                }
+                $planFromChange = $change->new_billing_plan ? strtolower(trim($change->new_billing_plan)) : null;
+                if ($planFromChange) {
+                    if (in_array($planFromChange, ['arc', 'annual'])) {
+                        $currentPlan = 'arc';
+                    } elseif (in_array($planFromChange, ['mrc', 'monthly'])) {
+                        $currentPlan = 'mrc';
+                    } elseif ($planFromChange === 'quarterly') {
+                        $currentPlan = 'quarterly';
+                    } else {
+                        $currentPlan = 'mrc';
+                    }
+                }
+                $segmentStart = $change->effective_from->copy();
+            }
+
+            $addSegment($segmentStart, $billingEndDate->copy(), $currentCapacity, $currentPlan);
+
+            if ($prorationTotal <= 0) {
+                return ['error' => 'Unable to calculate charges. Please check plan and pricing configuration.'];
+            }
+
+            $adjustments = [];
+            $adjustmentTotal = 0.0;
+            
+            if ($lastPaidInvoice && $lastPaidInvoice->billing_start_date && $lastPaidInvoice->billing_end_date) {
+                $previousPeriodStart = \Carbon\Carbon::parse($lastPaidInvoice->billing_start_date);
+                $previousPeriodEnd = \Carbon\Carbon::parse($lastPaidInvoice->billing_end_date);
+                
+                $pendingAdjustments = PlanChangeRequest::where('application_id', $application->id)
+                    ->where('status', 'approved')
+                    ->where('adjustment_applied', false)
+                    ->whereNotNull('effective_from')
+                    ->where(function ($query) use ($previousPeriodStart, $previousPeriodEnd) {
+                        $query->whereBetween('effective_from', [$previousPeriodStart, $previousPeriodEnd])
+                            ->orWhere(function ($q) use ($previousPeriodStart, $previousPeriodEnd) {
+                                $q->where('effective_from', '<=', $previousPeriodEnd)
+                                  ->where('effective_from', '>=', $previousPeriodStart->copy()->subMonths(6));
+                            });
+                    })
+                    ->get();
+                
+                foreach ($pendingAdjustments as $adjustment) {
+                    if ($adjustment->isCapacityChange() && $adjustment->adjustment_amount != 0) {
+                        $adjustmentAmount = (float) $adjustment->adjustment_amount;
+                        $adjustmentTotal += $adjustmentAmount;
+                        $adjustments[] = [
+                            'plan_change_id' => $adjustment->id,
+                            'type' => $adjustment->change_type,
+                            'description' => $adjustment->change_type === 'upgrade' 
+                                ? "Upgrade adjustment: {$adjustment->current_port_capacity} → {$adjustment->new_port_capacity}"
+                                : "Downgrade adjustment: {$adjustment->current_port_capacity} → {$adjustment->new_port_capacity}",
+                            'effective_from' => $adjustment->effective_from ? $adjustment->effective_from->format('Y-m-d') : null,
+                            'amount' => $adjustmentAmount,
+                        ];
+                    }
+                }
+            }
+            
+            $baseAmount = $prorationTotal + $adjustmentTotal;
+
+            $gstVerification = GstVerification::where('user_id', $application->user_id)
+                ->where('is_verified', true)
+                ->latest()
+                ->first();
+            $gstState = $location->state ?? ($gstVerification?->state);
+            $isDelhi = strtolower($gstState ?? '') === 'delhi' || strtolower($gstState ?? '') === 'new delhi';
+
+            if ($isDelhi) {
+                $cgstAmount = round(($baseAmount * 9) / 100, 2);
+                $sgstAmount = round(($baseAmount * 9) / 100, 2);
+                $gstAmount = $cgstAmount + $sgstAmount;
+            } else {
+                $gstAmount = round(($baseAmount * 18) / 100, 2);
+            }
+
+            $amount = $baseAmount;
+            $totalAmount = round($amount + $gstAmount, 2);
+
+            $carryForwardAmount = 0.0;
+            $hasCarryForward = false;
+            
+            $unpaidInvoicesQuery = Invoice::where('application_id', $application->id)
+                ->where(function ($q) {
+                    $q->where('payment_status', 'partial')
+                      ->orWhere(function ($q2) {
+                          $q2->where('payment_status', 'pending')
+                             ->where('due_date', '<', now('Asia/Kolkata'));
+                      });
+                });
+            
+            if ($lastPaidInvoice) {
+                $unpaidInvoicesQuery->where('id', '!=', $lastPaidInvoice->id);
+            }
+            
+            $unpaidInvoices = $unpaidInvoicesQuery->get();
+            
+            foreach ($unpaidInvoices as $unpaidInvoice) {
+                $balance = $unpaidInvoice->getRemainingBalance();
+                if ($balance > 0) {
+                    $carryForwardAmount += $balance;
+                    $hasCarryForward = true;
+                }
+            }
+            
+            $finalTotalAmount = $totalAmount + $carryForwardAmount;
+
+            return [
+                'billing_start_date' => $billingStartDate->format('Y-m-d'),
+                'billing_end_date' => $billingEndDate->format('Y-m-d'),
+                'billing_period' => $billingPeriod,
+                'due_date' => $dueDate->format('Y-m-d'),
+                'segments' => $segments,
+                'adjustments' => $adjustments,
+                'amount' => $amount,
+                'gst_amount' => $gstAmount,
+                'total_amount' => $totalAmount,
+                'carry_forward_amount' => $carryForwardAmount,
+                'has_carry_forward' => $hasCarryForward,
+                'final_total_amount' => $finalTotalAmount,
+                'proration_total' => $prorationTotal,
+                'adjustment_total' => $adjustmentTotal,
+            ];
+        } catch (Exception $e) {
+            Log::error('Error calculating invoice details: '.$e->getMessage());
+            return ['error' => 'Error calculating invoice details: '.$e->getMessage()];
+        }
+    }
+
+    /**
      * IX Account: Generate Invoice (supports recurring invoices).
      */
     public function ixAccountGenerateInvoice(Request $request, $id)
@@ -2636,439 +2991,143 @@ class AdminController extends Controller
                 return back()->with('error', 'This application is not available for Account review.');
             }
 
-            // Get payment amount - ONLY port charges, NO application fee
-            $applicationData = $application->application_data ?? [];
-            
-            // Get port amount based on billing cycle
-            $billingPlanRaw = $application->billing_cycle ?? ($applicationData['port_selection']['billing_plan'] ?? 'monthly');
-            
-            // Normalize billing plan (handle case variations and aliases)
-            $billingPlan = strtolower(trim($billingPlanRaw));
-            if (in_array($billingPlan, ['arc', 'annual'])) {
-                $billingPlan = 'annual';
-            } elseif (in_array($billingPlan, ['mrc', 'monthly'])) {
-                $billingPlan = 'monthly';
-            } elseif ($billingPlan === 'quarterly') {
-                $billingPlan = 'quarterly';
-            } else {
-                $billingPlan = 'monthly'; // Default fallback
-            }
-            
-            Log::info("Billing plan for application {$application->id}: raw='{$billingPlanRaw}', normalized='{$billingPlan}'");
-            
-            // Map billing plan to pricing plan
-            $pricingPlan = match($billingPlan) {
-                'annual', 'arc' => 'arc',
-                'monthly', 'mrc' => 'mrc',
-                'quarterly' => 'quarterly',
-                default => 'mrc',
-            };
-            
-            // Check for existing invoice for the same billing period to prevent duplicates
-            // First, we need to determine what the billing period would be
-            $lastPaidInvoice = Invoice::where('application_id', $application->id)
-                ->where('status', 'paid')
-                ->latest('invoice_date')
-                ->first();
-            
-            // Calculate billing period dates for invoice
-            $billingStartDate = null;
-            $billingEndDate = null;
-            $dueDate = null;
-            $billingPeriod = null;
-            
-            // Determine start date: first invoice uses service_activation_date, subsequent uses last invoice's due_date
-            if ($lastPaidInvoice && $lastPaidInvoice->due_date) {
-                // Subsequent invoice: start from last paid invoice's due date
-                $billingStartDate = \Carbon\Carbon::parse($lastPaidInvoice->due_date);
-                Log::info("Subsequent invoice for application {$application->id}: using last paid invoice due_date as start: {$billingStartDate->format('Y-m-d')}");
-            } elseif ($application->service_activation_date) {
-                // First invoice: start from service_activation_date
-                $billingStartDate = \Carbon\Carbon::parse($application->service_activation_date);
-                Log::info("First invoice for application {$application->id}: using service_activation_date as start: {$billingStartDate->format('Y-m-d')}");
-            } else {
-                // Fallback: use current date
-                $billingStartDate = now('Asia/Kolkata');
-                Log::warning("No service_activation_date or previous invoice for application {$application->id}, using current date as start: {$billingStartDate->format('Y-m-d')}");
-            }
-            
-            // Calculate end date (due date) based on billing cycle
-            switch ($billingPlan) {
-                case 'annual':
-                case 'arc':
-                    $billingEndDate = $billingStartDate->copy()->addYear();
-                    $billingPeriod = $billingStartDate->format('Y');
-                    break;
-                case 'quarterly':
-                    $billingEndDate = $billingStartDate->copy()->addMonths(3);
-                    $quarter = ceil($billingStartDate->month / 3);
-                    $billingPeriod = $billingStartDate->format('Y').'-Q'.$quarter;
-                    break;
-                case 'monthly':
-                case 'mrc':
-                default:
-                    $billingEndDate = $billingStartDate->copy()->addMonth();
-                    $billingPeriod = $billingEndDate->format('Y-m');
-                    break;
-            }
-            
-            // Due date is the billing end date
-            $dueDate = $billingEndDate;
-            
-            Log::info("Billing period calculation for application {$application->id}: billingPlan='{$billingPlan}', startDate={$billingStartDate->format('Y-m-d')}, endDate={$billingEndDate->format('Y-m-d')}, dueDate={$dueDate->format('Y-m-d')}, billingPeriod='{$billingPeriod}'");
-            
-            // Check for duplicate invoice with same billing period
-            $existingInvoice = Invoice::where('application_id', $application->id)
-                ->where('billing_period', $billingPeriod)
-                ->where('status', '!=', 'cancelled')
-                ->first();
-            
-            if ($existingInvoice) {
-                Log::warning("Duplicate invoice attempt for application {$application->id}, billing period '{$billingPeriod}'. Existing invoice: {$existingInvoice->invoice_number}");
-                return back()->with('error', "An invoice for billing period '{$billingPeriod}' already exists (Invoice: {$existingInvoice->invoice_number}). Please check existing invoices.");
-            }
-            // Determine location
-            $location = null;
-            if (isset($applicationData['location']['id'])) {
-                $location = IxLocation::find($applicationData['location']['id']);
-            }
-            if (! $location) {
-                Log::error("Missing location for invoice generation for application {$application->id}");
-                return back()->with('error', 'Unable to calculate port charges. Location is missing.');
-            }
+            // If form data is provided, use it; otherwise calculate automatically
+            if ($request->has('line_items')) {
+                // Use form data
+                $validated = $request->validate([
+                    'billing_start_date' => 'required|date',
+                    'billing_end_date' => 'required|date|after:billing_start_date',
+                    'billing_period' => 'nullable|string|max:50',
+                    'due_date' => 'required|date|after_or_equal:billing_start_date',
+                    'amount' => 'required|numeric|min:0',
+                    'gst_amount' => 'required|numeric|min:0',
+                    'total_amount' => 'required|numeric|min:0',
+                    'carry_forward_amount' => 'nullable|numeric|min:0',
+                    'has_carry_forward' => 'nullable|boolean',
+                    'line_items' => 'required|array',
+                    'line_items.*.description' => 'required|string|max:500',
+                    'line_items.*.quantity' => 'nullable|numeric|min:0',
+                    'line_items.*.rate' => 'nullable|numeric|min:0',
+                    'line_items.*.amount' => 'nullable|numeric|min:0',
+                ]);
 
-            // Helper to normalize capacity and fetch amount
-            $getPortAmount = function ($capacity, $plan) use ($location) {
-                if (! $capacity) {
-                    return null;
-                }
-                $normalizedCapacity = trim($capacity);
-                $normalizedCapacity = preg_replace('/\s+/', '', $normalizedCapacity);
-                if (stripos($normalizedCapacity, 'Gbps') !== false || stripos($normalizedCapacity, 'gbps') !== false) {
-                    $normalizedCapacity = str_ireplace(['Gbps', 'gbps', 'GBPS'], 'Gig', $normalizedCapacity);
-                }
-                if (! preg_match('/(Gig|M)$/i', $normalizedCapacity)) {
-                    if (preg_match('/^\d+$/', $normalizedCapacity)) {
-                        $normalizedCapacity .= 'Gig';
-                    }
+                // Prepare segments from form data
+                $segments = [];
+                foreach ($validated['line_items'] as $item) {
+                    $segments[] = [
+                        'description' => $item['description'],
+                        'quantity' => $item['quantity'] ?? 1,
+                        'rate' => $item['rate'] ?? 0,
+                        'amount' => $item['amount'] ?? 0,
+                    ];
                 }
 
-                $pricing = IxPortPricing::active()
-                    ->where('node_type', $location->node_type)
-                    ->where('port_capacity', $normalizedCapacity)
+                $billingStartDate = \Carbon\Carbon::parse($validated['billing_start_date']);
+                $billingEndDate = \Carbon\Carbon::parse($validated['billing_end_date']);
+                $dueDate = \Carbon\Carbon::parse($validated['due_date']);
+                $billingPeriod = $validated['billing_period'] ?? null;
+                $amount = $validated['amount'];
+                $gstAmount = $validated['gst_amount'];
+                $totalAmount = $validated['total_amount'];
+                $carryForwardAmount = $validated['carry_forward_amount'] ?? 0;
+                $hasCarryForward = $validated['has_carry_forward'] ?? false;
+                $finalTotalAmount = $totalAmount;
+            } else {
+                // Calculate automatically (existing logic)
+                $invoiceData = $this->calculateInvoiceDetails($application);
+                if (isset($invoiceData['error'])) {
+                    return back()->with('error', $invoiceData['error']);
+                }
+                $segments = $invoiceData['segments'];
+                $billingStartDate = \Carbon\Carbon::parse($invoiceData['billing_start_date']);
+                $billingEndDate = \Carbon\Carbon::parse($invoiceData['billing_end_date']);
+                $dueDate = \Carbon\Carbon::parse($invoiceData['due_date']);
+                $billingPeriod = $invoiceData['billing_period'];
+                $amount = $invoiceData['amount'];
+                $gstAmount = $invoiceData['gst_amount'];
+                $totalAmount = $invoiceData['total_amount'];
+                $carryForwardAmount = $invoiceData['carry_forward_amount'];
+                $hasCarryForward = $invoiceData['has_carry_forward'];
+                $finalTotalAmount = $invoiceData['final_total_amount'];
+            }
+
+            // Check for duplicate invoice
+            if ($billingPeriod) {
+                $existingInvoice = Invoice::where('application_id', $application->id)
+                    ->where('billing_period', $billingPeriod)
+                    ->where('status', '!=', 'cancelled')
                     ->first();
-
-                if (! $pricing) {
-                    $variations = [
-                        trim($capacity),
-                        str_replace(' ', '', trim($capacity)),
-                        preg_replace('/\s+/', '', trim($capacity)),
-                        str_replace(['Gbps', 'gbps', 'GBPS'], 'Gig', str_replace(' ', '', trim($capacity))),
-                        str_replace(['Gbps', 'gbps'], 'Gig', trim($capacity)),
-                        str_replace([' Gbps', 'Gbps', 'gbps'], 'Gig', trim($capacity)),
-                    ];
-
-                    foreach (array_unique($variations) as $variation) {
-                        if (empty($variation)) {
-                            continue;
-                        }
-                        $pricing = IxPortPricing::active()
-                            ->where('node_type', $location->node_type)
-                            ->where('port_capacity', $variation)
-                            ->first();
-                        if ($pricing) {
-                            break;
-                        }
-                    }
-                }
-
-                if (! $pricing) {
-                    return null;
-                }
-
-                $amount = $pricing->getAmountForPlan($plan);
-                if ($amount === null) {
-                    return null;
-                }
-                return $amount;
-            };
-
-            // Proration segments with approved plan changes in the billing window
-            $approvedPlanChanges = PlanChangeRequest::where('application_id', $application->id)
-                ->where('status', 'approved')
-                ->whereNotNull('effective_from')
-                ->orderBy('effective_from')
-                ->get();
-
-            // Determine starting capacity/plan at billingStartDate
-            $baseCapacity = $application->assigned_port_capacity ?? ($applicationData['port_selection']['capacity'] ?? null);
-            $basePlan = $billingPlan;
-            foreach ($approvedPlanChanges as $change) {
-                if ($change->effective_from && $change->effective_from->lt($billingStartDate)) {
-                    $baseCapacity = $change->new_port_capacity ?? $baseCapacity;
-                    $basePlan = $change->new_billing_plan ? strtolower($change->new_billing_plan) : $basePlan;
+                
+                if ($existingInvoice) {
+                    return back()->with('error', "An invoice for billing period '{$billingPeriod}' already exists (Invoice: {$existingInvoice->invoice_number}).");
                 }
             }
 
-            // Validate baseCapacity exists
-            if (!$baseCapacity) {
-                Log::error("Missing port capacity for application {$application->id} during invoice generation", [
-                    'assigned_port_capacity' => $application->assigned_port_capacity,
-                    'port_selection' => $applicationData['port_selection'] ?? null,
-                ]);
-                return back()->with('error', 'Port capacity is not set for this application. Please assign port capacity first.');
-            }
-            
-            // Normalize basePlan to ensure it matches pricing plan format
-            $basePlanNormalized = strtolower(trim($basePlan));
-            if (in_array($basePlanNormalized, ['arc', 'annual'])) {
-                $basePlanNormalized = 'arc';
-            } elseif (in_array($basePlanNormalized, ['mrc', 'monthly'])) {
-                $basePlanNormalized = 'mrc';
-            } elseif ($basePlanNormalized === 'quarterly') {
-                $basePlanNormalized = 'quarterly';
-            } else {
-                $basePlanNormalized = 'mrc'; // Default fallback
-            }
-            
-            $futureChanges = $approvedPlanChanges->filter(function ($c) use ($billingStartDate, $billingEndDate) {
-                return $c->effective_from && $c->effective_from->gte($billingStartDate) && $c->effective_from->lt($billingEndDate);
-            })->values();
-
-            $segmentStart = $billingStartDate->copy();
-            $currentCapacity = $baseCapacity;
-            $currentPlan = $basePlanNormalized;
-            $segments = [];
-            $prorationTotal = 0.0;
-            $totalDays = max(1, $billingEndDate->diffInDays($billingStartDate));
-
-            // Helper to get billing cycle period in days for proration
-            $getBillingCycleDays = function ($plan) {
-                $plan = strtolower(trim($plan));
-                return match($plan) {
-                    'annual', 'arc' => 365, // Annual period = 365 days
-                    'quarterly' => 90,      // Quarterly period = ~90 days (3 months)
-                    'monthly', 'mrc' => 30, // Monthly period = ~30 days
-                    default => 30,
-                };
-            };
-
-            $addSegment = function ($start, $end, $capacity, $plan) use ($getPortAmount, &$segments, &$prorationTotal, $getBillingCycleDays) {
-                if ($end->lte($start)) {
-                    Log::warning("Skipping segment: end date ({$end->format('Y-m-d')}) is before or equal to start date ({$start->format('Y-m-d')})");
-                    return;
-                }
-                $fullAmount = $getPortAmount($capacity, $plan);
-                if ($fullAmount === null || $fullAmount <= 0) {
-                    throw new Exception("No pricing found for capacity {$capacity} and plan {$plan}. Please ensure pricing is configured for this combination.");
-                }
-                // Calculate days: diffInDays returns positive when called correctly
-                // $start->diffInDays($end) gives days from start to end (positive)
-                $segmentDays = $start->diffInDays($end);
-                
-                // Safety check: ensure positive days
-                if ($segmentDays <= 0) {
-                    Log::warning("Invalid segment days calculated: {$segmentDays} for start={$start->format('Y-m-d')}, end={$end->format('Y-m-d')}");
-                    return;
-                }
-                
-                // Get the billing cycle period for this plan (annual=365, quarterly=90, monthly=30)
-                $billingCycleDays = $getBillingCycleDays($plan);
-                
-                // Prorate based on the plan's own billing cycle period, not the total billing period
-                // This handles cases like ARC (365 days) to MRC (30 days) correctly
-                $prorated = round(($fullAmount * $segmentDays) / $billingCycleDays, 2);
-                
-                $prorationTotal += $prorated;
-                $segments[] = [
-                    'start' => $start->format('Y-m-d'),
-                    'end' => $end->format('Y-m-d'),
-                    'capacity' => $capacity,
-                    'plan' => $plan,
-                    'plan_label' => match(strtolower($plan)) {
-                        'annual', 'arc' => 'Annual (ARC)',
-                        'quarterly' => 'Quarterly',
-                        'monthly', 'mrc' => 'Monthly (MRC)',
-                        default => ucfirst($plan),
-                    },
-                    'days' => $segmentDays,
-                    'billing_cycle_days' => $billingCycleDays,
-                    'amount_full' => $fullAmount,
-                    'amount_prorated' => $prorated,
-                ];
-            };
-
-            foreach ($futureChanges as $change) {
-                $segmentEnd = $change->effective_from->copy();
-                
-                // Only create segment if dates are valid
-                if ($segmentEnd->gt($segmentStart)) {
-                    $addSegment($segmentStart, $segmentEnd, $currentCapacity, $currentPlan);
-                }
-                
-                // Update capacity only if it's a capacity change
-                if ($change->isCapacityChange() && $change->new_port_capacity) {
-                    $currentCapacity = $change->new_port_capacity;
-                    Log::info("Plan change {$change->id}: Capacity updated to {$currentCapacity}");
-                }
-                
-                // Update plan if billing plan changed
-                $planFromChange = $change->new_billing_plan ? strtolower(trim($change->new_billing_plan)) : null;
-                if ($planFromChange) {
-                    // Normalize plan from change
-                    if (in_array($planFromChange, ['arc', 'annual'])) {
-                        $currentPlan = 'arc';
-                    } elseif (in_array($planFromChange, ['mrc', 'monthly'])) {
-                        $currentPlan = 'mrc';
-                    } elseif ($planFromChange === 'quarterly') {
-                        $currentPlan = 'quarterly';
-                    } else {
-                        $currentPlan = 'mrc'; // Default fallback
-                    }
-                    Log::info("Plan change {$change->id}: Plan updated to {$currentPlan}");
-                }
-                
-                $segmentStart = $change->effective_from->copy();
-            }
-
-            // Final segment to billing end
-            $addSegment($segmentStart, $billingEndDate->copy(), $currentCapacity, $currentPlan);
-
-            // Debug logging
-            Log::info("Invoice generation debug for application {$application->id}", [
-                'billingStartDate' => $billingStartDate->format('Y-m-d'),
-                'billingEndDate' => $billingEndDate->format('Y-m-d'),
-                'billingPlan' => $billingPlan,
-                'baseCapacity' => $baseCapacity,
-                'basePlan' => $basePlan,
-                'basePlanNormalized' => $basePlanNormalized,
-                'currentCapacity' => $currentCapacity,
-                'currentPlan' => $currentPlan,
-                'approvedPlanChangesCount' => $approvedPlanChanges->count(),
-                'approvedPlanChanges' => $approvedPlanChanges->map(function($c) {
-                    return [
-                        'id' => $c->id,
-                        'effective_from' => $c->effective_from ? $c->effective_from->format('Y-m-d') : null,
-                        'current_capacity' => $c->current_port_capacity,
-                        'new_capacity' => $c->new_port_capacity,
-                        'current_plan' => $c->current_billing_plan,
-                        'new_plan' => $c->new_billing_plan,
-                        'is_capacity_change' => $c->isCapacityChange(),
-                        'is_billing_cycle_change_only' => $c->isBillingCycleChangeOnly(),
-                    ];
-                })->toArray(),
-                'futureChangesCount' => $futureChanges->count(),
-                'futureChanges' => $futureChanges->map(function($c) {
-                    return [
-                        'id' => $c->id,
-                        'effective_from' => $c->effective_from ? $c->effective_from->format('Y-m-d') : null,
-                        'new_capacity' => $c->new_port_capacity,
-                        'new_plan' => $c->new_billing_plan,
-                    ];
-                })->toArray(),
-                'segmentsCount' => count($segments),
-                'segments' => $segments,
-                'prorationTotal' => $prorationTotal,
-                'location' => $location ? ['id' => $location->id, 'name' => $location->name, 'node_type' => $location->node_type] : null,
-            ]);
-
-            if ($prorationTotal <= 0) {
-                Log::error("Invalid prorated total for application {$application->id}", [
-                    'prorationTotal' => $prorationTotal,
-                    'segmentsCount' => count($segments),
-                    'segments' => $segments,
-                    'baseCapacity' => $baseCapacity,
-                    'basePlan' => $basePlan,
-                    'currentCapacity' => $currentCapacity,
-                    'currentPlan' => $currentPlan,
-                    'location' => $location ? ['id' => $location->id, 'name' => $location->name, 'node_type' => $location->node_type] : null,
-                ]);
-                return back()->with('error', 'Unable to calculate charges. Please check plan and pricing configuration. Ensure port capacity and billing plan have valid pricing.');
-            }
-
-            // Calculate adjustments from previous billing period's plan changes (capacity changes only)
-            // Adjustments are applied in the NEXT billing cycle after the change was effective
+            // Prepare line items data
+            $lineItemsData = $segments;
             $adjustments = [];
             $adjustmentTotal = 0.0;
+            $prorationTotal = 0.0;
             
-            if ($lastPaidInvoice && $lastPaidInvoice->billing_start_date && $lastPaidInvoice->billing_end_date) {
-                // Find approved plan changes that were effective in the previous billing period
-                // but haven't been adjusted yet (capacity changes only, not billing cycle changes)
-                $previousPeriodStart = \Carbon\Carbon::parse($lastPaidInvoice->billing_start_date);
-                $previousPeriodEnd = \Carbon\Carbon::parse($lastPaidInvoice->billing_end_date);
+            // If using form data, calculate proration from segments; otherwise use from invoiceData
+            if ($request->has('line_items')) {
+                // Calculate proration total from segments
+                foreach ($segments as $segment) {
+                    $prorationTotal += $segment['amount'] ?? 0;
+                }
+            } else {
+                // Use from calculated data
+                $adjustments = $invoiceData['adjustments'] ?? [];
+                $adjustmentTotal = $invoiceData['adjustment_total'] ?? 0;
+                $prorationTotal = $invoiceData['proration_total'] ?? 0;
+            }
+            
+            if (!empty($adjustments)) {
+                $lineItemsData['_metadata'] = [
+                    'adjustments' => $adjustments,
+                    'adjustment_total' => $adjustmentTotal,
+                    'proration_total' => $prorationTotal,
+                ];
+            }
+
+            // Ensure due_date is properly formatted as date string
+            $dueDateFormatted = $dueDate instanceof \Carbon\Carbon ? $dueDate->format('Y-m-d') : $dueDate;
+            
+            // Recalculate carry-forward if using form data (might have changed)
+            if ($request->has('line_items')) {
+                $lastPaidInvoice = Invoice::where('application_id', $application->id)
+                    ->where('status', 'paid')
+                    ->latest('invoice_date')
+                    ->first();
                 
-                $pendingAdjustments = PlanChangeRequest::where('application_id', $application->id)
-                    ->where('status', 'approved')
-                    ->where('adjustment_applied', false)
-                    ->whereNotNull('effective_from')
-                    ->where(function ($query) use ($previousPeriodStart, $previousPeriodEnd) {
-                        // Changes that were effective during the previous billing period
-                        $query->whereBetween('effective_from', [$previousPeriodStart, $previousPeriodEnd])
-                            ->orWhere(function ($q) use ($previousPeriodStart, $previousPeriodEnd) {
-                                // Or changes that were effective before but adjustment not yet applied
-                                $q->where('effective_from', '<=', $previousPeriodEnd)
-                                  ->where('effective_from', '>=', $previousPeriodStart->copy()->subMonths(6)); // Within last 6 months
-                            });
-                    })
-                    ->get();
+                $carryForwardAmount = 0.0;
+                $hasCarryForward = false;
                 
-                foreach ($pendingAdjustments as $adjustment) {
-                    // Only apply adjustments for capacity changes (upgrade/downgrade)
-                    // Billing cycle changes don't create adjustments, they just change future billing
-                    if ($adjustment->isCapacityChange() && $adjustment->adjustment_amount != 0) {
-                        $adjustmentAmount = (float) $adjustment->adjustment_amount;
-                        $adjustmentTotal += $adjustmentAmount;
-                        
-                        $adjustments[] = [
-                            'plan_change_id' => $adjustment->id,
-                            'type' => $adjustment->change_type, // 'upgrade' or 'downgrade'
-                            'description' => $adjustment->change_type === 'upgrade' 
-                                ? "Upgrade adjustment: {$adjustment->current_port_capacity} → {$adjustment->new_port_capacity}"
-                                : "Downgrade adjustment: {$adjustment->current_port_capacity} → {$adjustment->new_port_capacity}",
-                            'effective_from' => $adjustment->effective_from ? $adjustment->effective_from->format('Y-m-d') : null,
-                            'amount' => $adjustmentAmount,
-                        ];
-                        
-                        Log::info("Adding adjustment for plan change {$adjustment->id}: {$adjustment->change_type}, amount: ₹{$adjustmentAmount}");
+                $unpaidInvoicesQuery = Invoice::where('application_id', $application->id)
+                    ->where(function ($q) {
+                        $q->where('payment_status', 'partial')
+                          ->orWhere(function ($q2) {
+                              $q2->where('payment_status', 'pending')
+                                 ->where('due_date', '<', now('Asia/Kolkata'));
+                          });
+                    });
+                
+                if ($lastPaidInvoice) {
+                    $unpaidInvoicesQuery->where('id', '!=', $lastPaidInvoice->id);
+                }
+                
+                $unpaidInvoices = $unpaidInvoicesQuery->get();
+                
+                foreach ($unpaidInvoices as $unpaidInvoice) {
+                    $balance = $unpaidInvoice->getRemainingBalance();
+                    if ($balance > 0) {
+                        $carryForwardAmount += $balance;
+                        $hasCarryForward = true;
                     }
                 }
+                
+                $finalTotalAmount = $totalAmount + $carryForwardAmount;
             }
-            
-            // Base amount is proration total + adjustments
-            $baseAmount = $prorationTotal + $adjustmentTotal;
-
-            // Calculate GST based on state (IGST for non-Delhi, CGST+SGST for Delhi)
-            $gstVerification = GstVerification::where('user_id', $application->user_id)
-                ->where('is_verified', true)
-                ->latest()
-                ->first();
-            $gstState = $location->state ?? ($gstVerification?->state);
-
-            $gstPercentage = 18.00;
-            $isDelhi = strtolower($gstState ?? '') === 'delhi' || strtolower($gstState ?? '') === 'new delhi';
-
-            if ($isDelhi) {
-                $cgstAmount = round(($baseAmount * 9) / 100, 2);
-                $sgstAmount = round(($baseAmount * 9) / 100, 2);
-                $gstAmount = $cgstAmount + $sgstAmount;
-            } else {
-                $gstAmount = round(($baseAmount * 18) / 100, 2);
-                $cgstAmount = 0;
-                $sgstAmount = 0;
-            }
-
-            $amount = $baseAmount; // Prorated total + adjustments
-            $totalAmount = round($amount + $gstAmount, 2);
-
-            if ($amount <= 0 || $totalAmount <= 0) {
-                Log::error("Invalid invoice calculation for application {$application->id}: amount={$amount}, gstAmount={$gstAmount}, totalAmount={$totalAmount}");
-                return back()->with('error', 'Invalid invoice calculation. Please check port capacity and pricing configuration.');
-            }
-
-            Log::info("Invoice calculation for application {$application->id}: prorated amount={$prorationTotal}, adjustments={$adjustmentTotal}, base amount={$baseAmount}, gstAmount={$gstAmount}, totalAmount={$totalAmount}", [
-                'segments' => $segments,
-                'adjustments' => $adjustments,
-            ]);
 
             // Generate invoice number (ensure uniqueness)
             $baseInvoiceNumber = 'NIXI-IX-'.date('y').'-'.(date('y') + 1).'/'.str_pad($application->id, 4, '0', STR_PAD_LEFT);
@@ -3112,7 +3171,7 @@ class AdminController extends Controller
                 'transaction_id' => $transactionId,
                 'payment_status' => 'pending',
                 'payment_mode' => 'live',
-                'amount' => $totalAmount,
+                'amount' => $finalTotalAmount,
                 'currency' => 'INR',
                 'product_info' => 'NIXI IX Service Invoice - '.$invoiceNumber,
                 'response_message' => 'Invoice payment pending',
@@ -3120,7 +3179,7 @@ class AdminController extends Controller
             
             $paymentData = $payuService->preparePaymentData([
                 'transaction_id' => $transactionId,
-                'amount' => $totalAmount,
+                'amount' => $finalTotalAmount,
                 'product_info' => 'NIXI IX Service Invoice - '.$invoiceNumber,
                 'firstname' => $application->user->fullname,
                 'email' => $application->user->email,
@@ -3132,53 +3191,7 @@ class AdminController extends Controller
                 'udf3' => $invoiceNumber,
             ]);
             
-            // Ensure due_date is properly formatted as date string
-            $dueDateFormatted = $dueDate instanceof \Carbon\Carbon ? $dueDate->format('Y-m-d') : $dueDate;
-            
-            Log::info("Creating invoice for application {$application->id}: invoiceNumber='{$invoiceNumber}', invoiceDate=" . now('Asia/Kolkata')->format('Y-m-d') . ", dueDate={$dueDateFormatted}, billingPeriod='{$billingPeriod}', billingPlan='{$billingPlan}'");
-            
-            // Create invoice record with adjustments
-            // Structure line_items: segments array + adjustments metadata
-            $lineItemsData = $segments;
-            if (!empty($adjustments)) {
-                $lineItemsData['_metadata'] = [
-                    'adjustments' => $adjustments,
-                    'adjustment_total' => $adjustmentTotal,
-                    'proration_total' => $prorationTotal,
-                ];
-            }
-            
-            // Check for carry-forward amount from previous unpaid invoices
-            $carryForwardAmount = 0.0;
-            $hasCarryForward = false;
-            
-            // Build query for unpaid/partial invoices
-            $unpaidInvoicesQuery = Invoice::where('application_id', $application->id)
-                ->where(function ($q) {
-                    $q->where('payment_status', 'partial')
-                      ->orWhere(function ($q2) {
-                          $q2->where('payment_status', 'pending')
-                             ->where('due_date', '<', now('Asia/Kolkata'));
-                      });
-                });
-            
-            // Exclude last paid invoice if it exists
-            if ($lastPaidInvoice) {
-                $unpaidInvoicesQuery->where('id', '!=', $lastPaidInvoice->id);
-            }
-            
-            $unpaidInvoices = $unpaidInvoicesQuery->get();
-            
-            foreach ($unpaidInvoices as $unpaidInvoice) {
-                $balance = $unpaidInvoice->getRemainingBalance();
-                if ($balance > 0) {
-                    $carryForwardAmount += $balance;
-                    $hasCarryForward = true;
-                }
-            }
-            
-            // Add carry-forward to total if exists
-            $finalTotalAmount = $totalAmount + $carryForwardAmount;
+            Log::info("Creating invoice for application {$application->id}: invoiceNumber='{$invoiceNumber}', invoiceDate=" . now('Asia/Kolkata')->format('Y-m-d') . ", dueDate={$dueDateFormatted}, billingPeriod='{$billingPeriod}'");
             
             $invoice = Invoice::create([
                 'application_id' => $application->id,
@@ -3248,7 +3261,7 @@ class AdminController extends Controller
                     $application->user->fullname,
                     $application->application_id,
                     $invoiceNumber,
-                    $totalAmount,
+                    $finalTotalAmount,
                     $application->status,
                     $invoicePdfPath ?? null,
                     $payuService->getPaymentUrl(),
@@ -4535,7 +4548,10 @@ class AdminController extends Controller
 
             // Delete related records
             $invoice->paymentAllocations()->delete();
-            PaymentTransaction::where('invoice_id', $invoice->id)->delete();
+            // PaymentTransaction doesn't have invoice_id, delete by application_id and transaction matching invoice number
+            PaymentTransaction::where('application_id', $invoice->application_id)
+                ->where('product_info', 'like', '%'.$invoice->invoice_number.'%')
+                ->delete();
             PaymentVerificationLog::where('application_id', $invoice->application_id)
                 ->where('billing_period', $invoice->billing_period)
                 ->delete();

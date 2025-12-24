@@ -911,12 +911,9 @@
                     @if($roleToUse === 'ix_account' && $application->isVisibleToIxAccount())
                         @if($application->is_active)
                             {{-- Generate Invoice - Always available for LIVE applications --}}
-                            <form method="POST" action="{{ route('admin.applications.ix-account.generate-invoice', $application->id) }}" class="mb-3">
-                                @csrf
-                                <button type="submit" class="btn btn-primary w-100" onclick="return confirm('Generate invoice for this application?')">
-                                    Generate Invoice
-                                </button>
-                            </form>
+                            <a href="{{ route('admin.applications.ix-account.generate-invoice', $application->id) }}" class="btn btn-primary w-100 mb-3">
+                                Generate Invoice
+                            </a>
                             
                             {{-- Verify Payment - Only show if not already verified for current period --}}
                             @if(isset($canVerifyPayment) && $canVerifyPayment)
