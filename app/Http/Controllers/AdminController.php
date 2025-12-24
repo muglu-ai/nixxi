@@ -2931,6 +2931,7 @@ class AdminController extends Controller
 
             $carryForwardAmount = 0.0;
             $hasCarryForward = false;
+            $carryForwardInvoices = [];
             
             $unpaidInvoicesQuery = Invoice::where('application_id', $application->id)
                 ->where(function ($q) {
@@ -2952,9 +2953,15 @@ class AdminController extends Controller
                 if ($balance > 0) {
                     $carryForwardAmount += $balance;
                     $hasCarryForward = true;
+                    $carryForwardInvoices[] = [
+                        'invoice_id' => $unpaidInvoice->id,
+                        'invoice_number' => $unpaidInvoice->invoice_number,
+                        'amount' => $balance,
+                    ];
                 }
             }
             
+            // Carry forward amount already includes GST from previous invoices, so no GST is added again
             $finalTotalAmount = $totalAmount + $carryForwardAmount;
 
             return [
@@ -2969,6 +2976,7 @@ class AdminController extends Controller
                 'total_amount' => $totalAmount,
                 'carry_forward_amount' => $carryForwardAmount,
                 'has_carry_forward' => $hasCarryForward,
+                'carry_forward_invoices' => $carryForwardInvoices,
                 'final_total_amount' => $finalTotalAmount,
                 'proration_total' => $prorationTotal,
                 'adjustment_total' => $adjustmentTotal,
@@ -3079,6 +3087,7 @@ class AdminController extends Controller
             $adjustments = [];
             $adjustmentTotal = 0.0;
             $prorationTotal = 0.0;
+            $carryForwardInvoices = [];
             
             // If using form data, calculate proration from segments; otherwise use from invoiceData
             if ($request->has('line_items')) {
@@ -3086,11 +3095,64 @@ class AdminController extends Controller
                 foreach ($segments as $segment) {
                     $prorationTotal += $segment['amount'] ?? 0;
                 }
+                // Recalculate carry forward for form data
+                $lastPaidInvoice = Invoice::where('application_id', $application->id)
+                    ->where('status', 'paid')
+                    ->latest('invoice_date')
+                    ->first();
+                
+                $unpaidInvoicesQuery = Invoice::where('application_id', $application->id)
+                    ->where(function ($q) {
+                        $q->where('payment_status', 'partial')
+                          ->orWhere(function ($q2) {
+                              $q2->where('payment_status', 'pending')
+                                 ->where('due_date', '<', now('Asia/Kolkata'));
+                          });
+                    });
+                
+                if ($lastPaidInvoice) {
+                    $unpaidInvoicesQuery->where('id', '!=', $lastPaidInvoice->id);
+                }
+                
+                $unpaidInvoices = $unpaidInvoicesQuery->get();
+                
+                foreach ($unpaidInvoices as $unpaidInvoice) {
+                    $balance = $unpaidInvoice->getRemainingBalance();
+                    if ($balance > 0) {
+                        $carryForwardAmount += $balance;
+                        $hasCarryForward = true;
+                        $carryForwardInvoices[] = [
+                            'invoice_id' => $unpaidInvoice->id,
+                            'invoice_number' => $unpaidInvoice->invoice_number,
+                            'amount' => $balance,
+                        ];
+                    }
+                }
+                
+                $finalTotalAmount = $totalAmount + $carryForwardAmount;
             } else {
                 // Use from calculated data
                 $adjustments = $invoiceData['adjustments'] ?? [];
                 $adjustmentTotal = $invoiceData['adjustment_total'] ?? 0;
                 $prorationTotal = $invoiceData['proration_total'] ?? 0;
+                $carryForwardInvoices = $invoiceData['carry_forward_invoices'] ?? [];
+            }
+            
+            // Add carry forward as a line item if present
+            if ($hasCarryForward && $carryForwardAmount > 0) {
+                $carryForwardDescription = 'Carry Forward from Previous Invoice(s): ';
+                $invoiceNumbers = array_map(function($inv) {
+                    return $inv['invoice_number'];
+                }, $carryForwardInvoices);
+                $carryForwardDescription .= implode(', ', $invoiceNumbers);
+                
+                $lineItemsData[] = [
+                    'description' => $carryForwardDescription,
+                    'quantity' => 1,
+                    'rate' => $carryForwardAmount,
+                    'amount' => $carryForwardAmount,
+                    'is_carry_forward' => true,
+                ];
             }
             
             if (!empty($adjustments)) {
@@ -3236,6 +3298,28 @@ class AdminController extends Controller
                     ]);
                 }
                 Log::info("Marked " . count($adjustments) . " adjustments as applied for invoice {$invoice->id}");
+            }
+            
+            // Mark previous invoices as paid if carry forward is applied
+            if ($hasCarryForward && !empty($carryForwardInvoices)) {
+                foreach ($carryForwardInvoices as $cfInvoice) {
+                    $previousInvoice = Invoice::find($cfInvoice['invoice_id']);
+                    if ($previousInvoice) {
+                        $forwardedAmount = $cfInvoice['amount'];
+                        $previousInvoice->update([
+                            'payment_status' => 'paid',
+                            'status' => 'paid',
+                            'paid_amount' => $previousInvoice->total_amount,
+                            'balance_amount' => 0,
+                            'forwarded_amount' => $forwardedAmount,
+                            'forwarded_to_invoice_date' => $invoice->invoice_date,
+                            'paid_at' => now('Asia/Kolkata'),
+                            'paid_by' => $admin->id,
+                            'manual_payment_notes' => ($previousInvoice->manual_payment_notes ? $previousInvoice->manual_payment_notes . ' | ' : '') . "Amount forwarded to invoice {$invoice->invoice_number}",
+                        ]);
+                        Log::info("Marked invoice {$previousInvoice->invoice_number} as paid (forwarded {$forwardedAmount} to invoice {$invoice->invoice_number})");
+                    }
+                }
             }
             
             Log::info("Invoice created successfully: ID={$invoice->id}, due_date={$invoice->due_date}, billing_start_date={$invoice->billing_start_date}, billing_end_date={$invoice->billing_end_date}");

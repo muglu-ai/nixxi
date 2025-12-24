@@ -485,7 +485,12 @@
                             {{-- New format: line items with description, quantity, rate, amount --}}
                             <tr>
                                 <td>{{ $itemIndex++ }}</td>
-                                <td>{{ $item['description'] ?? 'Service Charge' }}</td>
+                                <td>
+                                    {{ $item['description'] ?? 'Service Charge' }}
+                                    @if(isset($item['is_carry_forward']) && $item['is_carry_forward'])
+                                        <br><small class="text-muted" style="font-style: italic;">(GST already included in this amount)</small>
+                                    @endif
+                                </td>
                                 <td>{{ number_format($item['quantity'] ?? 1, 2) }}</td>
                                 <td>{{ $portCapacity }}</td>
                                 <td>{{ number_format($item['rate'] ?? 0, 2) }}</td>
@@ -534,6 +539,28 @@
                 <tr style="background-color: #f8f9fa;">
                     <td colspan="4" class="text-end"><strong>Adjustments</strong></td>
                     <td colspan="2" class="text-end"><strong>{{ number_format($adjustmentTotal, 2) }}</strong></td>
+                </tr>
+            @endif
+            
+            {{-- Carry Forward Subtotal --}}
+            @php
+                $carryForwardTotal = 0;
+                if (is_array($serviceItems)) {
+                    foreach ($serviceItems as $item) {
+                        if (is_array($item) && isset($item['is_carry_forward']) && $item['is_carry_forward']) {
+                            $carryForwardTotal += $item['amount'] ?? 0;
+                        }
+                    }
+                }
+            @endphp
+            @if($carryForwardTotal > 0)
+                <tr style="background-color: #f0f8ff;">
+                    <td colspan="4" class="text-end"><strong>Subtotal (Service Charges + Adjustments)</strong></td>
+                    <td colspan="2" class="text-end"><strong>{{ number_format($prorationTotal + $adjustmentTotal, 2) }}</strong></td>
+                </tr>
+                <tr style="background-color: #f0f8ff;">
+                    <td colspan="4" class="text-end"><strong>Carry Forward from Previous Invoice(s) <small>(GST included)</small></strong></td>
+                    <td colspan="2" class="text-end"><strong>{{ number_format($carryForwardTotal, 2) }}</strong></td>
                 </tr>
             @endif
         </tbody>
