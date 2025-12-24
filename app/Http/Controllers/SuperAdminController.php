@@ -184,6 +184,49 @@ class SuperAdminController extends Controller
             $openGrievances = Ticket::whereIn('status', ['open', 'assigned', 'in_progress'])->count();
             $pendingGrievances = Ticket::where('status', 'assigned')->count();
 
+            // Payment Summary - This Month
+            $currentMonthStart = now('Asia/Kolkata')->startOfMonth();
+            $currentMonthEnd = now('Asia/Kolkata')->endOfMonth();
+            
+            // Total invoices generated this month
+            $invoicesThisMonth = Invoice::whereBetween('invoice_date', [$currentMonthStart, $currentMonthEnd])
+                ->where('status', '!=', 'cancelled')
+                ->count();
+            
+            // Total amount of invoices generated this month
+            $totalInvoicedThisMonth = Invoice::whereBetween('invoice_date', [$currentMonthStart, $currentMonthEnd])
+                ->where('status', '!=', 'cancelled')
+                ->sum('total_amount');
+            
+            // Total amount collected (paid invoices) this month
+            $totalCollectedThisMonth = Invoice::whereBetween('invoice_date', [$currentMonthStart, $currentMonthEnd])
+                ->where('payment_status', 'paid')
+                ->where('status', '!=', 'cancelled')
+                ->sum('paid_amount');
+            
+            // Total pending amount (unpaid + partial invoices) - all time
+            $totalPendingAmount = Invoice::whereIn('payment_status', ['pending', 'partial'])
+                ->where('status', '!=', 'cancelled')
+                ->sum('balance_amount');
+            
+            // Total overdue amount
+            $totalOverdueAmount = Invoice::where('status', 'overdue')
+                ->where('status', '!=', 'cancelled')
+                ->sum('balance_amount');
+            
+            // Partial payments this month
+            $partialPaymentsThisMonth = Invoice::whereBetween('invoice_date', [$currentMonthStart, $currentMonthEnd])
+                ->where('payment_status', 'partial')
+                ->where('status', '!=', 'cancelled')
+                ->count();
+            
+            // Total invoices by status (all time)
+            $totalInvoices = Invoice::where('status', '!=', 'cancelled')->count();
+            $paidInvoices = Invoice::where('payment_status', 'paid')->where('status', '!=', 'cancelled')->count();
+            $pendingInvoices = Invoice::where('payment_status', 'pending')->where('status', '!=', 'cancelled')->count();
+            $partialInvoices = Invoice::where('payment_status', 'partial')->where('status', '!=', 'cancelled')->count();
+            $overdueInvoices = Invoice::where('status', 'overdue')->where('status', '!=', 'cancelled')->count();
+
             return view('superadmin.dashboard', compact(
                 'superAdmin',
                 'recentLoggedInUsers',
@@ -221,7 +264,19 @@ class SuperAdminController extends Controller
                 // IX Points
                 'totalIxPoints',
                 'edgeIxPoints',
-                'metroIxPoints'
+                'metroIxPoints',
+                // Payment Summary
+                'invoicesThisMonth',
+                'totalInvoicedThisMonth',
+                'totalCollectedThisMonth',
+                'totalPendingAmount',
+                'totalOverdueAmount',
+                'partialPaymentsThisMonth',
+                'totalInvoices',
+                'paidInvoices',
+                'pendingInvoices',
+                'partialInvoices',
+                'overdueInvoices'
             ));
         } catch (QueryException $e) {
             Log::error('Database error loading SuperAdmin dashboard: '.$e->getMessage());

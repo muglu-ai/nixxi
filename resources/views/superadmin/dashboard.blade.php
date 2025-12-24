@@ -108,6 +108,142 @@
         </div>
     </div>
 
+    <!-- Payment Summary Section -->
+    <div class="row g-4 mb-4">
+        <div class="col-12">
+            <div class="card border-0 shadow-sm" style="border-radius: 16px;">
+                <div class="card-header bg-success text-white" style="border-radius: 16px 16px 0 0;">
+                    <h5 class="mb-0" style="font-weight: 600;">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" class="me-2" viewBox="0 0 16 16">
+                            <path d="M0 4a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V4zm2-1a1 1 0 0 0-1 1v.217l7 4.2 7-4.2V4a1 1 0 0 0-1-1H2zm13 2.383-4.708 2.825L15 11.105V5.383zm-.034 6.876-5.64-3.471L8 9.583l-1.326-.795-5.64 3.47A1 1 0 0 0 2 13h12a1 1 0 0 0 .966-.741ZM1 11.105l4.708-2.897L1 5.383v5.722Z"/>
+                        </svg>
+                        Payment Summary - {{ now('Asia/Kolkata')->format('F Y') }}
+                    </h5>
+                </div>
+                <div class="card-body p-4">
+                    <div class="row g-4 mb-4">
+                        <!-- Invoices Generated This Month -->
+                        <div class="col-md-3">
+                            <div class="card border-0 shadow-sm bg-primary bg-opacity-10" style="border-radius: 12px;">
+                                <div class="card-body text-center p-4">
+                                    <div class="mb-2">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" fill="#0d6efd" viewBox="0 0 16 16">
+                                            <path d="M14 4.5V14a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V2a2 2 0 0 1 2-2h5.5L14 4.5zm-3 0A1.5 1.5 0 0 1 9.5 3V1H4a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V4.5h-2z"/>
+                                        </svg>
+                                    </div>
+                                    <h3 class="mb-2" style="color: #0d6efd; font-weight: 700;">{{ number_format($invoicesThisMonth) }}</h3>
+                                    <p class="mb-0 text-muted" style="font-weight: 500; font-size: 0.875rem;">Bills Generated</p>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- Total Invoiced This Month -->
+                        <div class="col-md-3">
+                            <div class="card border-0 shadow-sm bg-info bg-opacity-10" style="border-radius: 12px;">
+                                <div class="card-body text-center p-4">
+                                    <div class="mb-2">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" fill="#0dcaf0" viewBox="0 0 16 16">
+                                            <path d="M4 10.5a.5.5 0 0 1 .5-.5h7a.5.5 0 0 1 0 1h-7a.5.5 0 0 1-.5-.5zm0-2a.5.5 0 0 1 .5-.5h11a.5.5 0 0 1 0 1h-11a.5.5 0 0 1-.5-.5zm0-2a.5.5 0 0 1 .5-.5h11a.5.5 0 0 1 0 1h-11a.5.5 0 0 1-.5-.5zm0-2a.5.5 0 0 1 .5-.5h11a.5.5 0 0 1 0 1h-11a.5.5 0 0 1-.5-.5zm0-2a.5.5 0 0 1 .5-.5h11a.5.5 0 0 1 0 1h-11a.5.5 0 0 1-.5-.5z"/>
+                                        </svg>
+                                    </div>
+                                    <h3 class="mb-2" style="color: #0dcaf0; font-weight: 700;">₹{{ number_format($totalInvoicedThisMonth, 2) }}</h3>
+                                    <p class="mb-0 text-muted" style="font-weight: 500; font-size: 0.875rem;">Total Invoiced</p>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- Amount Collected This Month -->
+                        <div class="col-md-3">
+                            <div class="card border-0 shadow-sm bg-success bg-opacity-10" style="border-radius: 12px;">
+                                <div class="card-body text-center p-4">
+                                    <div class="mb-2">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" fill="#198754" viewBox="0 0 16 16">
+                                            <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z"/>
+                                            <path d="M10.97 4.97a.75.75 0 0 1 1.07 1.05l-3.99 4.99a.75.75 0 0 1-1.08.02L4.324 8.384a.75.75 0 1 1 1.06-1.06l2.094 2.093 3.473-4.425a.267.267 0 0 1 .02-.022z"/>
+                                        </svg>
+                                    </div>
+                                    <h3 class="mb-2" style="color: #198754; font-weight: 700;">₹{{ number_format($totalCollectedThisMonth, 2) }}</h3>
+                                    <p class="mb-0 text-muted" style="font-weight: 500; font-size: 0.875rem;">Amount Collected</p>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- Pending Amount -->
+                        <div class="col-md-3">
+                            <div class="card border-0 shadow-sm bg-warning bg-opacity-10" style="border-radius: 12px;">
+                                <div class="card-body text-center p-4">
+                                    <div class="mb-2">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" fill="#ffc107" viewBox="0 0 16 16">
+                                            <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z"/>
+                                            <path d="M7.002 11a1 1 0 1 1 2 0 1 1 0 0 1-2 0zM7.1 4.995a.905.905 0 1 1 1.8 0l-.35 3.507a.552.552 0 0 1-1.1 0L7.1 4.995z"/>
+                                        </svg>
+                                    </div>
+                                    <h3 class="mb-2" style="color: #ffc107; font-weight: 700;">₹{{ number_format($totalPendingAmount, 2) }}</h3>
+                                    <p class="mb-0 text-muted" style="font-weight: 500; font-size: 0.875rem;">Pending Amount</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Detailed Statistics -->
+                    <div class="row g-4">
+                        <div class="col-md-6">
+                            <div class="card border-0 shadow-sm" style="border-radius: 12px;">
+                                <div class="card-header bg-light" style="border-radius: 12px 12px 0 0;">
+                                    <h6 class="mb-0" style="font-weight: 600; color: #2c3e50;">Invoice Status Breakdown (All Time)</h6>
+                                </div>
+                                <div class="card-body p-3">
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                        <span class="text-muted">Total Invoices:</span>
+                                        <strong style="color: #2c3e50;">{{ number_format($totalInvoices) }}</strong>
+                                    </div>
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                        <span class="text-success">Paid:</span>
+                                        <strong class="text-success">{{ number_format($paidInvoices) }}</strong>
+                                    </div>
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                        <span class="text-warning">Pending:</span>
+                                        <strong class="text-warning">{{ number_format($pendingInvoices) }}</strong>
+                                    </div>
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                        <span class="text-info">Partial:</span>
+                                        <strong class="text-info">{{ number_format($partialInvoices) }}</strong>
+                                    </div>
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <span class="text-danger">Overdue:</span>
+                                        <strong class="text-danger">{{ number_format($overdueInvoices) }}</strong>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="card border-0 shadow-sm" style="border-radius: 12px;">
+                                <div class="card-header bg-light" style="border-radius: 12px 12px 0 0;">
+                                    <h6 class="mb-0" style="font-weight: 600; color: #2c3e50;">Additional Information</h6>
+                                </div>
+                                <div class="card-body p-3">
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                        <span class="text-muted">Partial Payments (This Month):</span>
+                                        <strong style="color: #2c3e50;">{{ number_format($partialPaymentsThisMonth) }}</strong>
+                                    </div>
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                        <span class="text-danger">Overdue Amount:</span>
+                                        <strong class="text-danger">₹{{ number_format($totalOverdueAmount, 2) }}</strong>
+                                    </div>
+                                    @if($totalInvoicedThisMonth > 0)
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <span class="text-muted">Collection Rate:</span>
+                                        <strong style="color: #2c3e50;">
+                                            {{ number_format(($totalCollectedThisMonth / $totalInvoicedThisMonth) * 100, 2) }}%
+                                        </strong>
+                                    </div>
+                                    @endif
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Approved Applications & Member Statistics Row -->
     <div class="row g-4 mb-4">
         <!-- Approved Applications -->
