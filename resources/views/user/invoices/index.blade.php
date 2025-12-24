@@ -58,13 +58,21 @@
                                     @endif
                                 </td>
                                 <td>
-                                    <strong>₹{{ number_format($invoice->total_amount, 2) }}</strong>
+                                    @if($invoice->payment_status === 'partial')
+                                        <strong>₹{{ number_format($invoice->balance_amount ?? $invoice->total_amount, 2) }}</strong>
+                                        <br><small class="text-warning">(Partial: ₹{{ number_format($invoice->paid_amount, 2) }} paid of ₹{{ number_format($invoice->total_amount, 2) }})</small>
+                                    @else
+                                        <strong>₹{{ number_format($invoice->total_amount, 2) }}</strong>
+                                    @endif
                                     @if($invoice->gst_amount > 0)
                                         <br><small class="text-muted">(Base: ₹{{ number_format($invoice->amount, 2) }} + GST: ₹{{ number_format($invoice->gst_amount, 2) }})</small>
                                     @endif
                                 </td>
                                 <td>
-                                    @if($invoice->status === 'paid')
+                                    @if($invoice->payment_status === 'partial')
+                                        <span class="badge bg-warning">Partial</span>
+                                        <br><small class="text-muted">Balance: ₹{{ number_format($invoice->balance_amount, 2) }}</small>
+                                    @elseif($invoice->status === 'paid')
                                         <span class="badge bg-success">Paid</span>
                                         @if($invoice->paid_at)
                                             <br><small class="text-muted">{{ $invoice->paid_at->format('d M Y') }}</small>
@@ -79,7 +87,7 @@
                                 </td>
                                 <td>
                                     <div class="d-flex gap-2">
-                                        @if($invoice->status === 'pending')
+                                        @if(in_array($invoice->status, ['pending', 'overdue']) || $invoice->payment_status === 'partial')
                                             <form action="{{ route('user.payments.pay-now', $invoice->id) }}" method="POST" class="d-inline">
                                                 @csrf
                                                 <button type="submit" class="btn btn-sm btn-success">

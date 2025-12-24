@@ -4290,7 +4290,95 @@ class AdminController extends Controller
                 return back()->with('error', 'Invoice can only be managed for LIVE applications.');
             }
 
-            return view('admin.invoices.edit', compact('invoice', 'admin'));
+            // Load line items from segments if they exist
+            $lineItems = $invoice->line_items ?? [];
+            $segments = [];
+            
+            // Extract segments from line_items (they might be stored as array or with metadata)
+            if (is_array($lineItems)) {
+                // Check if metadata exists (new format)
+                if (isset($lineItems['_metadata'])) {
+                    // Segments are the keys except _metadata
+                    foreach ($lineItems as $key => $value) {
+                        if ($key !== '_metadata' && is_array($value)) {
+                            $segments[] = $value;
+                        }
+                    }
+                } else {
+                    // Old format: check if items have segment structure
+                    foreach ($lineItems as $item) {
+                        if (is_array($item) && (isset($item['start']) || isset($item['description']))) {
+                            $segments[] = $item;
+                        }
+                    }
+                }
+            }
+
+            // If no segments found, try to regenerate from billing cycle
+            if (empty($segments) && $invoice->billing_start_date && $invoice->billing_end_date) {
+                try {
+                    $application = $invoice->application;
+                    $applicationData = $application->application_data ?? [];
+                    $billingStartDate = \Carbon\Carbon::parse($invoice->billing_start_date);
+                    $billingEndDate = \Carbon\Carbon::parse($invoice->billing_end_date);
+                    $billingPlan = $application->billing_cycle ?? ($applicationData['port_selection']['billing_plan'] ?? 'monthly');
+                    
+                    // Get location and pricing
+                    $locationId = $applicationData['location']['id'] ?? null;
+                    $location = $locationId ? IxLocation::find($locationId) : null;
+                    
+                    if ($location) {
+                        $baseCapacity = $application->assigned_port_capacity ?? ($applicationData['port_selection']['capacity'] ?? null);
+                        
+                        if ($baseCapacity) {
+                            // Get pricing
+                            $pricing = IxPortPricing::where('location_id', $location->id)
+                                ->where('port_capacity', $baseCapacity)
+                                ->where('billing_plan', strtolower($billingPlan))
+                                ->first();
+                            
+                            if ($pricing) {
+                                $amount = $pricing->amount;
+                                $days = $billingStartDate->diffInDays($billingEndDate);
+                                
+                                // Calculate prorated amount
+                                $billingCycleDays = match(strtolower($billingPlan)) {
+                                    'annual', 'arc' => 365,
+                                    'quarterly' => 90,
+                                    'monthly', 'mrc' => 30,
+                                    default => 30,
+                                };
+                                
+                                $prorated = round(($amount * $days) / $billingCycleDays, 2);
+                                
+                                $segments = [[
+                                    'start' => $billingStartDate->format('Y-m-d'),
+                                    'end' => $billingEndDate->format('Y-m-d'),
+                                    'capacity' => $baseCapacity,
+                                    'plan' => strtolower($billingPlan),
+                                    'plan_label' => match(strtolower($billingPlan)) {
+                                        'annual', 'arc' => 'Annual (ARC)',
+                                        'quarterly' => 'Quarterly',
+                                        'monthly', 'mrc' => 'Monthly (MRC)',
+                                        default => ucfirst($billingPlan),
+                                    },
+                                    'days' => $days,
+                                    'amount_full' => $amount,
+                                    'amount_prorated' => $prorated,
+                                    'description' => "IX Service - {$baseCapacity} Port Capacity ({$billingPlan})",
+                                    'quantity' => 1,
+                                    'rate' => $amount,
+                                    'amount' => $prorated,
+                                ]];
+                            }
+                        }
+                    }
+                } catch (Exception $e) {
+                    Log::warning('Could not regenerate segments for invoice edit: '.$e->getMessage());
+                }
+            }
+
+            return view('admin.invoices.edit', compact('invoice', 'admin', 'segments'));
         } catch (Exception $e) {
             Log::error('Error loading invoice edit form: '.$e->getMessage());
 
@@ -4337,6 +4425,12 @@ class AdminController extends Controller
                 }
             }
 
+            // Delete old PDF if exists
+            $oldPdfPath = $invoice->pdf_path;
+            if ($oldPdfPath && Storage::disk('public')->exists($oldPdfPath)) {
+                Storage::disk('public')->delete($oldPdfPath);
+            }
+
             // Update invoice
             $invoice->update([
                 'invoice_date' => $validated['invoice_date'],
@@ -4358,7 +4452,37 @@ class AdminController extends Controller
                 'manual_payment_notes' => $validated['manual_payment_notes'] ?? $invoice->manual_payment_notes,
                 'paid_at' => $validated['payment_status'] === 'paid' && !$invoice->paid_at ? now('Asia/Kolkata') : ($validated['payment_status'] !== 'paid' ? null : $invoice->paid_at),
                 'paid_by' => $validated['payment_status'] === 'paid' && !$invoice->paid_by ? $admin->id : ($validated['payment_status'] !== 'paid' ? null : $invoice->paid_by),
+                'pdf_path' => null, // Will be regenerated
             ]);
+
+            // Regenerate invoice PDF
+            $application = $invoice->application()->with('user')->first();
+            try {
+                $invoicePdf = $this->generateIxInvoicePdf($application, $invoice);
+                $invoicePdfPath = 'applications/'.$application->user_id.'/ix/'.$invoice->invoice_number.'_invoice.pdf';
+                Storage::disk('public')->put($invoicePdfPath, $invoicePdf->output());
+                $invoice->update(['pdf_path' => $invoicePdfPath]);
+            } catch (Exception $e) {
+                Log::error('Error regenerating IX invoice PDF: '.$e->getMessage());
+            }
+
+            // Send updated invoice email to user
+            try {
+                Mail::to($application->user->email)->send(new IxApplicationInvoiceMail(
+                    $application->user->fullname,
+                    $application->application_id,
+                    $invoice->invoice_number,
+                    $invoice->total_amount,
+                    $application->status,
+                    $invoice->pdf_path ?? null,
+                    null, // No PayU URL for updated invoice
+                    null  // No PayU data for updated invoice
+                ));
+                $invoice->update(['sent_at' => now('Asia/Kolkata')]);
+                Log::info("Updated invoice email sent to {$application->user->email} for invoice {$invoice->invoice_number}");
+            } catch (Exception $e) {
+                Log::error('Error sending updated invoice email: '.$e->getMessage());
+            }
 
             // Log status change
             ApplicationStatusHistory::log(
@@ -4371,7 +4495,7 @@ class AdminController extends Controller
             );
 
             return redirect()->route('admin.applications.show', $invoice->application_id)
-                ->with('success', 'Invoice updated successfully.');
+                ->with('success', 'Invoice updated successfully. Updated invoice has been sent to the user.');
         } catch (Exception $e) {
             Log::error('Error updating invoice: '.$e->getMessage());
 
@@ -4404,9 +4528,17 @@ class AdminController extends Controller
             $applicationId = $invoice->application_id;
             $invoiceNumber = $invoice->invoice_number;
 
+            // Delete old PDF if exists
+            if ($invoice->pdf_path && Storage::disk('public')->exists($invoice->pdf_path)) {
+                Storage::disk('public')->delete($invoice->pdf_path);
+            }
+
             // Delete related records
             $invoice->paymentAllocations()->delete();
             PaymentTransaction::where('invoice_id', $invoice->id)->delete();
+            PaymentVerificationLog::where('application_id', $invoice->application_id)
+                ->where('billing_period', $invoice->billing_period)
+                ->delete();
 
             // Delete invoice
             $invoice->delete();

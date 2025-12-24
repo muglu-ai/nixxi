@@ -28,17 +28,22 @@ class UserPaymentController extends Controller
                     ->with('error', 'User session expired. Please login again.');
             }
 
-            // Get all pending invoices with applications
+            // Get all pending and partial invoices with applications
             $pendingInvoices = Invoice::whereHas('application', function ($query) use ($userId) {
                 $query->where('user_id', $userId);
             })
-            ->where('status', 'pending')
+            ->where(function ($q) {
+                $q->where('status', 'pending')
+                  ->orWhere('payment_status', 'partial');
+            })
             ->with(['application'])
             ->latest('due_date')
             ->get();
 
-            // Calculate total outstanding amount
-            $outstandingAmount = $pendingInvoices->sum('total_amount');
+            // Calculate total outstanding amount (use balance_amount for partial payments)
+            $outstandingAmount = $pendingInvoices->sum(function ($invoice) {
+                return $invoice->balance_amount ?? $invoice->total_amount;
+            });
 
             return view('user.payments.pending', compact('user', 'pendingInvoices', 'outstandingAmount'));
         } catch (Exception $e) {

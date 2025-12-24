@@ -59,20 +59,35 @@
                     <h5 class="mb-3">Line Items / Particulars</h5>
                     <div id="lineItemsContainer">
                         @php
-                            $lineItems = $invoice->line_items ?? [];
-                            // Handle both old format (segments array) and new format
-                            if (isset($lineItems['segments']) && is_array($lineItems['segments'])) {
-                                $items = $lineItems['segments'];
-                            } elseif (is_array($lineItems) && !isset($lineItems[0]['description'])) {
-                                // Convert old format to new format
-                                $items = [];
-                                foreach ($lineItems as $key => $value) {
-                                    if (is_array($value) && isset($value['description'])) {
-                                        $items[] = $value;
-                                    }
-                                }
+                            // Use segments if provided, otherwise fall back to line_items
+                            if (isset($segments) && !empty($segments)) {
+                                $items = $segments;
                             } else {
-                                $items = $lineItems;
+                                $lineItems = $invoice->line_items ?? [];
+                                // Handle both old format (segments array) and new format
+                                if (isset($lineItems['segments']) && is_array($lineItems['segments'])) {
+                                    $items = $lineItems['segments'];
+                                } elseif (is_array($lineItems) && !isset($lineItems[0]['description'])) {
+                                    // Convert old format to new format
+                                    $items = [];
+                                    foreach ($lineItems as $key => $value) {
+                                        if ($key !== '_metadata' && is_array($value) && (isset($value['description']) || isset($value['start']))) {
+                                            // Convert segment format to display format
+                                            if (isset($value['start'])) {
+                                                $items[] = [
+                                                    'description' => $value['description'] ?? ($value['plan_label'] ?? '') . ' - ' . $value['capacity'] . ' Port Capacity (' . ($value['start'] ?? '') . ' to ' . ($value['end'] ?? '') . ')',
+                                                    'quantity' => 1,
+                                                    'rate' => $value['amount_full'] ?? $value['rate'] ?? 0,
+                                                    'amount' => $value['amount_prorated'] ?? $value['amount'] ?? 0,
+                                                ];
+                                            } else {
+                                                $items[] = $value;
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    $items = $lineItems;
+                                }
                             }
                             if (empty($items)) {
                                 $items = [['description' => '', 'quantity' => 1, 'rate' => 0, 'amount' => 0]];

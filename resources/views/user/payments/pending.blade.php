@@ -90,7 +90,12 @@
                                         @endif
                                     </td>
                                     <td style="padding: 1rem;">
-                                        <strong>₹{{ number_format($invoice->total_amount, 2) }}</strong>
+                                        @if($invoice->payment_status === 'partial')
+                                            <strong>₹{{ number_format($invoice->balance_amount ?? $invoice->total_amount, 2) }}</strong>
+                                            <br><small class="text-warning">(Partial: ₹{{ number_format($invoice->paid_amount, 2) }} paid of ₹{{ number_format($invoice->total_amount, 2) }})</small>
+                                        @else
+                                            <strong>₹{{ number_format($invoice->total_amount, 2) }}</strong>
+                                        @endif
                                         @if($invoice->gst_amount > 0)
                                             <br><small class="text-muted">(Base: ₹{{ number_format($invoice->amount, 2) }} + GST: ₹{{ number_format($invoice->gst_amount, 2) }})</small>
                                         @endif

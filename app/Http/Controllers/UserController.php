@@ -59,24 +59,37 @@ class UserController extends Controller
             
             $pendingInvoices = \App\Models\Invoice::whereHas('application', function ($query) use ($userId) {
                 $query->where('user_id', $userId);
-            })->where('status', 'pending')->count();
+            })->where(function ($q) {
+                $q->where('status', 'pending')
+                  ->orWhere('payment_status', 'partial');
+            })->count();
             
             $paidInvoices = \App\Models\Invoice::whereHas('application', function ($query) use ($userId) {
                 $query->where('user_id', $userId);
             })->where('status', 'paid')->count();
             
-            // Calculate outstanding amount (sum of all pending invoices)
-            $outstandingAmount = \App\Models\Invoice::whereHas('application', function ($query) use ($userId) {
+            // Calculate outstanding amount (sum of balance amounts for pending and partial invoices)
+            $outstandingInvoices = \App\Models\Invoice::whereHas('application', function ($query) use ($userId) {
                 $query->where('user_id', $userId);
             })
-            ->where('status', 'pending')
-            ->sum('total_amount');
+            ->where(function ($q) {
+                $q->where('status', 'pending')
+                  ->orWhere('payment_status', 'partial');
+            })
+            ->get();
+            
+            $outstandingAmount = $outstandingInvoices->sum(function ($invoice) {
+                return $invoice->balance_amount ?? $invoice->total_amount;
+            });
             
             // Get pending invoices with applications for payment list
             $pendingInvoicesList = \App\Models\Invoice::whereHas('application', function ($query) use ($userId) {
                 $query->where('user_id', $userId);
             })
-            ->where('status', 'pending')
+            ->where(function ($q) {
+                $q->where('status', 'pending')
+                  ->orWhere('payment_status', 'partial');
+            })
             ->with(['application'])
             ->latest('due_date')
             ->get();
