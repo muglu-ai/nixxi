@@ -2842,10 +2842,24 @@ class AdminController extends Controller
             })->sortBy('effective_from')->values();
             
             // Log all changes for debugging
-            Log::info("Billing period: {$billingStartDate->format('Y-m-d')} to {$billingEndDate->format('Y-m-d')}, Base capacity: {$baseCapacity}, Changes in period: " . $futureChanges->count());
-            foreach ($futureChanges as $change) {
-                Log::info("Plan change in period: {$change->current_port_capacity} → {$change->new_port_capacity} effective from {$change->effective_from->format('Y-m-d')} (ID: {$change->id})");
+            Log::info("=== INVOICE CALCULATION DEBUG ===");
+            Log::info("Billing period: {$billingStartDate->format('Y-m-d')} to {$billingEndDate->format('Y-m-d')}");
+            Log::info("Base capacity determined: {$baseCapacity}");
+            Log::info("Application assigned_port_capacity: " . ($application->assigned_port_capacity ?? 'null'));
+            Log::info("Application application_data capacity: " . ($applicationData['port_selection']['capacity'] ?? 'null'));
+            Log::info("Total approved plan changes: " . $approvedPlanChanges->count());
+            Log::info("Changes in this billing period: " . $futureChanges->count());
+            
+            foreach ($approvedPlanChanges as $change) {
+                $effDate = $change->effective_from ? $change->effective_from->format('Y-m-d') : 'null';
+                $inPeriod = $change->effective_from && $change->effective_from->gte($billingStartDate) && $change->effective_from->lt($billingEndDate) ? 'YES' : 'NO';
+                Log::info("  Plan Change ID {$change->id}: {$change->current_port_capacity} → {$change->new_port_capacity}, effective: {$effDate}, in period: {$inPeriod}, isCapacityChange: " . ($change->isCapacityChange() ? 'YES' : 'NO'));
             }
+            
+            foreach ($futureChanges as $idx => $change) {
+                Log::info("  Change #{$idx} in period: {$change->current_port_capacity} → {$change->new_port_capacity} effective from {$change->effective_from->format('Y-m-d')} (ID: {$change->id}, isCapacityChange: " . ($change->isCapacityChange() ? 'YES' : 'NO') . ")");
+            }
+            Log::info("=== END DEBUG ===");
 
             $segmentStart = $billingStartDate->copy();
             $currentCapacity = $baseCapacity;
@@ -2916,19 +2930,23 @@ class AdminController extends Controller
             };
 
             // Process changes in chronological order
-            foreach ($futureChanges as $change) {
+            foreach ($futureChanges as $index => $change) {
                 $changeDate = $change->effective_from->copy();
                 
-                // Process if change date is after segment start and on or before billing end
-                if ($changeDate->gt($segmentStart) && $changeDate->lte($billingEndDate)) {
+                // Only process if change date is strictly within the billing period
+                // (after segment start and strictly before billing end)
+                if ($changeDate->gt($segmentStart) && $changeDate->lt($billingEndDate)) {
                     // Add segment for the period before this change
+                    Log::info("Processing change #{$index}: Adding segment from {$segmentStart->format('Y-m-d')} to {$changeDate->format('Y-m-d')} with capacity {$currentCapacity}");
                     $addSegment($segmentStart, $changeDate, $currentCapacity, $currentPlan);
                     
                     // Update capacity if this is a capacity change
                     if ($change->isCapacityChange() && $change->new_port_capacity) {
                         $oldCapacity = $currentCapacity;
                         $currentCapacity = $change->new_port_capacity;
-                        Log::info("Port capacity change during billing: {$oldCapacity} → {$currentCapacity} effective from {$changeDate->format('Y-m-d')}");
+                        Log::info("Port capacity change during billing: {$oldCapacity} → {$currentCapacity} effective from {$changeDate->format('Y-m-d')} (Change ID: {$change->id})");
+                    } else {
+                        Log::info("Change #{$index} is not a capacity change or has no new_port_capacity. Current capacity remains: {$currentCapacity}");
                     }
                     
                     // Billing cycle changes should NOT apply during current billing cycle
@@ -2937,14 +2955,18 @@ class AdminController extends Controller
                     
                     // Move segment start to the change date
                     $segmentStart = $changeDate;
+                } else {
+                    Log::info("Skipping change #{$index} (effective: {$changeDate->format('Y-m-d')}) - outside segment range ({$segmentStart->format('Y-m-d')} to {$billingEndDate->format('Y-m-d')})");
                 }
             }
 
             // Add final segment from last change (or start) to billing end date
             // Only add if there's remaining time and we haven't reached the end
             if ($segmentStart->lt($billingEndDate)) {
-                Log::info("Adding final segment: {$segmentStart->format('Y-m-d')} to {$billingEndDate->format('Y-m-d')} with capacity {$currentCapacity}");
+                Log::info("Adding final segment: {$segmentStart->format('Y-m-d')} to {$billingEndDate->format('Y-m-d')} with capacity {$currentCapacity} (after processing " . count($futureChanges) . " changes)");
                 $addSegment($segmentStart, $billingEndDate->copy(), $currentCapacity, $currentPlan);
+            } else {
+                Log::info("No final segment needed - segmentStart ({$segmentStart->format('Y-m-d')}) >= billingEndDate ({$billingEndDate->format('Y-m-d')})");
             }
             
             // Remove any duplicate or zero-day segments
