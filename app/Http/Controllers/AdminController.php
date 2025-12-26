@@ -1088,6 +1088,7 @@ class AdminController extends Controller
             
             if ($selectedRole === 'ix_account' && $application->is_active && $application->isVisibleToIxAccount()) {
                 if ($application->service_activation_date && $application->billing_cycle) {
+                    // Application is live - only show recurring payment verification
                     $currentBillingPeriod = $this->getCurrentBillingPeriod($application);
                     if ($currentBillingPeriod) {
                         $canVerifyPayment = !$this->isPaymentVerifiedForPeriod($application, $currentBillingPeriod);
@@ -1103,8 +1104,17 @@ class AdminController extends Controller
                         }
                     }
                 } else {
-                    // Initial payment - check if any verification exists
-                    $canVerifyPayment = !$application->paymentVerificationLogs()->exists();
+                    // Initial payment - check if initial payment verification already exists
+                    // Only allow verification if NO initial payment verification exists
+                    $hasInitialVerification = $application->paymentVerificationLogs()
+                        ->where('verification_type', 'initial')
+                        ->exists();
+                    
+                    $canVerifyPayment = !$hasInitialVerification;
+                    
+                    if ($hasInitialVerification) {
+                        $paymentVerificationMessage = "Initial application payment has already been verified.";
+                    }
                 }
             }
 
@@ -4352,6 +4362,17 @@ class AdminController extends Controller
             $billingPeriod = null;
             $verificationType = 'initial';
             $invoice = null;
+
+            // Prevent verifying initial payment if it's already been verified
+            if ($isInitialPayment) {
+                $hasInitialVerification = $application->paymentVerificationLogs()
+                    ->where('verification_type', 'initial')
+                    ->exists();
+                
+                if ($hasInitialVerification) {
+                    return back()->with('error', 'Initial application payment has already been verified. Only recurring invoice payments can be verified after the application is live.');
+                }
+            }
 
             if (!$isInitialPayment) {
                 $billingPeriod = $this->getCurrentBillingPeriod($application);

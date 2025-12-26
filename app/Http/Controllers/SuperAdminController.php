@@ -200,23 +200,19 @@ class SuperAdminController extends Controller
                 ->sum('total_amount');
             
             // Total amount collected this month - based on actual payments received this month
+            // Includes both application fees (initial) and invoice payments (recurring)
             // Primary method: Sum of PaymentVerificationLog where verified_at is this month
             // This captures both manual verifications and automatic PayU verifications
             $totalCollectedFromVerification = \App\Models\PaymentVerificationLog::whereBetween('verified_at', [$currentMonthStart, $currentMonthEnd])
-                ->where('verification_type', 'recurring') // Only invoice/recurring payments, not application fees
+                ->whereIn('verification_type', ['initial', 'recurring']) // Include both application fees and invoice payments
                 ->sum(DB::raw('COALESCE(amount_captured, amount, 0)'));
             
-            // Secondary method: Sum of PaymentTransaction for invoice payments where payment_status = success and created_at is this month
-            // Filter for invoice payments by checking product_info contains invoice number pattern
+            // Secondary method: Sum of PaymentTransaction for all payments where payment_status = success and created_at is this month
+            // Include both application payments and invoice payments
+            // For invoice payments, check product_info; for application payments, product_info won't match invoice patterns
             $totalCollectedFromTransactions = PaymentTransaction::where('payment_status', 'success')
                 ->whereBetween('created_at', [$currentMonthStart, $currentMonthEnd])
                 ->whereNotNull('application_id')
-                ->where(function($query) {
-                    // Check if product_info contains invoice number (starts with INV- or contains invoice number)
-                    $query->where('product_info', 'LIKE', 'INV-%')
-                          ->orWhere('product_info', 'LIKE', 'BULK-%')
-                          ->orWhere('product_info', 'LIKE', '%Invoice%');
-                })
                 ->sum('amount');
             
             // Use verification logs as primary source (most accurate)
