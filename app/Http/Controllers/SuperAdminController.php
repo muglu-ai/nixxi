@@ -199,27 +199,58 @@ class SuperAdminController extends Controller
                 ->where('status', '!=', 'cancelled')
                 ->sum('total_amount');
             
-            // Total amount collected this month - based on actual payments received this month
-            // Includes both application fees (initial) and invoice payments (recurring)
-            // Primary method: Sum of PaymentVerificationLog where verified_at is this month
-            // This captures both manual verifications and automatic PayU verifications
-            $totalCollectedFromVerification = \App\Models\PaymentVerificationLog::whereBetween('verified_at', [$currentMonthStart, $currentMonthEnd])
-                ->whereIn('verification_type', ['initial', 'recurring']) // Include both application fees and invoice payments
+            // Application payments (initial/one-time) collected this month - separate calculation
+            // Primary method: Sum of PaymentVerificationLog where verified_at is this month and type is 'initial'
+            $applicationPaymentsFromVerification = \App\Models\PaymentVerificationLog::whereBetween('verified_at', [$currentMonthStart, $currentMonthEnd])
+                ->where('verification_type', 'initial') // Only application fees
                 ->sum(DB::raw('COALESCE(amount_captured, amount, 0)'));
             
-            // Secondary method: Sum of PaymentTransaction for all payments where payment_status = success and created_at is this month
-            // Include both application payments and invoice payments
-            // For invoice payments, check product_info; for application payments, product_info won't match invoice patterns
-            $totalCollectedFromTransactions = PaymentTransaction::where('payment_status', 'success')
+            // Secondary method: Sum of PaymentTransaction for application payments (those without invoice pattern)
+            $applicationPaymentsFromTransactions = PaymentTransaction::where('payment_status', 'success')
                 ->whereBetween('created_at', [$currentMonthStart, $currentMonthEnd])
                 ->whereNotNull('application_id')
+                ->where(function($query) {
+                    // Exclude invoice payments (those with invoice patterns)
+                    // Application payments don't have invoice patterns in product_info
+                    $query->where(function($q) {
+                        $q->whereNull('product_info')
+                          ->orWhere(function($q2) {
+                              $q2->where('product_info', 'NOT LIKE', 'INV-%')
+                                 ->where('product_info', 'NOT LIKE', 'BULK-%')
+                                 ->where('product_info', 'NOT LIKE', '%Invoice%');
+                          });
+                    });
+                })
+                ->sum('amount');
+            
+            // Use verification logs as primary source (most accurate)
+            $applicationPaymentsThisMonth = $applicationPaymentsFromVerification > 0 
+                ? $applicationPaymentsFromVerification 
+                : $applicationPaymentsFromTransactions;
+            
+            // Invoice payments (recurring) collected this month - separate calculation
+            // Primary method: Sum of PaymentVerificationLog where verified_at is this month and type is 'recurring'
+            $invoicePaymentsFromVerification = \App\Models\PaymentVerificationLog::whereBetween('verified_at', [$currentMonthStart, $currentMonthEnd])
+                ->where('verification_type', 'recurring') // Only invoice/recurring payments
+                ->sum(DB::raw('COALESCE(amount_captured, amount, 0)'));
+            
+            // Secondary method: Sum of PaymentTransaction for invoice payments (those with invoice pattern)
+            $invoicePaymentsFromTransactions = PaymentTransaction::where('payment_status', 'success')
+                ->whereBetween('created_at', [$currentMonthStart, $currentMonthEnd])
+                ->whereNotNull('application_id')
+                ->where(function($query) {
+                    // Include only invoice payments (those with invoice patterns)
+                    $query->where('product_info', 'LIKE', 'INV-%')
+                          ->orWhere('product_info', 'LIKE', 'BULK-%')
+                          ->orWhere('product_info', 'LIKE', '%Invoice%');
+                })
                 ->sum('amount');
             
             // Use verification logs as primary source (most accurate)
             // If verification logs exist, use them; otherwise use transactions
-            $totalCollectedThisMonth = $totalCollectedFromVerification > 0 
-                ? $totalCollectedFromVerification 
-                : $totalCollectedFromTransactions;
+            $totalCollectedThisMonth = $invoicePaymentsFromVerification > 0 
+                ? $invoicePaymentsFromVerification 
+                : $invoicePaymentsFromTransactions;
             
             // Fallback: If both are 0 or very small, check invoices with paid_at this month
             // This handles cases where payment verification logs might not exist
@@ -341,6 +372,7 @@ class SuperAdminController extends Controller
                 'invoicesThisMonth',
                 'totalInvoicedThisMonth',
                 'totalCollectedThisMonth',
+                'applicationPaymentsThisMonth',
                 'totalPendingAmount',
                 'totalOverdueAmount',
                 'partialPaymentsThisMonth',

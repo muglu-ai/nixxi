@@ -123,7 +123,7 @@
                 <div class="card-body p-4">
                     <div class="row g-4 mb-4">
                         <!-- Invoices Generated This Month -->
-                        <div class="col-md-3">
+                        <div class="col-md-2 col-lg-2">
                             <div class="card border-0 shadow-sm bg-primary bg-opacity-10" style="border-radius: 12px;">
                                 <div class="card-body text-center p-4">
                                     <div class="mb-2">
@@ -137,7 +137,7 @@
                             </div>
                         </div>
                         <!-- Total Invoiced This Month -->
-                        <div class="col-md-3">
+                        <div class="col-md-2 col-lg-2">
                             <div class="card border-0 shadow-sm bg-info bg-opacity-10" style="border-radius: 12px;">
                                 <div class="card-body text-center p-4">
                                     <div class="mb-2">
@@ -150,8 +150,8 @@
                                 </div>
                             </div>
                         </div>
-                        <!-- Amount Collected This Month -->
-                        <div class="col-md-3">
+                        <!-- Amount Collected from Invoices This Month -->
+                        <div class="col-md-2 col-lg-2">
                             <div class="card border-0 shadow-sm bg-success bg-opacity-10" style="border-radius: 12px;">
                                 <div class="card-body text-center p-4">
                                     <div class="mb-2">
@@ -161,12 +161,27 @@
                                         </svg>
                                     </div>
                                     <h3 class="mb-2" style="color: #198754; font-weight: 700;">₹{{ number_format($totalCollectedThisMonth, 2) }}</h3>
-                                    <p class="mb-0 text-muted" style="font-weight: 500; font-size: 0.875rem;">Amount Collected</p>
+                                    <p class="mb-0 text-muted" style="font-weight: 500; font-size: 0.875rem;">Invoice Payments</p>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- Application Payments This Month -->
+                        <div class="col-md-2 col-lg-2">
+                            <div class="card border-0 shadow-sm bg-secondary bg-opacity-10" style="border-radius: 12px;">
+                                <div class="card-body text-center p-4">
+                                    <div class="mb-2">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" fill="#6c757d" viewBox="0 0 16 16">
+                                            <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z"/>
+                                            <path d="M10.97 4.97a.75.75 0 0 1 1.07 1.05l-3.99 4.99a.75.75 0 0 1-1.08.02L4.324 8.384a.75.75 0 1 1 1.06-1.06l2.094 2.093 3.473-4.425a.267.267 0 0 1 .02-.022z"/>
+                                        </svg>
+                                    </div>
+                                    <h3 class="mb-2" style="color: #6c757d; font-weight: 700;">₹{{ number_format($applicationPaymentsThisMonth, 2) }}</h3>
+                                    <p class="mb-0 text-muted" style="font-weight: 500; font-size: 0.875rem;">Application Payments</p>
                                 </div>
                             </div>
                         </div>
                         <!-- Pending Amount -->
-                        <div class="col-md-3">
+                        <div class="col-md-2 col-lg-2">
                             <div class="card border-0 shadow-sm bg-warning bg-opacity-10" style="border-radius: 12px;">
                                 <div class="card-body text-center p-4">
                                     <div class="mb-2">
