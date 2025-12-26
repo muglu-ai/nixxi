@@ -183,6 +183,7 @@ class SuperAdminController extends Controller
             // Grievance Tracking
             $openGrievances = Ticket::whereIn('status', ['open', 'assigned', 'in_progress'])->count();
             $pendingGrievances = Ticket::where('status', 'assigned')->count();
+            $closedGrievances = Ticket::whereIn('status', ['resolved', 'closed'])->count();
 
             // Payment Summary - This Month
             $currentMonthStart = now('Asia/Kolkata')->startOfMonth();
@@ -246,6 +247,7 @@ class SuperAdminController extends Controller
                 'recentLiveMembers',
                 'openGrievances',
                 'pendingGrievances',
+                'closedGrievances',
                 // New IX Workflow Roles
                 'ixProcessorApproved',
                 'ixProcessorPending',

@@ -483,6 +483,32 @@
                             </tr>
                         @elseif(isset($item['description']))
                             {{-- New format: line items with description, quantity, rate, amount --}}
+                            @php
+                                // Get capacity for this specific line item
+                                $itemCapacity = $item['capacity'] ?? null;
+                                
+                                // If capacity is not stored, try to extract from description
+                                if (!$itemCapacity && isset($item['description'])) {
+                                    // Try to extract capacity from description like "IX Service - 3Gig Port Capacity"
+                                    if (preg_match('/(\d+(?:\.\d+)?)\s*(?:Gig|Gbps|G)/i', $item['description'], $matches)) {
+                                        $itemCapacity = $matches[1] . 'Gig';
+                                    }
+                                }
+                                
+                                // Format capacity for display
+                                if ($itemCapacity) {
+                                    if (strpos($itemCapacity, 'Gig') !== false) {
+                                        $itemCapacityDisplay = str_replace('Gig', ' Gbps', $itemCapacity);
+                                    } elseif (strpos($itemCapacity, 'Mbps') === false && is_numeric(str_replace([' ', 'Mbps', 'Gbps'], '', $itemCapacity))) {
+                                        $itemCapacityDisplay = $itemCapacity . ' Mbps';
+                                    } else {
+                                        $itemCapacityDisplay = $itemCapacity;
+                                    }
+                                } else {
+                                    // Fallback to application's port capacity
+                                    $itemCapacityDisplay = $portCapacity;
+                                }
+                            @endphp
                             <tr>
                                 <td>{{ $itemIndex++ }}</td>
                                 <td>
@@ -492,7 +518,7 @@
                                     @endif
                                 </td>
                                 <td>{{ number_format($item['quantity'] ?? 1, 2) }}</td>
-                                <td>{{ $portCapacity }}</td>
+                                <td>{{ $itemCapacityDisplay }}</td>
                                 <td>{{ number_format($item['rate'] ?? 0, 2) }}</td>
                                 <td>{{ number_format($item['amount'] ?? 0, 2) }}</td>
                             </tr>

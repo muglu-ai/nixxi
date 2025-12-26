@@ -384,8 +384,8 @@
                             </div>
                         </a>
                     </div>
-                    <div>
-                        <a href="{{ route('superadmin.grievance.index') }}" class="text-decoration-none">
+                    <div class="mb-3">
+                        <a href="{{ route('superadmin.grievance.index', ['status' => 'assigned']) }}" class="text-decoration-none">
                             <div class="d-flex align-items-center justify-content-between p-3 bg-light rounded">
                                 <div>
                                     <h6 class="text-muted mb-1" style="font-size: 0.875rem; font-weight: 500;">Pending Requests</h6>
@@ -395,6 +395,21 @@
                                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="#0dcaf0" viewBox="0 0 16 16">
                                         <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z"/>
                                         <path d="M5 6.5a.5.5 0 0 1 .5-.5h5a.5.5 0 0 1 0 1h-5a.5.5 0 0 1-.5-.5zm0 3a.5.5 0 0 1 .5-.5h5a.5.5 0 0 1 0 1h-5a.5.5 0 0 1-.5-.5z"/>
+                                    </svg>
+                                </div>
+                            </div>
+                        </a>
+                    </div>
+                    <div>
+                        <a href="{{ route('superadmin.grievance.index', ['status' => 'closed']) }}" class="text-decoration-none">
+                            <div class="d-flex align-items-center justify-content-between p-3 bg-light rounded">
+                                <div>
+                                    <h6 class="text-muted mb-1" style="font-size: 0.875rem; font-weight: 500;">Closed Grievances</h6>
+                                    <h3 class="mb-0" style="color: #2c3e50; font-weight: 700;">{{ $closedGrievances }}</h3>
+                                </div>
+                                <div class="bg-success bg-opacity-10 rounded-circle p-3">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="#198754" viewBox="0 0 16 16">
+                                        <path d="M16 8A8 8 0 1 1 0 8a8 8 0 0 1 16 0zm-3.97-3.03a.75.75 0 0 0-1.08.022L7.477 9.417 2.04 4.907a.75.75 0 0 0-1.06 1.061l5.523 5.524a.75.75 0 0 0 1.07-.01l5.99-5.99a.75.75 0 0 0-.022-1.08z"/>
                                     </svg>
                                 </div>
                             </div>

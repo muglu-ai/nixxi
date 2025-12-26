@@ -146,6 +146,7 @@ class AdminController extends Controller
             // Grievance Tracking
             $openGrievances = Ticket::whereIn('status', ['open', 'assigned', 'in_progress'])->count();
             $pendingGrievances = Ticket::where('status', 'assigned')->count();
+            $closedGrievances = Ticket::whereIn('status', ['resolved', 'closed'])->count();
             
             // Plan Change Requests
             $pendingPlanChanges = \App\Models\PlanChangeRequest::where('status', 'pending')->count();
@@ -225,6 +226,7 @@ class AdminController extends Controller
                 'metroIxPoints',
                 'openGrievances',
                 'pendingGrievances',
+                'closedGrievances',
                 'pendingPlanChanges'
             ));
         } catch (QueryException $e) {

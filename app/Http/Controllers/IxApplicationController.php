@@ -1715,75 +1715,159 @@ class IxApplicationController extends Controller
                 'payu_payment_id' => $payuPaymentId,
             ]);
             
-            // Update application status
+            // Check if this is an invoice payment
+            $invoiceNumber = $payuResponseFields['udf3'] ?? $cookieData['invoice_number'] ?? null;
+            $isInvoicePayment = $invoiceNumber !== null && strpos($invoiceNumber, 'BULK-') !== 0;
+            
+            // Handle invoice payment or application payment
             if ($paymentTransaction->application_id) {
                 $application = Application::find($paymentTransaction->application_id);
                 if ($application) {
-                    $newStatus = $application->application_type === 'IX' ? 'submitted' : 'pending';
-                    
-                    $application->update([
-                        'status' => $newStatus,
-                        'submitted_at' => now('Asia/Kolkata'),
-                    ]);
-                    
-                    // Use user_id from cookie data (session is cleared when PayU redirects)
-                    $userId = $cookieData['user_id'] ?? $paymentTransaction->user_id;
-                    ApplicationStatusHistory::log(
-                        $application->id,
-                        null,
-                        $newStatus,
-                        'user',
-                        $userId,
-                        'IX application submitted with payment'
-                    );
-                    
-                    // Generate application PDF
-                    try {
+                    // Handle invoice payment
+                    if ($isInvoicePayment && $invoiceNumber) {
+                        $invoice = \App\Models\Invoice::where('invoice_number', $invoiceNumber)
+                            ->where('application_id', $application->id)
+                            ->first();
+                        
+                        if ($invoice) {
+                            // Calculate payment amounts (handle partial payments)
+                            $paymentAmount = (float) $paymentTransaction->amount;
+                            $currentPaidAmount = (float) ($invoice->paid_amount ?? 0);
+                            $newPaidAmount = $currentPaidAmount + $paymentAmount;
+                            $balanceAmount = max(0, (float)$invoice->total_amount - $newPaidAmount);
+                            
+                            // Determine payment status
+                            $paymentStatus = 'pending';
+                            if ($newPaidAmount >= $invoice->total_amount) {
+                                $paymentStatus = 'paid';
+                                $balanceAmount = 0;
+                            } elseif ($newPaidAmount > 0) {
+                                $paymentStatus = 'partial';
+                            }
+                            
+                            // Update invoice
+                            $invoice->update([
+                                'paid_amount' => $newPaidAmount,
+                                'balance_amount' => $balanceAmount,
+                                'payment_status' => $paymentStatus,
+                                'status' => $paymentStatus === 'paid' ? 'paid' : $invoice->status,
+                                'paid_at' => $paymentStatus === 'paid' ? now('Asia/Kolkata') : $invoice->paid_at,
+                            ]);
+                            
+                            // Automatically verify payment for this billing period
+                            if ($invoice->billing_period && $paymentStatus === 'paid') {
+                                $existingVerification = \App\Models\PaymentVerificationLog::where('application_id', $application->id)
+                                    ->where('billing_period', $invoice->billing_period)
+                                    ->first();
+                                
+                                if (!$existingVerification) {
+                                    \App\Models\PaymentVerificationLog::create([
+                                        'application_id' => $application->id,
+                                        'verified_by' => null,
+                                        'verification_type' => 'recurring',
+                                        'billing_period' => $invoice->billing_period,
+                                        'amount' => $invoice->total_amount,
+                                        'amount_captured' => $paymentAmount,
+                                        'currency' => $invoice->currency,
+                                        'payment_method' => 'payu',
+                                        'payment_id' => $payuPaymentId ?? $paymentTransaction->transaction_id,
+                                        'notes' => 'Payment verified automatically via PayU for invoice '.$invoiceNumber,
+                                        'verified_at' => now('Asia/Kolkata'),
+                                    ]);
+                                    
+                                    // Send message to user
+                                    \App\Models\Message::create([
+                                        'user_id' => $application->user_id,
+                                        'subject' => 'Payment Verified',
+                                        'message' => "Payment for invoice {$invoiceNumber} has been received and verified automatically. Thank you for your payment.",
+                                        'is_read' => false,
+                                        'sent_by' => 'system',
+                                    ]);
+                                }
+                            }
+                            
+                            Log::info('PayU Success - Invoice payment processed', [
+                                'invoice_number' => $invoiceNumber,
+                                'payment_amount' => $paymentAmount,
+                                'new_paid_amount' => $newPaidAmount,
+                                'payment_status' => $paymentStatus,
+                            ]);
+                        }
+                    } else {
+                        // Handle initial application payment (not invoice)
+                        $newStatus = $application->application_type === 'IX' ? 'submitted' : 'pending';
+                        
+                        $application->update([
+                            'status' => $newStatus,
+                            'submitted_at' => now('Asia/Kolkata'),
+                        ]);
+                        
                         // Use user_id from cookie data (session is cleared when PayU redirects)
                         $userId = $cookieData['user_id'] ?? $paymentTransaction->user_id;
-                        $applicationPdf = $this->generateApplicationPdf($application);
-                        $pdfPath = 'applications/'.$userId.'/ix/'.$application->application_id.'_application.pdf';
-                        Storage::disk('public')->put($pdfPath, $applicationPdf->output());
-                        $applicationData = $application->application_data;
-                        $applicationData['pdfs'] = ['application_pdf' => $pdfPath];
-                        $applicationData['payment'] = array_merge($applicationData['payment'] ?? [], [
-                            'transaction_id' => $paymentTransaction->transaction_id,
-                            'payment_id' => $payuPaymentId ?? $paymentTransaction->payment_id,
-                            'status' => 'success',
-                            'paid_at' => now('Asia/Kolkata')->toDateTimeString(),
-                            'bank_ref_num' => $bankRefNum,
-                            'mode' => $mode,
-                            'unmappedstatus' => $unmappedStatus,
-                            'card_type' => $cardType,
-                            'cardnum' => $cardnum,
-                            'name_on_card' => $nameOnCard,
-                            'bankcode' => $bankcode,
-                            'pg_type' => $pgType,
-                        ]);
-                        $application->update(['application_data' => $applicationData]);
+                        ApplicationStatusHistory::log(
+                            $application->id,
+                            null,
+                            $newStatus,
+                            'user',
+                            $userId,
+                            'IX application submitted with payment'
+                        );
                         
-                        // Send email - use user from application relationship or cookie data
+                        // Generate application PDF
                         try {
-                            $userEmail = $application->user->email ?? ($userSessionData['user_email'] ?? null);
-                            if ($userEmail) {
-                                Mail::to($userEmail)->send(
-                                    new \App\Mail\IxApplicationSubmittedMail($application)
-                                );
+                            // Use user_id from cookie data (session is cleared when PayU redirects)
+                            $userId = $cookieData['user_id'] ?? $paymentTransaction->user_id;
+                            $applicationPdf = $this->generateApplicationPdf($application);
+                            $pdfPath = 'applications/'.$userId.'/ix/'.$application->application_id.'_application.pdf';
+                            Storage::disk('public')->put($pdfPath, $applicationPdf->output());
+                            $applicationData = $application->application_data;
+                            $applicationData['pdfs'] = ['application_pdf' => $pdfPath];
+                            $applicationData['payment'] = array_merge($applicationData['payment'] ?? [], [
+                                'transaction_id' => $paymentTransaction->transaction_id,
+                                'payment_id' => $payuPaymentId ?? $paymentTransaction->payment_id,
+                                'status' => 'success',
+                                'paid_at' => now('Asia/Kolkata')->toDateTimeString(),
+                                'bank_ref_num' => $bankRefNum,
+                                'mode' => $mode,
+                                'unmappedstatus' => $unmappedStatus,
+                                'card_type' => $cardType,
+                                'cardnum' => $cardnum,
+                                'name_on_card' => $nameOnCard,
+                                'bankcode' => $bankcode,
+                                'pg_type' => $pgType,
+                            ]);
+                            $application->update(['application_data' => $applicationData]);
+                            
+                            // Send email - use user from application relationship or cookie data
+                            try {
+                                $userEmail = $application->user->email ?? ($userSessionData['user_email'] ?? null);
+                                if ($userEmail) {
+                                    Mail::to($userEmail)->send(
+                                        new \App\Mail\IxApplicationSubmittedMail($application)
+                                    );
+                                }
+                            } catch (Exception $e) {
+                                Log::error('Error sending IX application submitted email: '.$e->getMessage());
                             }
                         } catch (Exception $e) {
-                            Log::error('Error sending IX application submitted email: '.$e->getMessage());
+                            Log::error('Error generating IX application PDF: '.$e->getMessage());
                         }
-                    } catch (Exception $e) {
-                        Log::error('Error generating IX application PDF: '.$e->getMessage());
                     }
                 }
             }
             
             // After processing payment, redirect to login-from-cookie route which will set session and redirect
             // Pass success message and transaction ID as query parameters
-            $successMessage = 'Payment successful! Your application has been submitted. Transaction ID: ' . $paymentTransaction->transaction_id;
+            if ($isInvoicePayment && $invoiceNumber) {
+                $successMessage = 'Payment successful! Invoice '.$invoiceNumber.' has been paid. Transaction ID: ' . $paymentTransaction->transaction_id;
+                $redirectRoute = route('user.invoices.index');
+            } else {
+                $successMessage = 'Payment successful! Your application has been submitted. Transaction ID: ' . $paymentTransaction->transaction_id;
+                $redirectRoute = route('user.applications.index');
+            }
+            
             $loginUrl = route('user.login-from-cookie', [
-                'redirect' => route('user.applications.index'),
+                'redirect' => $redirectRoute,
                 'success' => urlencode($successMessage),
             ]);
             
@@ -2348,15 +2432,33 @@ class IxApplicationController extends Controller
                                 ->where('application_id', $application->id)
                                 ->first();
                             
-                            if ($invoice && $invoice->status === 'pending') {
-                                // Mark invoice as paid
+                            if ($invoice) {
+                                // Calculate payment amounts (handle partial payments)
+                                $paymentAmount = (float) $paymentTransaction->amount;
+                                $currentPaidAmount = (float) ($invoice->paid_amount ?? 0);
+                                $newPaidAmount = $currentPaidAmount + $paymentAmount;
+                                $balanceAmount = max(0, (float)$invoice->total_amount - $newPaidAmount);
+                                
+                                // Determine payment status
+                                $paymentStatus = 'pending';
+                                if ($newPaidAmount >= $invoice->total_amount) {
+                                    $paymentStatus = 'paid';
+                                    $balanceAmount = 0;
+                                } elseif ($newPaidAmount > 0) {
+                                    $paymentStatus = 'partial';
+                                }
+                                
+                                // Update invoice
                                 $invoice->update([
-                                    'status' => 'paid',
-                                    'paid_at' => now('Asia/Kolkata'),
+                                    'paid_amount' => $newPaidAmount,
+                                    'balance_amount' => $balanceAmount,
+                                    'payment_status' => $paymentStatus,
+                                    'status' => $paymentStatus === 'paid' ? 'paid' : $invoice->status,
+                                    'paid_at' => $paymentStatus === 'paid' ? now('Asia/Kolkata') : $invoice->paid_at,
                                 ]);
 
-                                // Automatically verify payment for this billing period
-                                if ($invoice->billing_period) {
+                                // Automatically verify payment for this billing period (only if fully paid)
+                                if ($invoice->billing_period && $paymentStatus === 'paid') {
                                     // Check if already verified
                                     $existingVerification = \App\Models\PaymentVerificationLog::where('application_id', $application->id)
                                         ->where('billing_period', $invoice->billing_period)
@@ -2369,8 +2471,10 @@ class IxApplicationController extends Controller
                                             'verification_type' => 'recurring',
                                             'billing_period' => $invoice->billing_period,
                                             'amount' => $invoice->total_amount,
+                                            'amount_captured' => $paymentAmount,
                                             'currency' => $invoice->currency,
                                             'payment_method' => 'payu',
+                                            'payment_id' => $payuPaymentId ?? $transactionId,
                                             'notes' => 'Payment verified automatically via PayU for invoice '.$invoiceNumber,
                                             'verified_at' => now('Asia/Kolkata'),
                                         ]);
@@ -2394,6 +2498,15 @@ class IxApplicationController extends Controller
                                             'sent_by' => 'system',
                                         ]);
                                     }
+                                } elseif ($paymentStatus === 'partial') {
+                                    // Send message for partial payment
+                                    \App\Models\Message::create([
+                                        'user_id' => $application->user_id,
+                                        'subject' => 'Partial Payment Received',
+                                        'message' => "Partial payment of ₹".number_format($paymentAmount, 2)." has been received for invoice {$invoiceNumber}. Remaining balance: ₹".number_format($balanceAmount, 2).". Please pay the remaining amount.",
+                                        'is_read' => false,
+                                        'sent_by' => 'system',
+                                    ]);
                                 }
                             }
                         }

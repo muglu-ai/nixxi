@@ -71,11 +71,17 @@ class UserPaymentController extends Controller
             $invoice = Invoice::whereHas('application', function ($query) use ($userId) {
                 $query->where('user_id', $userId);
             })
-            ->where('status', 'pending')
+            ->where(function ($q) {
+                $q->where('status', 'pending')
+                  ->orWhere('payment_status', 'partial');
+            })
             ->with(['application'])
             ->findOrFail($invoiceId);
 
             $application = $invoice->application;
+
+            // Use balance_amount for partial payments, otherwise total_amount
+            $paymentAmount = $invoice->balance_amount ?? $invoice->total_amount;
 
             // Generate PayU payment link
             $payuService = new PayuService();
@@ -87,20 +93,17 @@ class UserPaymentController extends Controller
                 'application_id' => $application->id,
                 'transaction_id' => $transactionId,
                 'payment_status' => 'pending',
-                'payment_mode' => 'live',
-                'amount' => $invoice->total_amount,
+                'payment_mode' => config('services.payu.mode', 'test'),
+                'amount' => $paymentAmount,
                 'currency' => 'INR',
                 'product_info' => 'NIXI IX Service Invoice - '.$invoice->invoice_number,
                 'response_message' => 'Invoice payment pending',
             ]);
 
-            // Parse PayU payment link from invoice
-            $payuPaymentData = json_decode($invoice->payu_payment_link, true);
-            
-            // Update payment data with new transaction ID
+            // Prepare payment data with all required parameters
             $paymentData = $payuService->preparePaymentData([
                 'transaction_id' => $transactionId,
-                'amount' => $invoice->total_amount,
+                'amount' => $paymentAmount,
                 'product_info' => 'NIXI IX Service Invoice - '.$invoice->invoice_number,
                 'firstname' => $user->fullname,
                 'email' => $user->email,
@@ -112,10 +115,59 @@ class UserPaymentController extends Controller
                 'udf3' => $invoice->invoice_number, // Invoice number for identification
             ]);
 
-            // Redirect to PayU payment page
-            return redirect($payuService->getPaymentUrl())->with('payment_data', $paymentData);
+            // Store payment data in cookies for callback
+            $cookieData = [
+                'payment_transaction_id' => $paymentTransaction->id,
+                'transaction_id' => $transactionId,
+                'application_id' => $application->id,
+                'user_id' => $userId,
+                'amount' => $paymentAmount,
+                'invoice_id' => $invoice->id,
+                'invoice_number' => $invoice->invoice_number,
+            ];
+
+            $userSessionData = [
+                'user_id' => $userId,
+                'user_email' => $user->email,
+                'user_name' => $user->fullname,
+                'user_registration_id' => $user->registrationid,
+            ];
+
+            $response = response()->view('user.payments.redirect-payu', [
+                'paymentUrl' => $payuService->getPaymentUrl(),
+                'paymentData' => $paymentData,
+            ]);
+
+            // Set cookies for callback handling
+            $response->cookie(
+                'pending_payment_data',
+                json_encode($cookieData),
+                60,
+                '/',
+                null,
+                true,
+                false,
+                false,
+                'lax'
+            );
+            $response->cookie(
+                'user_session_data',
+                json_encode($userSessionData),
+                60,
+                '/',
+                null,
+                true,
+                false,
+                false,
+                'lax'
+            );
+
+            return $response;
         } catch (Exception $e) {
-            Log::error('Error initiating payment for invoice '.$invoiceId.': '.$e->getMessage());
+            Log::error('Error initiating payment for invoice '.$invoiceId.': '.$e->getMessage(), [
+                'exception' => $e,
+                'trace' => $e->getTraceAsString(),
+            ]);
 
             return redirect()->route('user.payments.pending')
                 ->with('error', 'Unable to initiate payment. Please try again.');
