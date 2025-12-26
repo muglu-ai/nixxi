@@ -53,6 +53,11 @@ Route::prefix('superadmin')->name('superadmin.')->middleware(['superadmin'])->gr
     Route::get('/users/{id}', [SuperAdminController::class, 'showUser'])->name('users.show');
     Route::delete('/users/{id}', [SuperAdminController::class, 'deleteUser'])->name('users.delete');
     Route::post('/applications/{applicationId}/accept-payment', [SuperAdminController::class, 'acceptPayment'])->name('applications.accept-payment');
+    
+    // Applications routes
+    Route::get('/applications', [SuperAdminController::class, 'applications'])->name('applications.index');
+    Route::get('/applications/{id}', [SuperAdminController::class, 'showApplication'])->name('applications.show');
+    Route::post('/applications/{id}/approve-to-invoice', [SuperAdminController::class, 'approveToInvoice'])->name('applications.approve-to-invoice');
     Route::post('/applications/{applicationId}/toggle-member-status', [\App\Http\Controllers\AdminController::class, 'toggleMemberStatus'])->name('applications.toggle-member-status');
 
     // Admin management

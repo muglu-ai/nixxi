@@ -1540,6 +1540,125 @@ class SuperAdminController extends Controller
     }
 
     /**
+     * Display all applications list.
+     */
+    public function applications(Request $request)
+    {
+        try {
+            $superAdminId = session('superadmin_id');
+            $superAdmin = SuperAdmin::findOrFail($superAdminId);
+
+            $query = Application::with(['user'])
+                ->where('application_type', 'IX')
+                ->latest();
+
+            // Search functionality
+            if ($request->has('search') && $request->search) {
+                $search = $request->search;
+                $query->where(function($q) use ($search) {
+                    $q->where('application_id', 'LIKE', "%{$search}%")
+                      ->orWhere('membership_id', 'LIKE', "%{$search}%")
+                      ->orWhere('status', 'LIKE', "%{$search}%")
+                      ->orWhereHas('user', function($userQuery) use ($search) {
+                          $userQuery->where('fullname', 'LIKE', "%{$search}%")
+                                    ->orWhere('email', 'LIKE', "%{$search}%");
+                      });
+                });
+            }
+
+            $applications = $query->paginate(20);
+
+            return view('superadmin.applications.index', compact('applications', 'superAdmin'));
+        } catch (Exception $e) {
+            Log::error('Error loading applications: '.$e->getMessage());
+            return redirect()->route('superadmin.dashboard')
+                ->with('error', 'Unable to load applications. Please try again.');
+        }
+    }
+
+    /**
+     * Display application details.
+     */
+    public function showApplication($id)
+    {
+        try {
+            $superAdminId = session('superadmin_id');
+            $superAdmin = SuperAdmin::findOrFail($superAdminId);
+
+            $application = Application::with([
+                'user',
+                'statusHistory',
+                'paymentVerificationLogs',
+                'invoices',
+                'gstVerification',
+                'udyamVerification',
+                'mcaVerification',
+                'rocIecVerification'
+            ])->findOrFail($id);
+
+            return view('superadmin.applications.show', compact('application', 'superAdmin'));
+        } catch (Exception $e) {
+            Log::error('Error loading application: '.$e->getMessage());
+            return redirect()->route('superadmin.applications.index')
+                ->with('error', 'Application not found.');
+        }
+    }
+
+    /**
+     * Approve application to invoice stage (ip_assigned status) without sending emails.
+     */
+    public function approveToInvoice(Request $request, $id)
+    {
+        try {
+            $superAdminId = session('superadmin_id');
+            $superAdmin = SuperAdmin::findOrFail($superAdminId);
+
+            $application = Application::findOrFail($id);
+
+            if ($application->application_type !== 'IX') {
+                return back()->with('error', 'This action is only available for IX applications.');
+            }
+
+            // Check if already at invoice stage or beyond
+            if (in_array($application->status, ['ip_assigned', 'invoice_pending', 'payment_verified', 'approved'])) {
+                return back()->with('info', 'Application is already at or beyond the invoice stage.');
+            }
+
+            // Update application to ip_assigned status (ready for invoice generation)
+            $oldStatus = $application->status;
+            $application->update([
+                'status' => 'ip_assigned',
+                'is_active' => true,
+            ]);
+
+            // Log status change without sending email
+            ApplicationStatusHistory::log(
+                $application->id,
+                $oldStatus,
+                'ip_assigned',
+                'superadmin',
+                $superAdmin->id,
+                'Application approved to invoice stage by Super Admin (no email sent)'
+            );
+
+            // Log admin action
+            AdminAction::create([
+                'admin_id' => null,
+                'superadmin_id' => $superAdmin->id,
+                'actionable_type' => Application::class,
+                'actionable_id' => $application->id,
+                'action' => 'approved_to_invoice',
+                'details' => "Application {$application->application_id} approved to invoice stage (ip_assigned) without sending email notifications.",
+            ]);
+
+            return back()->with('success', 'Application has been approved to invoice stage. IX Account can now generate invoices.');
+        } catch (Exception $e) {
+            Log::error('Error approving application to invoice: '.$e->getMessage());
+            return back()->with('error', 'An error occurred while approving the application.');
+        }
+    }
+
+    /**
      * Update invoice status.
      */
     public function updateInvoiceStatus(Request $request, $id)
