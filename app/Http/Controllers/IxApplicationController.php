@@ -1730,32 +1730,69 @@ class IxApplicationController extends Controller
                             ->first();
                         
                         if ($invoice) {
-                            // Calculate payment amounts (handle partial payments)
-                            $paymentAmount = (float) $paymentTransaction->amount;
-                            $currentPaidAmount = (float) ($invoice->paid_amount ?? 0);
-                            $newPaidAmount = $currentPaidAmount + $paymentAmount;
-                            $balanceAmount = max(0, (float)$invoice->total_amount - $newPaidAmount);
+                            // Check if payment has already been processed by webhook
+                            // The webhook is the source of truth, so if it has already processed, skip here
+                            $alreadyProcessed = false;
                             
-                            // Determine payment status
-                            $paymentStatus = 'pending';
-                            if ($newPaidAmount >= $invoice->total_amount) {
-                                $paymentStatus = 'paid';
-                                $balanceAmount = 0;
-                            } elseif ($newPaidAmount > 0) {
-                                $paymentStatus = 'partial';
+                            // Check if a PaymentVerificationLog exists for this transaction (webhook creates this)
+                            $existingVerification = \App\Models\PaymentVerificationLog::where('application_id', $application->id)
+                                ->where('payment_id', $payuPaymentId ?? $paymentTransaction->transaction_id)
+                                ->where('billing_period', $invoice->billing_period)
+                                ->first();
+                            
+                            if ($existingVerification) {
+                                $alreadyProcessed = true;
+                                Log::info('PayU Success - Payment already processed by webhook, skipping duplicate processing', [
+                                    'invoice_number' => $invoiceNumber,
+                                    'payment_id' => $payuPaymentId ?? $paymentTransaction->transaction_id,
+                                ]);
                             }
                             
-                            // Update invoice
-                            $invoice->update([
-                                'paid_amount' => $newPaidAmount,
-                                'balance_amount' => $balanceAmount,
-                                'payment_status' => $paymentStatus,
-                                'status' => $paymentStatus === 'paid' ? 'paid' : $invoice->status,
-                                'paid_at' => $paymentStatus === 'paid' ? now('Asia/Kolkata') : $invoice->paid_at,
-                            ]);
+                            // Also check if paid_amount already includes this payment amount
+                            // If paid_amount is already >= total_amount and payment_status is 'paid', skip
+                            if (!$alreadyProcessed && $invoice->payment_status === 'paid' && $invoice->paid_amount >= $invoice->total_amount) {
+                                $alreadyProcessed = true;
+                                Log::info('PayU Success - Invoice already marked as paid, skipping duplicate processing', [
+                                    'invoice_number' => $invoiceNumber,
+                                    'paid_amount' => $invoice->paid_amount,
+                                    'total_amount' => $invoice->total_amount,
+                                ]);
+                            }
                             
-                            // Automatically verify payment for this billing period
-                            if ($invoice->billing_period && $paymentStatus === 'paid') {
+                            $paymentStatus = $invoice->payment_status; // Default to current status
+                            
+                            if (!$alreadyProcessed) {
+                                // Calculate payment amounts (handle partial payments)
+                                $paymentAmount = (float) $paymentTransaction->amount;
+                                $currentPaidAmount = (float) ($invoice->paid_amount ?? 0);
+                                $newPaidAmount = $currentPaidAmount + $paymentAmount;
+                                $balanceAmount = max(0, (float)$invoice->total_amount - $newPaidAmount);
+                                
+                                // Determine payment status
+                                $paymentStatus = 'pending';
+                                if ($newPaidAmount >= $invoice->total_amount) {
+                                    $paymentStatus = 'paid';
+                                    $balanceAmount = 0;
+                                } elseif ($newPaidAmount > 0) {
+                                    $paymentStatus = 'partial';
+                                }
+                                
+                                // Update invoice
+                                $invoice->update([
+                                    'paid_amount' => $newPaidAmount,
+                                    'balance_amount' => $balanceAmount,
+                                    'payment_status' => $paymentStatus,
+                                    'status' => $paymentStatus === 'paid' ? 'paid' : $invoice->status,
+                                    'paid_at' => $paymentStatus === 'paid' ? now('Asia/Kolkata') : $invoice->paid_at,
+                                ]);
+                                
+                                // Refresh invoice to get updated status
+                                $invoice->refresh();
+                                $paymentStatus = $invoice->payment_status;
+                            }
+                            
+                            // Automatically verify payment for this billing period (only if not already processed)
+                            if (!$alreadyProcessed && $invoice->billing_period && $paymentStatus === 'paid') {
                                 $existingVerification = \App\Models\PaymentVerificationLog::where('application_id', $application->id)
                                     ->where('billing_period', $invoice->billing_period)
                                     ->first();
@@ -2433,32 +2470,70 @@ class IxApplicationController extends Controller
                                 ->first();
                             
                             if ($invoice) {
-                                // Calculate payment amounts (handle partial payments)
+                                // Check if payment has already been processed (prevent duplicate processing)
+                                $alreadyProcessed = false;
                                 $paymentAmount = (float) $paymentTransaction->amount;
-                                $currentPaidAmount = (float) ($invoice->paid_amount ?? 0);
-                                $newPaidAmount = $currentPaidAmount + $paymentAmount;
-                                $balanceAmount = max(0, (float)$invoice->total_amount - $newPaidAmount);
                                 
-                                // Determine payment status
-                                $paymentStatus = 'pending';
-                                if ($newPaidAmount >= $invoice->total_amount) {
-                                    $paymentStatus = 'paid';
-                                    $balanceAmount = 0;
-                                } elseif ($newPaidAmount > 0) {
-                                    $paymentStatus = 'partial';
+                                // Check if a PaymentVerificationLog already exists for this transaction
+                                $existingVerification = \App\Models\PaymentVerificationLog::where('application_id', $application->id)
+                                    ->where('payment_id', $payuPaymentId ?? $transactionId)
+                                    ->where('billing_period', $invoice->billing_period)
+                                    ->first();
+                                
+                                if ($existingVerification) {
+                                    $alreadyProcessed = true;
+                                    Log::info('PayU Webhook - Payment already processed, skipping duplicate processing', [
+                                        'invoice_number' => $invoiceNumber,
+                                        'payment_id' => $payuPaymentId ?? $transactionId,
+                                    ]);
                                 }
                                 
-                                // Update invoice
-                                $invoice->update([
-                                    'paid_amount' => $newPaidAmount,
-                                    'balance_amount' => $balanceAmount,
-                                    'payment_status' => $paymentStatus,
-                                    'status' => $paymentStatus === 'paid' ? 'paid' : $invoice->status,
-                                    'paid_at' => $paymentStatus === 'paid' ? now('Asia/Kolkata') : $invoice->paid_at,
-                                ]);
+                                // Also check if the payment amount would exceed what's already paid
+                                // If paid_amount already includes this payment, skip
+                                if (!$alreadyProcessed) {
+                                    $currentPaidAmount = (float) ($invoice->paid_amount ?? 0);
+                                    
+                                    // If current paid amount is already >= total and payment_status is 'paid', skip
+                                    if ($invoice->payment_status === 'paid' && $currentPaidAmount >= $invoice->total_amount) {
+                                        $alreadyProcessed = true;
+                                        Log::info('PayU Webhook - Invoice already fully paid, skipping duplicate processing', [
+                                            'invoice_number' => $invoiceNumber,
+                                            'paid_amount' => $currentPaidAmount,
+                                            'total_amount' => $invoice->total_amount,
+                                        ]);
+                                    }
+                                }
+                                
+                                if (!$alreadyProcessed) {
+                                    // Calculate payment amounts (handle partial payments)
+                                    $currentPaidAmount = (float) ($invoice->paid_amount ?? 0);
+                                    $newPaidAmount = $currentPaidAmount + $paymentAmount;
+                                    $balanceAmount = max(0, (float)$invoice->total_amount - $newPaidAmount);
+                                    
+                                    // Determine payment status
+                                    $paymentStatus = 'pending';
+                                    if ($newPaidAmount >= $invoice->total_amount) {
+                                        $paymentStatus = 'paid';
+                                        $balanceAmount = 0;
+                                    } elseif ($newPaidAmount > 0) {
+                                        $paymentStatus = 'partial';
+                                    }
+                                    
+                                    // Update invoice
+                                    $invoice->update([
+                                        'paid_amount' => $newPaidAmount,
+                                        'balance_amount' => $balanceAmount,
+                                        'payment_status' => $paymentStatus,
+                                        'status' => $paymentStatus === 'paid' ? 'paid' : $invoice->status,
+                                        'paid_at' => $paymentStatus === 'paid' ? now('Asia/Kolkata') : $invoice->paid_at,
+                                    ]);
+                                } else {
+                                    // Use current payment status if already processed
+                                    $paymentStatus = $invoice->payment_status;
+                                }
 
-                                // Automatically verify payment for this billing period (only if fully paid)
-                                if ($invoice->billing_period && $paymentStatus === 'paid') {
+                                // Automatically verify payment for this billing period (only if fully paid and not already processed)
+                                if (!$alreadyProcessed && $invoice->billing_period && $paymentStatus === 'paid') {
                                     // Check if already verified
                                     $existingVerification = \App\Models\PaymentVerificationLog::where('application_id', $application->id)
                                         ->where('billing_period', $invoice->billing_period)
@@ -2471,7 +2546,7 @@ class IxApplicationController extends Controller
                                             'verification_type' => 'recurring',
                                             'billing_period' => $invoice->billing_period,
                                             'amount' => $invoice->total_amount,
-                                            'amount_captured' => $paymentAmount,
+                                            'amount_captured' => $paymentAmount ?? (float) $paymentTransaction->amount,
                                             'currency' => $invoice->currency,
                                             'payment_method' => 'payu',
                                             'payment_id' => $payuPaymentId ?? $transactionId,
