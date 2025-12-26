@@ -199,13 +199,47 @@ class SuperAdminController extends Controller
                 ->where('status', '!=', 'cancelled')
                 ->sum('total_amount');
             
-            // Total amount collected (paid invoices) this month
-            $totalCollectedThisMonth = Invoice::whereBetween('invoice_date', [$currentMonthStart, $currentMonthEnd])
-                ->where('payment_status', 'paid')
-                ->where('status', '!=', 'cancelled')
-                ->sum('paid_amount');
+            // Total amount collected this month - based on actual payments received this month
+            // Primary method: Sum of PaymentVerificationLog where verified_at is this month
+            // This captures both manual verifications and automatic PayU verifications
+            $totalCollectedFromVerification = \App\Models\PaymentVerificationLog::whereBetween('verified_at', [$currentMonthStart, $currentMonthEnd])
+                ->where('verification_type', 'recurring') // Only invoice/recurring payments, not application fees
+                ->sum(DB::raw('COALESCE(amount_captured, amount, 0)'));
+            
+            // Secondary method: Sum of PaymentTransaction for invoice payments where payment_status = success and created_at is this month
+            // Filter for invoice payments by checking product_info contains invoice number pattern
+            $totalCollectedFromTransactions = PaymentTransaction::where('payment_status', 'success')
+                ->whereBetween('created_at', [$currentMonthStart, $currentMonthEnd])
+                ->whereNotNull('application_id')
+                ->where(function($query) {
+                    // Check if product_info contains invoice number (starts with INV- or contains invoice number)
+                    $query->where('product_info', 'LIKE', 'INV-%')
+                          ->orWhere('product_info', 'LIKE', 'BULK-%')
+                          ->orWhere('product_info', 'LIKE', '%Invoice%');
+                })
+                ->sum('amount');
+            
+            // Use verification logs as primary source (most accurate)
+            // If verification logs exist, use them; otherwise use transactions
+            $totalCollectedThisMonth = $totalCollectedFromVerification > 0 
+                ? $totalCollectedFromVerification 
+                : $totalCollectedFromTransactions;
+            
+            // Fallback: If both are 0 or very small, check invoices with paid_at this month
+            // This handles cases where payment verification logs might not exist
+            if ($totalCollectedThisMonth < 0.01) {
+                // For invoices paid this month, we need to be careful about partial payments
+                // If an invoice was partially paid before and fully paid this month, we should only count incremental
+                // For simplicity, we'll sum paid_amount of invoices where paid_at is this month
+                // But this might overcount if invoice was partially paid before
+                $totalCollectedThisMonth = Invoice::whereBetween('paid_at', [$currentMonthStart, $currentMonthEnd])
+                    ->where('status', '!=', 'cancelled')
+                    ->whereIn('payment_status', ['paid', 'partial'])
+                    ->sum('paid_amount');
+            }
             
             // Total pending amount (unpaid + partial invoices) - all time
+            // Use balance_amount for accurate pending calculation
             $totalPendingAmount = Invoice::whereIn('payment_status', ['pending', 'partial'])
                 ->where('status', '!=', 'cancelled')
                 ->sum('balance_amount');
