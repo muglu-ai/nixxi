@@ -207,13 +207,39 @@
                 </div>
                 <div class="card-body p-4">
                     @foreach($applications as $application)
+                    @php
+                        // Get invoices for this application
+                        $appInvoices = \App\Models\Invoice::where('application_id', $application->id)
+                            ->where('status', '!=', 'cancelled')
+                            ->get();
+                        
+                        $appPendingInvoices = $appInvoices->whereIn('payment_status', ['pending', 'partial']);
+                        $appPaidInvoices = $appInvoices->where('payment_status', 'paid');
+                        
+                        $appOutstandingAmount = $appPendingInvoices->sum(function ($invoice) {
+                            return $invoice->balance_amount ?? $invoice->total_amount;
+                        });
+                        
+                        $appPaidAmount = $appPaidInvoices->sum('paid_amount');
+                        
+                        $appData = $application->application_data ?? [];
+                        $portSelection = $appData['port_selection'] ?? [];
+                    @endphp
                     <div class="mb-4 pb-4 {{ !$loop->last ? 'border-bottom' : '' }}">
                         <div class="d-flex justify-content-between align-items-start mb-3">
-                            <div>
+                            <div class="flex-grow-1">
                                 <h6 class="mb-1" style="color: #2c3e50; font-weight: 600;">{{ $application->application_id }}</h6>
                                 <p class="text-muted mb-0 small">{{ $application->application_type }}</p>
                             </div>
-                            <div>
+                            <div class="d-flex align-items-center gap-2">
+                                <button type="button" class="btn btn-sm btn-outline-secondary toggle-summary" 
+                                        data-target="summary-{{ $application->id }}"
+                                        style="border-radius: 8px; min-width: 40px;">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16" class="toggle-icon">
+                                        <path fill-rule="evenodd" d="M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z"/>
+                                    </svg>
+                                </button>
+                                <div>
                                 @if($application->status === 'approved' || $application->status === 'payment_verified')
                                     <span class="badge bg-success">Approved</span>
                                 @elseif($application->status === 'rejected' || $application->status === 'ceo_rejected')
@@ -399,6 +425,94 @@
                             @endif
                         </div>
                         
+                        <!-- Application Summary (Collapsible) -->
+                        <div id="summary-{{ $application->id }}" class="application-summary mt-3" style="display: none;">
+                            <div class="card border-0 shadow-sm bg-light" style="border-radius: 12px;">
+                                <div class="card-body p-3">
+                                    <h6 class="mb-3" style="color: #2c3e50; font-weight: 600;">Application Summary</h6>
+                                    <div class="row g-3">
+                                        @if($application->application_type === 'IX')
+                                            <!-- Port Details -->
+                                            <div class="col-md-6">
+                                                <div class="p-2 bg-white rounded">
+                                                    <small class="text-muted d-block mb-1">Port Capacity</small>
+                                                    <strong style="color: #2c3e50;">{{ $application->assigned_port_capacity ?? ($portSelection['capacity'] ?? 'N/A') }}</strong>
+                                                </div>
+                                            </div>
+                                            @if($application->assigned_port_number)
+                                            <div class="col-md-6">
+                                                <div class="p-2 bg-white rounded">
+                                                    <small class="text-muted d-block mb-1">Port Number</small>
+                                                    <strong style="color: #2c3e50;">{{ $application->assigned_port_number }}</strong>
+                                                </div>
+                                            </div>
+                                            @endif
+                                            <!-- IP Details -->
+                                            @if($application->assigned_ip)
+                                            <div class="col-md-6">
+                                                <div class="p-2 bg-white rounded">
+                                                    <small class="text-muted d-block mb-1">Assigned IP</small>
+                                                    <strong style="color: #2c3e50;">{{ $application->assigned_ip }}</strong>
+                                                </div>
+                                            </div>
+                                            @endif
+                                            <!-- Live Status -->
+                                            <div class="col-md-6">
+                                                <div class="p-2 bg-white rounded">
+                                                    <small class="text-muted d-block mb-1">Live Status</small>
+                                                    @if($application->is_active)
+                                                        <span class="badge bg-success">LIVE</span>
+                                                        @if($application->service_activation_date)
+                                                            <br><small class="text-muted">Since {{ \Carbon\Carbon::parse($application->service_activation_date)->format('d/m/Y') }}</small>
+                                                        @endif
+                                                    @else
+                                                        <span class="badge bg-danger">NOT LIVE</span>
+                                                    @endif
+                                                </div>
+                                            </div>
+                                            @if($application->membership_id)
+                                            <div class="col-md-6">
+                                                <div class="p-2 bg-white rounded">
+                                                    <small class="text-muted d-block mb-1">Membership ID</small>
+                                                    <strong style="color: #2c3e50;">{{ $application->membership_id }}</strong>
+                                                </div>
+                                            </div>
+                                            @endif
+                                            @if($application->customer_id)
+                                            <div class="col-md-6">
+                                                <div class="p-2 bg-white rounded">
+                                                    <small class="text-muted d-block mb-1">Customer ID</small>
+                                                    <strong style="color: #2c3e50;">{{ $application->customer_id }}</strong>
+                                                </div>
+                                            </div>
+                                            @endif
+                                        @endif
+                                        
+                                        <!-- Payment Summary -->
+                                        <div class="col-md-6">
+                                            <div class="p-2 bg-white rounded">
+                                                <small class="text-muted d-block mb-1">Amount to Pay</small>
+                                                @if($appOutstandingAmount > 0)
+                                                    <strong class="text-warning">₹{{ number_format($appOutstandingAmount, 2) }}</strong>
+                                                    <br><small class="text-muted">{{ $appPendingInvoices->count() }} pending invoice(s)</small>
+                                                @else
+                                                    <strong class="text-success">₹0.00</strong>
+                                                    <br><small class="text-muted">No pending payments</small>
+                                                @endif
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <div class="p-2 bg-white rounded">
+                                                <small class="text-muted d-block mb-1">Total Paid</small>
+                                                <strong class="text-success">₹{{ number_format($appPaidAmount, 2) }}</strong>
+                                                <br><small class="text-muted">{{ $appPaidInvoices->count() }} paid invoice(s)</small>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
                         <div class="mt-3">
                             <a href="{{ route('user.applications.show', $application->id) }}" class="btn btn-sm btn-outline-primary" style="border-radius: 8px;">
                                 View Details
@@ -497,6 +611,28 @@
             return new bootstrap.Tooltip(tooltipTriggerEl);
         });
     });
+</script>
+@endpush
+@push('scripts')
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Toggle application summary
+    document.querySelectorAll('.toggle-summary').forEach(function(button) {
+        button.addEventListener('click', function() {
+            const targetId = this.getAttribute('data-target');
+            const summary = document.getElementById(targetId);
+            const icon = this.querySelector('.toggle-icon');
+            
+            if (summary.style.display === 'none') {
+                summary.style.display = 'block';
+                icon.style.transform = 'rotate(180deg)';
+            } else {
+                summary.style.display = 'none';
+                icon.style.transform = 'rotate(0deg)';
+            }
+        });
+    });
+});
 </script>
 @endpush
 @endsection
