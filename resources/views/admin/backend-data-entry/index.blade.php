@@ -124,7 +124,7 @@
         <div class="card border-0 shadow-sm mb-4" style="border-radius: 16px;">
             <div class="card-header bg-success text-white d-flex justify-content-between align-items-center" style="border-radius: 16px 16px 0 0;">
                 <h5 class="mb-0">IX Applications</h5>
-                <button type="button" class="btn btn-light btn-sm" onclick="addApplication()">
+                <button type="button" class="btn btn-warning btn-sm text-white fw-bold" onclick="addApplication()" style="background-color: #ffc107; border-color: #ffc107;">
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
                         <path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4z"/>
                     </svg>
@@ -520,17 +520,15 @@
         }
     }
 
-    // Application counter
-    let applicationCounter = 0;
-
     // Add new application
     function addApplication() {
         const template = document.getElementById('applicationTemplate');
         const container = document.getElementById('applicationsContainer');
         const clone = template.content.cloneNode(true);
         
-        applicationCounter++;
-        const appIndex = applicationCounter;
+        // Get the next sequential index based on existing applications
+        const existingApps = container.querySelectorAll('.application-item');
+        const appIndex = existingApps.length; // 0-based index, so length gives us the next index
         
         // Update all field names with new index
         clone.querySelectorAll('[name]').forEach(field => {
@@ -559,13 +557,6 @@
         clone.querySelector('.application-item').setAttribute('data-app-index', appIndex);
         clone.querySelector('.app-number').textContent = appIndex + 1;
         
-        // Update IDs to be unique
-        clone.querySelectorAll('[id]').forEach(el => {
-            if (el.id) {
-                el.id = el.id + '_' + appIndex;
-            }
-        });
-        
         container.appendChild(clone);
         
         // Initialize handlers for new application
@@ -574,19 +565,45 @@
 
     // Remove application
     function removeApplication(btn) {
+        const container = document.getElementById('applicationsContainer');
         const appItem = btn.closest('.application-item');
-        if (document.querySelectorAll('.application-item').length > 1) {
+        if (container.querySelectorAll('.application-item').length > 1) {
             appItem.remove();
-            updateApplicationNumbers();
+            renumberApplications();
         } else {
             alert('At least one application is required.');
         }
     }
 
-    // Update application numbers
-    function updateApplicationNumbers() {
-        document.querySelectorAll('.application-item').forEach((item, index) => {
-            item.querySelector('.app-number').textContent = index + 1;
+    // Renumber all applications sequentially and update field names
+    function renumberApplications() {
+        const container = document.getElementById('applicationsContainer');
+        const applications = container.querySelectorAll('.application-item');
+        
+        applications.forEach((appItem, index) => {
+            // Update the display number
+            appItem.querySelector('.app-number').textContent = index + 1;
+            
+            // Update data attribute
+            appItem.setAttribute('data-app-index', index);
+            
+            // Get the old index from the first field name
+            const firstField = appItem.querySelector('[name]');
+            if (firstField) {
+                const oldName = firstField.getAttribute('name');
+                const oldIndexMatch = oldName.match(/applications\[(\d+)\]/);
+                if (oldIndexMatch) {
+                    const oldIndex = oldIndexMatch[1];
+                    
+                    // Update all field names to use the new sequential index
+                    appItem.querySelectorAll('[name]').forEach(field => {
+                        const name = field.getAttribute('name');
+                        if (name && name.includes(`applications[${oldIndex}]`)) {
+                            field.setAttribute('name', name.replace(`applications[${oldIndex}]`, `applications[${index}]`));
+                        }
+                    });
+                }
+            }
         });
     }
 
