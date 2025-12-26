@@ -239,10 +239,27 @@ class SuperAdminController extends Controller
             }
             
             // Total pending amount (unpaid + partial invoices) - all time
-            // Use balance_amount for accurate pending calculation
-            $totalPendingAmount = Invoice::whereIn('payment_status', ['pending', 'partial'])
+            // Calculate dynamically as (total_amount - paid_amount) to ensure accuracy
+            // Only include invoices that are actually pending (not fully paid)
+            $pendingInvoices = Invoice::whereIn('payment_status', ['pending', 'partial'])
                 ->where('status', '!=', 'cancelled')
-                ->sum('balance_amount');
+                ->where('status', '!=', 'paid') // Exclude invoices marked as paid
+                ->get();
+            
+            $totalPendingAmount = $pendingInvoices->sum(function ($invoice) {
+                // Calculate balance as total_amount - paid_amount
+                // This ensures accuracy even if balance_amount field is incorrect
+                $paidAmount = (float)($invoice->paid_amount ?? 0);
+                $totalAmount = (float)$invoice->total_amount;
+                
+                // If fully paid (paid_amount >= total_amount), return 0
+                if ($paidAmount >= $totalAmount && $totalAmount > 0) {
+                    return 0;
+                }
+                
+                // Return the calculated balance
+                return max(0, $totalAmount - $paidAmount);
+            });
             
             // Total overdue amount
             $totalOverdueAmount = Invoice::where('status', 'overdue')
