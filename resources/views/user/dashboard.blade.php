@@ -240,7 +240,9 @@
                                     </svg>
                                 </button>
                                 <div>
-                                @if($application->status === 'approved' || $application->status === 'payment_verified')
+                                @if($application->is_active && $application->service_activation_date)
+                                    <span class="badge bg-success">COMPLETED</span>
+                                @elseif($application->status === 'approved' || $application->status === 'payment_verified')
                                     <span class="badge bg-success">Approved</span>
                                 @elseif($application->status === 'rejected' || $application->status === 'ceo_rejected')
                                     <span class="badge bg-danger">Rejected</span>
@@ -276,153 +278,6 @@
                                     @endif
                                 @endif
                             </div>
-                        </div>
-                        
-                        @php
-                            if($application->application_type === 'IX') {
-                                // New IX Workflow Stages
-                                $stages = ['IX Processor', 'IX Legal', 'IX Head', 'CEO', 'Nodal Officer', 'IX Tech Team', 'IX Account', 'Completed'];
-                                $isCompleted = in_array($application->status, ['payment_verified', 'approved']);
-                                
-                                $processorCompleted = in_array($application->status, ['processor_forwarded_legal', 'legal_forwarded_head', 'head_forwarded_ceo', 'ceo_approved', 'port_assigned', 'ip_assigned', 'invoice_pending', 'payment_verified', 'approved']);
-                                $legalCompleted = in_array($application->status, ['legal_forwarded_head', 'head_forwarded_ceo', 'ceo_approved', 'port_assigned', 'ip_assigned', 'invoice_pending', 'payment_verified', 'approved']);
-                                $headCompleted = in_array($application->status, ['head_forwarded_ceo', 'ceo_approved', 'port_assigned', 'ip_assigned', 'invoice_pending', 'payment_verified', 'approved']);
-                                $ceoCompleted = in_array($application->status, ['ceo_approved', 'port_assigned', 'ip_assigned', 'invoice_pending', 'payment_verified', 'approved']);
-                                $nodalCompleted = in_array($application->status, ['port_assigned', 'ip_assigned', 'invoice_pending', 'payment_verified', 'approved']);
-                                $techCompleted = in_array($application->status, ['ip_assigned', 'invoice_pending', 'payment_verified', 'approved']);
-                                $accountCompleted = in_array($application->status, ['payment_verified', 'approved']);
-                                $completedCompleted = $isCompleted;
-                                
-                                $completedCount = ($processorCompleted ? 1 : 0) + ($legalCompleted ? 1 : 0) + ($headCompleted ? 1 : 0) + ($ceoCompleted ? 1 : 0) + ($nodalCompleted ? 1 : 0) + ($techCompleted ? 1 : 0) + ($accountCompleted ? 1 : 0) + ($completedCompleted ? 1 : 0);
-                                $progress = ($completedCount / count($stages)) * 100;
-                            } else {
-                                // Legacy Workflow Stages
-                                $stages = ['Processor', 'Finance', 'Technical', 'Approved'];
-                                $isApproved = $application->status === 'approved';
-                                
-                                $processorCompleted = in_array($application->status, ['processor_approved', 'finance_review', 'finance_approved', 'approved']);
-                                $financeCompleted = in_array($application->status, ['finance_approved', 'approved']);
-                                $technicalCompleted = $isApproved;
-                                $approvedCompleted = $isApproved;
-                                
-                                $completedCount = ($processorCompleted ? 1 : 0) + ($financeCompleted ? 1 : 0) + ($technicalCompleted ? 1 : 0) + ($approvedCompleted ? 1 : 0);
-                                $progress = ($completedCount / count($stages)) * 100;
-                            }
-                        @endphp
-                        
-                        <div class="progress mb-3" style="height: 25px; border-radius: 12px;">
-                            <div class="progress-bar progress-bar-striped progress-bar-animated bg-success" 
-                                 role="progressbar" 
-                                 style="width: {{ $progress }}%; border-radius: 12px; font-weight: 600; font-size: 0.875rem;"
-                                 aria-valuenow="{{ $progress }}" 
-                                 aria-valuemin="0" 
-                                 aria-valuemax="100">
-                                {{ round($progress) }}%
-                            </div>
-                        </div>
-                        
-                        <div class="d-flex flex-wrap gap-3">
-                            @if($application->application_type === 'IX')
-                                {{-- New IX Workflow Stages --}}
-                                <div class="d-flex align-items-center">
-                                    @if($processorCompleted)
-                                        <i class="bi bi-check-circle-fill text-success me-2" style="font-size: 18px;"></i>
-                                    @else
-                                        <i class="bi bi-circle text-muted me-2" style="font-size: 18px;"></i>
-                                    @endif
-                                    <span style="color: #2c3e50; font-weight: 500; font-size: 0.875rem;">IX Processor</span>
-                                </div>
-                                <div class="d-flex align-items-center">
-                                    @if($legalCompleted)
-                                        <i class="bi bi-check-circle-fill text-success me-2" style="font-size: 18px;"></i>
-                                    @else
-                                        <i class="bi bi-circle text-muted me-2" style="font-size: 18px;"></i>
-                                    @endif
-                                    <span style="color: #2c3e50; font-weight: 500; font-size: 0.875rem;">IX Legal</span>
-                                </div>
-                                <div class="d-flex align-items-center">
-                                    @if($headCompleted)
-                                        <i class="bi bi-check-circle-fill text-success me-2" style="font-size: 18px;"></i>
-                                    @else
-                                        <i class="bi bi-circle text-muted me-2" style="font-size: 18px;"></i>
-                                    @endif
-                                    <span style="color: #2c3e50; font-weight: 500; font-size: 0.875rem;">IX Head</span>
-                                </div>
-                                <div class="d-flex align-items-center">
-                                    @if($ceoCompleted)
-                                        <i class="bi bi-check-circle-fill text-success me-2" style="font-size: 18px;"></i>
-                                    @else
-                                        <i class="bi bi-circle text-muted me-2" style="font-size: 18px;"></i>
-                                    @endif
-                                    <span style="color: #2c3e50; font-weight: 500; font-size: 0.875rem;">CEO</span>
-                                </div>
-                                <div class="d-flex align-items-center">
-                                    @if($nodalCompleted)
-                                        <i class="bi bi-check-circle-fill text-success me-2" style="font-size: 18px;"></i>
-                                    @else
-                                        <i class="bi bi-circle text-muted me-2" style="font-size: 18px;"></i>
-                                    @endif
-                                    <span style="color: #2c3e50; font-weight: 500; font-size: 0.875rem;">Nodal Officer</span>
-                                </div>
-                                <div class="d-flex align-items-center">
-                                    @if($techCompleted)
-                                        <i class="bi bi-check-circle-fill text-success me-2" style="font-size: 18px;"></i>
-                                    @else
-                                        <i class="bi bi-circle text-muted me-2" style="font-size: 18px;"></i>
-                                    @endif
-                                    <span style="color: #2c3e50; font-weight: 500; font-size: 0.875rem;">IX Tech Team</span>
-                                </div>
-                                <div class="d-flex align-items-center">
-                                    @if($accountCompleted)
-                                        <i class="bi bi-check-circle-fill text-success me-2" style="font-size: 18px;"></i>
-                                    @else
-                                        <i class="bi bi-circle text-muted me-2" style="font-size: 18px;"></i>
-                                    @endif
-                                    <span style="color: #2c3e50; font-weight: 500; font-size: 0.875rem;">IX Account</span>
-                                </div>
-                                <div class="d-flex align-items-center">
-                                    @if($completedCompleted)
-                                        <i class="bi bi-check-circle-fill text-success me-2" style="font-size: 18px;"></i>
-                                    @else
-                                        <i class="bi bi-circle text-muted me-2" style="font-size: 18px;"></i>
-                                    @endif
-                                    <span style="color: #2c3e50; font-weight: 500; font-size: 0.875rem;">Completed</span>
-                                </div>
-                            @else
-                                {{-- Legacy Workflow Stages --}}
-                                <div class="d-flex align-items-center">
-                                    @if($processorCompleted)
-                                        <i class="bi bi-check-circle-fill text-success me-2" style="font-size: 20px;"></i>
-                                    @else
-                                        <i class="bi bi-circle text-muted me-2" style="font-size: 20px;"></i>
-                                    @endif
-                                    <span style="color: #2c3e50; font-weight: 500;">Processor</span>
-                                </div>
-                                <div class="d-flex align-items-center">
-                                    @if($financeCompleted)
-                                        <i class="bi bi-check-circle-fill text-success me-2" style="font-size: 20px;"></i>
-                                    @else
-                                        <i class="bi bi-circle text-muted me-2" style="font-size: 20px;"></i>
-                                    @endif
-                                    <span style="color: #2c3e50; font-weight: 500;">Finance</span>
-                                </div>
-                                <div class="d-flex align-items-center">
-                                    @if($technicalCompleted)
-                                        <i class="bi bi-check-circle-fill text-success me-2" style="font-size: 20px;"></i>
-                                    @else
-                                        <i class="bi bi-circle text-muted me-2" style="font-size: 20px;"></i>
-                                    @endif
-                                    <span style="color: #2c3e50; font-weight: 500;">Technical</span>
-                                </div>
-                                <div class="d-flex align-items-center">
-                                    @if($approvedCompleted)
-                                        <i class="bi bi-check-circle-fill text-success me-2" style="font-size: 20px;"></i>
-                                    @else
-                                        <i class="bi bi-circle text-muted me-2" style="font-size: 20px;"></i>
-                                    @endif
-                                    <span style="color: #2c3e50; font-weight: 500;">Approved</span>
-                                </div>
-                            @endif
                         </div>
                         
                         <!-- Application Summary (Collapsible) -->

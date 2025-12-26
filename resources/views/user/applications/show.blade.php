@@ -35,7 +35,12 @@ use Illuminate\Support\Facades\Storage;
                     <tr>
                         <th>Status:</th>
                         <td>
-                            @if($application->application_type === 'IX')
+                            @if($application->is_active && $application->service_activation_date)
+                                <span class="badge bg-success">LIVE</span>
+                                <span class="badge bg-success ms-2">COMPLETED</span>
+                            @elseif($application->service_activation_date)
+                                <span class="badge bg-info">Will be live on {{ \Carbon\Carbon::parse($application->service_activation_date)->format('d M Y') }}</span>
+                            @elseif($application->application_type === 'IX')
                                 {{-- New IX Workflow Statuses --}}
                                 @if($application->status === 'approved' || $application->status === 'payment_verified')
                                     <span class="badge bg-success">Approved</span>
@@ -76,6 +81,64 @@ use Illuminate\Support\Facades\Storage;
                             @endif
                         </td>
                     </tr>
+                    @if($application->application_type === 'IX')
+                    <tr>
+                        <th>Progress:</th>
+                        <td>
+                            @php
+                                if($application->application_type === 'IX') {
+                                    // New IX Workflow Stages
+                                    $stages = ['IX Processor', 'IX Legal', 'IX Head', 'CEO', 'Nodal Officer', 'IX Tech Team', 'IX Account', 'Completed'];
+                                    $isCompleted = in_array($application->status, ['payment_verified', 'approved']);
+                                    
+                                    $processorCompleted = in_array($application->status, ['processor_forwarded_legal', 'legal_forwarded_head', 'head_forwarded_ceo', 'ceo_approved', 'port_assigned', 'ip_assigned', 'invoice_pending', 'payment_verified', 'approved']);
+                                    $legalCompleted = in_array($application->status, ['legal_forwarded_head', 'head_forwarded_ceo', 'ceo_approved', 'port_assigned', 'ip_assigned', 'invoice_pending', 'payment_verified', 'approved']);
+                                    $headCompleted = in_array($application->status, ['head_forwarded_ceo', 'ceo_approved', 'port_assigned', 'ip_assigned', 'invoice_pending', 'payment_verified', 'approved']);
+                                    $ceoCompleted = in_array($application->status, ['ceo_approved', 'port_assigned', 'ip_assigned', 'invoice_pending', 'payment_verified', 'approved']);
+                                    $nodalCompleted = in_array($application->status, ['port_assigned', 'ip_assigned', 'invoice_pending', 'payment_verified', 'approved']);
+                                    $techCompleted = in_array($application->status, ['ip_assigned', 'invoice_pending', 'payment_verified', 'approved']);
+                                    $accountCompleted = in_array($application->status, ['payment_verified', 'approved']);
+                                    $completedCompleted = $isCompleted;
+                                    
+                                    $completedCount = ($processorCompleted ? 1 : 0) + ($legalCompleted ? 1 : 0) + ($headCompleted ? 1 : 0) + ($ceoCompleted ? 1 : 0) + ($nodalCompleted ? 1 : 0) + ($techCompleted ? 1 : 0) + ($accountCompleted ? 1 : 0) + ($completedCompleted ? 1 : 0);
+                                    $progress = ($completedCount / count($stages)) * 100;
+                                } else {
+                                    // Legacy Workflow Stages
+                                    $stages = ['Processor', 'Finance', 'Technical', 'Approved'];
+                                    $isApproved = $application->status === 'approved';
+                                    
+                                    $processorCompleted = in_array($application->status, ['processor_approved', 'finance_review', 'finance_approved', 'approved']);
+                                    $financeCompleted = in_array($application->status, ['finance_approved', 'approved']);
+                                    $technicalCompleted = $isApproved;
+                                    $approvedCompleted = $isApproved;
+                                    
+                                    $completedCount = ($processorCompleted ? 1 : 0) + ($financeCompleted ? 1 : 0) + ($technicalCompleted ? 1 : 0) + ($approvedCompleted ? 1 : 0);
+                                    $progress = ($completedCount / count($stages)) * 100;
+                                }
+                            @endphp
+                            <div class="progress" style="height: 25px; border-radius: 12px;">
+                                <div class="progress-bar progress-bar-striped progress-bar-animated bg-success" 
+                                     role="progressbar" 
+                                     style="width: {{ $progress }}%; border-radius: 12px; font-weight: 600; font-size: 0.875rem; line-height: 25px;"
+                                     aria-valuenow="{{ $progress }}" 
+                                     aria-valuemin="0" 
+                                     aria-valuemax="100">
+                                    {{ round($progress) }}%
+                                </div>
+                            </div>
+                            @if($application->is_active && $application->service_activation_date)
+                                <div class="mt-2">
+                                    <span class="badge bg-success">LIVE</span>
+                                    <span class="badge bg-success ms-2">COMPLETED</span>
+                                </div>
+                            @elseif($application->service_activation_date)
+                                <div class="mt-2">
+                                    <span class="badge bg-info">Will be live on {{ \Carbon\Carbon::parse($application->service_activation_date)->format('d M Y') }}</span>
+                                </div>
+                            @endif
+                        </td>
+                    </tr>
+                    @endif
                     @if($application->application_type === 'IX')
                         @if($application->assigned_port_capacity)
                         <tr>
@@ -478,56 +541,6 @@ use Illuminate\Support\Facades\Storage;
         @endif
         @endif
 
-        <!-- Status History -->
-        <div class="card shadow">
-            <div class="card-header bg-info text-white">
-                <h5 class="mb-0">Status History</h5>
-            </div>
-            <div class="card-body">
-                @if($application->statusHistory && $application->statusHistory->count() > 0)
-                    <div class="timeline">
-                        @foreach($application->statusHistory->sortBy('created_at') as $history)
-                        <div class="mb-3 pb-3 border-bottom">
-                            <div class="d-flex justify-content-between">
-                                <div>
-                                    <strong>{{ $history->status_from ? ucfirst(str_replace('_', ' ', $history->status_from)) : 'New' }}</strong>
-                                    <i class="bi bi-arrow-right"></i>
-                                    <strong>{{ ucfirst(str_replace('_', ' ', $history->status_to)) }}</strong>
-                                </div>
-                                <small class="text-muted">{{ $history->created_at->format('d M Y, h:i A') }}</small>
-                            </div>
-                            @if($history->notes)
-                            <p class="mb-0 mt-2"><small>{{ $history->notes }}</small></p>
-                            @endif
-                            @php
-                                $changedBy = $history->changedBy();
-                            @endphp
-                            @if($changedBy)
-                            <p class="mb-0 mt-1">
-                                <small class="text-muted">
-                                    Changed by: 
-                                    @if($history->changed_by_type === 'admin')
-                                        {{ $changedBy->name ?? 'Admin' }}
-                                    @elseif($history->changed_by_type === 'superadmin')
-                                        {{ $changedBy->name ?? 'SuperAdmin' }}
-                                    @elseif($history->changed_by_type === 'user')
-                                        User
-                                    @endif
-                                </small>
-                            </p>
-                            @elseif($history->changed_by_type === 'user')
-                            <p class="mb-0 mt-1">
-                                <small class="text-muted">Changed by: User</small>
-                            </p>
-                            @endif
-                        </div>
-                        @endforeach
-                    </div>
-                @else
-                    <p class="text-muted">No status history available.</p>
-                @endif
-            </div>
-        </div>
     </div>
 
     <div class="col-md-4">
@@ -1588,234 +1601,83 @@ document.addEventListener('DOMContentLoaded', function() {
             statusSummaryIcon.style.transform = 'rotate(0deg)';
         });
         
-        statusSummary.addEventListener('hide.bs.collapse', function() {
-            statusSummaryIcon.style.transform = 'rotate(180deg)';
+    });
+    
+    // Handle status history collapse icon rotation
+    const statusHistory = document.getElementById('statusHistory');
+    const statusHistoryIcon = document.querySelector('.status-history-icon');
+    
+    if (statusHistory && statusHistoryIcon) {
+        statusHistory.addEventListener('show.bs.collapse', function() {
+            statusHistoryIcon.style.transform = 'rotate(0deg)';
+        });
+        
+        statusHistory.addEventListener('hide.bs.collapse', function() {
+            statusHistoryIcon.style.transform = 'rotate(180deg)';
         });
     }
 </script>
 @endpush
 
-<!-- Application Status Summary (Collapsible) -->
+<!-- Status History (Collapsible) -->
 <div class="row mt-4">
     <div class="col-12">
         <div class="card border-0 shadow-sm" style="border-radius: 16px;">
-            <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center" 
+            <div class="card-header bg-info text-white d-flex justify-content-between align-items-center" 
                  style="border-radius: 16px 16px 0 0; cursor: pointer;" 
                  data-bs-toggle="collapse" 
-                 data-bs-target="#statusSummary" 
+                 data-bs-target="#statusHistory" 
                  aria-expanded="false" 
-                 aria-controls="statusSummary">
-                <h5 class="mb-0" style="font-weight: 600;">Application Status Summary</h5>
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" class="status-summary-icon" viewBox="0 0 16 16" style="transition: transform 0.3s; transform: rotate(180deg);">
+                 aria-controls="statusHistory">
+                <h5 class="mb-0" style="font-weight: 600;">Status History</h5>
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" class="status-history-icon" viewBox="0 0 16 16" style="transition: transform 0.3s; transform: rotate(180deg);">
                     <path fill-rule="evenodd" d="M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z"/>
                 </svg>
             </div>
-            <div id="statusSummary" class="collapse">
+            <div id="statusHistory" class="collapse">
                 <div class="card-body p-4">
-                    @php
-                        if($application->application_type === 'IX') {
-                            // New IX Workflow Stages
-                            $stages = ['IX Processor', 'IX Legal', 'IX Head', 'CEO', 'Nodal Officer', 'IX Tech Team', 'IX Account', 'Completed'];
-                            $isCompleted = in_array($application->status, ['payment_verified', 'approved']);
-                            
-                            $processorCompleted = in_array($application->status, ['processor_forwarded_legal', 'legal_forwarded_head', 'head_forwarded_ceo', 'ceo_approved', 'port_assigned', 'ip_assigned', 'invoice_pending', 'payment_verified', 'approved']);
-                            $legalCompleted = in_array($application->status, ['legal_forwarded_head', 'head_forwarded_ceo', 'ceo_approved', 'port_assigned', 'ip_assigned', 'invoice_pending', 'payment_verified', 'approved']);
-                            $headCompleted = in_array($application->status, ['head_forwarded_ceo', 'ceo_approved', 'port_assigned', 'ip_assigned', 'invoice_pending', 'payment_verified', 'approved']);
-                            $ceoCompleted = in_array($application->status, ['ceo_approved', 'port_assigned', 'ip_assigned', 'invoice_pending', 'payment_verified', 'approved']);
-                            $nodalCompleted = in_array($application->status, ['port_assigned', 'ip_assigned', 'invoice_pending', 'payment_verified', 'approved']);
-                            $techCompleted = in_array($application->status, ['ip_assigned', 'invoice_pending', 'payment_verified', 'approved']);
-                            $accountCompleted = in_array($application->status, ['payment_verified', 'approved']);
-                            $completedCompleted = $isCompleted;
-                            
-                            $completedCount = ($processorCompleted ? 1 : 0) + ($legalCompleted ? 1 : 0) + ($headCompleted ? 1 : 0) + ($ceoCompleted ? 1 : 0) + ($nodalCompleted ? 1 : 0) + ($techCompleted ? 1 : 0) + ($accountCompleted ? 1 : 0) + ($completedCompleted ? 1 : 0);
-                            $progress = ($completedCount / count($stages)) * 100;
-                        } else {
-                            // Legacy Workflow Stages
-                            $stages = ['Processor', 'Finance', 'Technical', 'Approved'];
-                            $isApproved = $application->status === 'approved';
-                            
-                            $processorCompleted = in_array($application->status, ['processor_approved', 'finance_review', 'finance_approved', 'approved']);
-                            $financeCompleted = in_array($application->status, ['finance_approved', 'approved']);
-                            $technicalCompleted = $isApproved;
-                            $approvedCompleted = $isApproved;
-                            
-                            $completedCount = ($processorCompleted ? 1 : 0) + ($financeCompleted ? 1 : 0) + ($technicalCompleted ? 1 : 0) + ($approvedCompleted ? 1 : 0);
-                            $progress = ($completedCount / count($stages)) * 100;
-                        }
-                    @endphp
-                    
-                    <div class="progress mb-4" style="height: 30px; border-radius: 15px;">
-                        <div class="progress-bar progress-bar-striped progress-bar-animated bg-success" 
-                             role="progressbar" 
-                             style="width: {{ $progress }}%; border-radius: 15px; font-weight: 600; font-size: 1rem; line-height: 30px;"
-                             aria-valuenow="{{ $progress }}" 
-                             aria-valuemin="0" 
-                             aria-valuemax="100">
-                            {{ round($progress) }}% Complete
+                    @if($application->statusHistory && $application->statusHistory->count() > 0)
+                        <div class="timeline">
+                            @foreach($application->statusHistory->sortBy('created_at') as $history)
+                            <div class="mb-3 pb-3 {{ !$loop->last ? 'border-bottom' : '' }}">
+                                <div class="d-flex justify-content-between">
+                                    <div>
+                                        <strong>{{ $history->status_from ? ucfirst(str_replace('_', ' ', $history->status_from)) : 'New' }}</strong>
+                                        <i class="bi bi-arrow-right mx-2"></i>
+                                        <strong>{{ ucfirst(str_replace('_', ' ', $history->status_to)) }}</strong>
+                                    </div>
+                                    <small class="text-muted">{{ $history->created_at->format('d M Y, h:i A') }}</small>
+                                </div>
+                                @if($history->notes)
+                                <p class="mb-0 mt-2"><small class="text-muted">{{ $history->notes }}</small></p>
+                                @endif
+                                @php
+                                    $changedBy = $history->changedBy();
+                                @endphp
+                                @if($changedBy)
+                                <p class="mb-0 mt-1">
+                                    <small class="text-muted">
+                                        Changed by: 
+                                        @if($history->changed_by_type === 'admin')
+                                            {{ $changedBy->name ?? 'Admin' }}
+                                        @elseif($history->changed_by_type === 'superadmin')
+                                            {{ $changedBy->name ?? 'SuperAdmin' }}
+                                        @elseif($history->changed_by_type === 'user')
+                                            User
+                                        @endif
+                                    </small>
+                                </p>
+                                @elseif($history->changed_by_type === 'user')
+                                <p class="mb-0 mt-1">
+                                    <small class="text-muted">Changed by: User</small>
+                                </p>
+                                @endif
+                            </div>
+                            @endforeach
                         </div>
-                    </div>
-                    
-                    <div class="row g-3">
-                        @if($application->application_type === 'IX')
-                            <div class="col-md-3 col-sm-6">
-                                <div class="d-flex align-items-center p-3 bg-light rounded">
-                                    @if($processorCompleted)
-                                        <i class="bi bi-check-circle-fill text-success me-2" style="font-size: 24px;"></i>
-                                    @else
-                                        <i class="bi bi-circle text-muted me-2" style="font-size: 24px;"></i>
-                                    @endif
-                                    <div>
-                                        <div style="color: #2c3e50; font-weight: 600;">IX Processor</div>
-                                        <small class="text-muted">{{ $processorCompleted ? 'Completed' : 'Pending' }}</small>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="col-md-3 col-sm-6">
-                                <div class="d-flex align-items-center p-3 bg-light rounded">
-                                    @if($legalCompleted)
-                                        <i class="bi bi-check-circle-fill text-success me-2" style="font-size: 24px;"></i>
-                                    @else
-                                        <i class="bi bi-circle text-muted me-2" style="font-size: 24px;"></i>
-                                    @endif
-                                    <div>
-                                        <div style="color: #2c3e50; font-weight: 600;">IX Legal</div>
-                                        <small class="text-muted">{{ $legalCompleted ? 'Completed' : 'Pending' }}</small>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="col-md-3 col-sm-6">
-                                <div class="d-flex align-items-center p-3 bg-light rounded">
-                                    @if($headCompleted)
-                                        <i class="bi bi-check-circle-fill text-success me-2" style="font-size: 24px;"></i>
-                                    @else
-                                        <i class="bi bi-circle text-muted me-2" style="font-size: 24px;"></i>
-                                    @endif
-                                    <div>
-                                        <div style="color: #2c3e50; font-weight: 600;">IX Head</div>
-                                        <small class="text-muted">{{ $headCompleted ? 'Completed' : 'Pending' }}</small>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="col-md-3 col-sm-6">
-                                <div class="d-flex align-items-center p-3 bg-light rounded">
-                                    @if($ceoCompleted)
-                                        <i class="bi bi-check-circle-fill text-success me-2" style="font-size: 24px;"></i>
-                                    @else
-                                        <i class="bi bi-circle text-muted me-2" style="font-size: 24px;"></i>
-                                    @endif
-                                    <div>
-                                        <div style="color: #2c3e50; font-weight: 600;">CEO</div>
-                                        <small class="text-muted">{{ $ceoCompleted ? 'Completed' : 'Pending' }}</small>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="col-md-3 col-sm-6">
-                                <div class="d-flex align-items-center p-3 bg-light rounded">
-                                    @if($nodalCompleted)
-                                        <i class="bi bi-check-circle-fill text-success me-2" style="font-size: 24px;"></i>
-                                    @else
-                                        <i class="bi bi-circle text-muted me-2" style="font-size: 24px;"></i>
-                                    @endif
-                                    <div>
-                                        <div style="color: #2c3e50; font-weight: 600;">Nodal Officer</div>
-                                        <small class="text-muted">{{ $nodalCompleted ? 'Completed' : 'Pending' }}</small>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="col-md-3 col-sm-6">
-                                <div class="d-flex align-items-center p-3 bg-light rounded">
-                                    @if($techCompleted)
-                                        <i class="bi bi-check-circle-fill text-success me-2" style="font-size: 24px;"></i>
-                                    @else
-                                        <i class="bi bi-circle text-muted me-2" style="font-size: 24px;"></i>
-                                    @endif
-                                    <div>
-                                        <div style="color: #2c3e50; font-weight: 600;">IX Tech Team</div>
-                                        <small class="text-muted">{{ $techCompleted ? 'Completed' : 'Pending' }}</small>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="col-md-3 col-sm-6">
-                                <div class="d-flex align-items-center p-3 bg-light rounded">
-                                    @if($accountCompleted)
-                                        <i class="bi bi-check-circle-fill text-success me-2" style="font-size: 24px;"></i>
-                                    @else
-                                        <i class="bi bi-circle text-muted me-2" style="font-size: 24px;"></i>
-                                    @endif
-                                    <div>
-                                        <div style="color: #2c3e50; font-weight: 600;">IX Account</div>
-                                        <small class="text-muted">{{ $accountCompleted ? 'Completed' : 'Pending' }}</small>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="col-md-3 col-sm-6">
-                                <div class="d-flex align-items-center p-3 bg-light rounded">
-                                    @if($completedCompleted)
-                                        <i class="bi bi-check-circle-fill text-success me-2" style="font-size: 24px;"></i>
-                                    @else
-                                        <i class="bi bi-circle text-muted me-2" style="font-size: 24px;"></i>
-                                    @endif
-                                    <div>
-                                        <div style="color: #2c3e50; font-weight: 600;">Completed</div>
-                                        <small class="text-muted">{{ $completedCompleted ? 'Yes' : 'No' }}</small>
-                                    </div>
-                                </div>
-                            </div>
-                        @else
-                            <div class="col-md-3 col-sm-6">
-                                <div class="d-flex align-items-center p-3 bg-light rounded">
-                                    @if($processorCompleted)
-                                        <i class="bi bi-check-circle-fill text-success me-2" style="font-size: 24px;"></i>
-                                    @else
-                                        <i class="bi bi-circle text-muted me-2" style="font-size: 24px;"></i>
-                                    @endif
-                                    <div>
-                                        <div style="color: #2c3e50; font-weight: 600;">Processor</div>
-                                        <small class="text-muted">{{ $processorCompleted ? 'Completed' : 'Pending' }}</small>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="col-md-3 col-sm-6">
-                                <div class="d-flex align-items-center p-3 bg-light rounded">
-                                    @if($financeCompleted)
-                                        <i class="bi bi-check-circle-fill text-success me-2" style="font-size: 24px;"></i>
-                                    @else
-                                        <i class="bi bi-circle text-muted me-2" style="font-size: 24px;"></i>
-                                    @endif
-                                    <div>
-                                        <div style="color: #2c3e50; font-weight: 600;">Finance</div>
-                                        <small class="text-muted">{{ $financeCompleted ? 'Completed' : 'Pending' }}</small>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="col-md-3 col-sm-6">
-                                <div class="d-flex align-items-center p-3 bg-light rounded">
-                                    @if($technicalCompleted)
-                                        <i class="bi bi-check-circle-fill text-success me-2" style="font-size: 24px;"></i>
-                                    @else
-                                        <i class="bi bi-circle text-muted me-2" style="font-size: 24px;"></i>
-                                    @endif
-                                    <div>
-                                        <div style="color: #2c3e50; font-weight: 600;">Technical</div>
-                                        <small class="text-muted">{{ $technicalCompleted ? 'Completed' : 'Pending' }}</small>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="col-md-3 col-sm-6">
-                                <div class="d-flex align-items-center p-3 bg-light rounded">
-                                    @if($approvedCompleted)
-                                        <i class="bi bi-check-circle-fill text-success me-2" style="font-size: 24px;"></i>
-                                    @else
-                                        <i class="bi bi-circle text-muted me-2" style="font-size: 24px;"></i>
-                                    @endif
-                                    <div>
-                                        <div style="color: #2c3e50; font-weight: 600;">Approved</div>
-                                        <small class="text-muted">{{ $approvedCompleted ? 'Yes' : 'No' }}</small>
-                                    </div>
-                                </div>
-                            </div>
-                        @endif
-                    </div>
+                    @else
+                        <p class="text-muted mb-0">No status history available.</p>
+                    @endif
                 </div>
             </div>
         </div>
