@@ -24,7 +24,13 @@
             <p class="mb-1"><strong>Password:</strong> <code>{{ session('credentials.password') }}</code></p>
             <p class="mb-1"><strong>Email OTP:</strong> <code>{{ session('credentials.email_otp') }}</code></p>
             <p class="mb-1"><strong>Mobile OTP:</strong> <code>{{ session('credentials.mobile_otp') }}</code></p>
-            <p class="mb-0"><strong>Application ID:</strong> {{ session('credentials.application_id') }}</p>
+            <p class="mb-0"><strong>Application ID(s):</strong> 
+                @if(is_array(session('credentials.application_ids')))
+                    {{ implode(', ', session('credentials.application_ids')) }}
+                @else
+                    {{ session('credentials.application_id') ?? 'N/A' }}
+                @endif
+            </p>
         </div>
         <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
     </div>
@@ -54,67 +60,52 @@
             <div class="card-body p-4">
                 <div class="row g-3">
                     <div class="col-md-12 mb-3">
-                        <label class="form-label">Registration Type <span class="text-danger">*</span></label>
+                        <label class="form-label">Registration Type</label>
                         <div class="d-flex gap-4">
                             <div class="form-check">
-                                <input class="form-check-input" type="radio" name="registration_type" id="reg_type_entity" value="entity" {{ old('registration_type', 'entity') === 'entity' ? 'checked' : '' }} required>
+                                <input class="form-check-input" type="radio" name="registration_type" id="reg_type_entity" value="entity" {{ old('registration_type', 'entity') === 'entity' ? 'checked' : '' }}>
                                 <label class="form-check-label" for="reg_type_entity">Entity</label>
                             </div>
                             <div class="form-check">
-                                <input class="form-check-input" type="radio" name="registration_type" id="reg_type_individual" value="individual" {{ old('registration_type') === 'individual' ? 'checked' : '' }} required>
+                                <input class="form-check-input" type="radio" name="registration_type" id="reg_type_individual" value="individual" {{ old('registration_type') === 'individual' ? 'checked' : '' }}>
                                 <label class="form-check-label" for="reg_type_individual">Individual</label>
                             </div>
                         </div>
                     </div>
 
                     <div class="col-md-6">
-                        <label for="fullname" class="form-label" id="fullnameLabel">Full Name (As per PAN) <span class="text-danger">*</span></label>
-                        <input type="text" class="form-control @error('fullname') is-invalid @enderror" id="fullname" name="fullname" value="{{ old('fullname') }}" required>
-                        @error('fullname')
-                            <div class="invalid-feedback">{{ $message }}</div>
-                        @enderror
+                        <label for="fullname" class="form-label" id="fullnameLabel">Full Name (As per PAN)</label>
+                        <input type="text" class="form-control" id="fullname" name="fullname" value="{{ old('fullname') }}">
                     </div>
 
                     <div class="col-md-6">
-                        <label for="dateofbirth" class="form-label" id="dateofbirthLabel">Date of Birth (As per PAN) <span class="text-danger">*</span></label>
-                        <input type="date" class="form-control @error('dateofbirth') is-invalid @enderror" id="dateofbirth" name="dateofbirth" value="{{ old('dateofbirth') }}" required>
-                        @error('dateofbirth')
-                            <div class="invalid-feedback">{{ $message }}</div>
-                        @enderror
+                        <label for="dateofbirth" class="form-label" id="dateofbirthLabel">Date of Birth (As per PAN)</label>
+                        <input type="date" class="form-control" id="dateofbirth" name="dateofbirth" value="{{ old('dateofbirth') }}">
                     </div>
 
                     <div class="col-md-6">
-                        <label for="pancardno" class="form-label">PAN Number <span class="text-danger">*</span></label>
+                        <label for="pancardno" class="form-label">PAN Number</label>
                         <div class="input-group">
-                            <input type="text" class="form-control @error('pancardno') is-invalid @enderror" id="pancardno" name="pancardno" value="{{ old('pancardno') }}" placeholder="ABCDE1234F" maxlength="10" required>
+                            <input type="text" class="form-control" id="pancardno" name="pancardno" value="{{ old('pancardno') }}" placeholder="ABCDE1234F" maxlength="10">
                             <button type="button" class="btn btn-outline-primary" id="verifyPanBtn" onclick="verifyPan()">Verify PAN</button>
                         </div>
                         <div id="panVerificationStatus" class="mt-2" style="display: none;"></div>
-                        @error('pancardno')
-                            <div class="invalid-feedback">{{ $message }}</div>
-                        @enderror
                     </div>
 
                     <div class="col-md-6">
-                        <label for="email" class="form-label">Email Address <span class="text-danger">*</span></label>
-                        <input type="email" class="form-control @error('email') is-invalid @enderror" id="email" name="email" value="{{ old('email') }}" required>
+                        <label for="email" class="form-label">Email Address</label>
+                        <input type="text" class="form-control" id="email" name="email" value="{{ old('email') }}">
                         <div id="emailOtpDisplay" class="mt-2">
                             <small class="text-muted"><strong>Email OTP (will be generated):</strong> <code id="emailOtpValue" class="text-primary">---</code></small>
                         </div>
-                        @error('email')
-                            <div class="invalid-feedback">{{ $message }}</div>
-                        @enderror
                     </div>
 
                     <div class="col-md-6">
-                        <label for="mobile" class="form-label">Mobile Number <span class="text-danger">*</span></label>
-                        <input type="tel" class="form-control @error('mobile') is-invalid @enderror" id="mobile" name="mobile" value="{{ old('mobile') }}" placeholder="10-digit mobile number" maxlength="10" required>
+                        <label for="mobile" class="form-label">Mobile Number</label>
+                        <input type="text" class="form-control" id="mobile" name="mobile" value="{{ old('mobile') }}" placeholder="10-digit mobile number" maxlength="10">
                         <div id="mobileOtpDisplay" class="mt-2">
                             <small class="text-muted"><strong>Mobile OTP (will be generated):</strong> <code id="mobileOtpValue" class="text-primary">---</code></small>
                         </div>
-                        @error('mobile')
-                            <div class="invalid-feedback">{{ $message }}</div>
-                        @enderror
                     </div>
 
                     <div class="col-md-12">
@@ -129,255 +120,280 @@
             </div>
         </div>
 
-        <!-- Application Section -->
+        <!-- Applications Section -->
         <div class="card border-0 shadow-sm mb-4" style="border-radius: 16px;">
-            <div class="card-header bg-success text-white" style="border-radius: 16px 16px 0 0;">
-                <h5 class="mb-0">IX Application Details</h5>
+            <div class="card-header bg-success text-white d-flex justify-content-between align-items-center" style="border-radius: 16px 16px 0 0;">
+                <h5 class="mb-0">IX Applications</h5>
+                <button type="button" class="btn btn-light btn-sm" onclick="addApplication()">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                        <path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4z"/>
+                    </svg>
+                    Add Application
+                </button>
             </div>
             <div class="card-body p-4">
-                <div class="row g-3">
-                    <!-- Member Type -->
-                    <div class="col-md-6">
-                        <label class="form-label">Member Type <span class="text-danger">*</span></label>
-                        <select name="member_type" id="memberType" class="form-select" required>
-                            <option value="">Select Member Type</option>
-                            <option value="isp" {{ old('member_type') === 'isp' ? 'selected' : '' }}>ISP</option>
-                            <option value="cdn" {{ old('member_type') === 'cdn' ? 'selected' : '' }}>CDN</option>
-                            <option value="vno" {{ old('member_type') === 'vno' ? 'selected' : '' }}>VNO</option>
-                            <option value="govt" {{ old('member_type') === 'govt' ? 'selected' : '' }}>Government Entity</option>
-                            <option value="others" {{ old('member_type') === 'others' ? 'selected' : '' }}>Others</option>
-                        </select>
-                        <input type="text" name="member_type_other" id="memberTypeOther" class="form-control mt-2 d-none" placeholder="Specify member type" value="{{ old('member_type_other') }}">
-                    </div>
-
-                    <!-- Location -->
-                    <div class="col-md-6">
-                        <label class="form-label">NIXI Location <span class="text-danger">*</span></label>
-                        <select name="location_id" id="locationSelect" class="form-select" required>
-                            <option value="">Select Location</option>
-                            @foreach($locations as $location)
-                                <option value="{{ $location->id }}" data-node-type="{{ $location->node_type }}" {{ old('location_id') == $location->id ? 'selected' : '' }}>
-                                    {{ $location->name }} ({{ ucfirst($location->node_type) }} - {{ $location->state }})
-                                </option>
-                            @endforeach
-                        </select>
-                    </div>
-
-                    <!-- Representative Details -->
-                    <div class="col-12">
-                        <h6 class="mb-3 text-primary">Authorized Representative Details</h6>
-                    </div>
-
-                    <div class="col-md-6">
-                        <label class="form-label">Representative Name <span class="text-danger">*</span></label>
-                        <input type="text" name="representative_name" class="form-control" value="{{ old('representative_name') }}" required>
-                    </div>
-
-                    <div class="col-md-6">
-                        <label class="form-label">Representative PAN <span class="text-danger">*</span></label>
-                        <input type="text" name="representative_pan" class="form-control" value="{{ old('representative_pan') }}" placeholder="ABCDE1234F" maxlength="10" required>
-                    </div>
-
-                    <div class="col-md-6">
-                        <label class="form-label">Representative Date of Birth <span class="text-danger">*</span></label>
-                        <input type="date" name="representative_dob" class="form-control" value="{{ old('representative_dob') }}" required>
-                    </div>
-
-                    <div class="col-md-6">
-                        <label class="form-label">Representative Email <span class="text-danger">*</span></label>
-                        <input type="email" name="representative_email" class="form-control" value="{{ old('representative_email') }}" required>
-                    </div>
-
-                    <div class="col-md-6">
-                        <label class="form-label">Representative Mobile <span class="text-danger">*</span></label>
-                        <input type="tel" name="representative_mobile" class="form-control" value="{{ old('representative_mobile') }}" placeholder="10-digit mobile number" maxlength="10" required>
-                    </div>
-
-                    <div class="col-md-6">
-                        <label class="form-label">GSTIN <span class="text-danger">*</span></label>
-                        <input type="text" name="gstin" id="gstin" class="form-control" value="{{ old('gstin') }}" placeholder="15-character GSTIN" maxlength="15" required>
-                        <small class="text-muted">GSTIN will be auto-verified for backend entry</small>
-                    </div>
-
-                    <!-- Port & Billing -->
-                    <div class="col-12">
-                        <h6 class="mb-3 text-primary mt-3">Port & Billing Details</h6>
-                    </div>
-
-                    <div class="col-md-6">
-                        <label class="form-label">Port Capacity <span class="text-danger">*</span></label>
-                        <select name="port_capacity" id="portCapacitySelect" class="form-select" required>
-                            <option value="">Select capacity</option>
-                            @foreach($portPricings as $nodeType => $entries)
-                                <optgroup label="{{ ucfirst($nodeType) }} nodes">
-                                    @foreach($entries as $pricing)
-                                        <option value="{{ $pricing->port_capacity }}" data-node-type="{{ $nodeType }}" data-arc="{{ $pricing->price_arc }}" data-mrc="{{ $pricing->price_mrc }}" data-quarterly="{{ $pricing->price_quarterly }}" {{ old('port_capacity') == $pricing->port_capacity ? 'selected' : '' }}>
-                                            {{ $pricing->port_capacity }}
-                                        </option>
-                                    @endforeach
-                                </optgroup>
-                            @endforeach
-                        </select>
-                    </div>
-
-                    <div class="col-md-6">
-                        <label class="form-label">Billing Plan <span class="text-danger">*</span></label>
-                        <div class="d-flex gap-3">
-                            <div class="form-check">
-                                <input class="form-check-input" type="radio" name="billing_plan" id="planArc" value="arc" {{ old('billing_plan') === 'arc' ? 'checked' : '' }} required>
-                                <label class="form-check-label" for="planArc">Annual (ARC)</label>
-                            </div>
-                            <div class="form-check">
-                                <input class="form-check-input" type="radio" name="billing_plan" id="planMrc" value="mrc" {{ old('billing_plan') === 'mrc' ? 'checked' : '' }} required>
-                                <label class="form-check-label" for="planMrc">Monthly (MRC)</label>
-                            </div>
-                            <div class="form-check">
-                                <input class="form-check-input" type="radio" name="billing_plan" id="planQuarterly" value="quarterly" {{ old('billing_plan') === 'quarterly' ? 'checked' : '' }} required>
-                                <label class="form-check-label" for="planQuarterly">Quarterly</label>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- IP Prefix -->
-                    <div class="col-12">
-                        <h6 class="mb-3 text-primary mt-3">IP Prefix Information</h6>
-                    </div>
-
-                    <div class="col-md-4">
-                        <label class="form-label">Number of IP Prefixes <span class="text-danger">*</span></label>
-                        <input type="number" min="1" max="500" name="ip_prefix_count" class="form-control" value="{{ old('ip_prefix_count') }}" required>
-                    </div>
-
-                    <div class="col-md-4">
-                        <label class="form-label">IP Prefix Allocation Source <span class="text-danger">*</span></label>
-                        <select name="ip_prefix_source" id="ipPrefixSource" class="form-select" required>
-                            <option value="">Select Source</option>
-                            <option value="irinn" {{ old('ip_prefix_source') === 'irinn' ? 'selected' : '' }}>IRINN</option>
-                            <option value="apnic" {{ old('ip_prefix_source') === 'apnic' ? 'selected' : '' }}>APNIC</option>
-                            <option value="others" {{ old('ip_prefix_source') === 'others' ? 'selected' : '' }}>Others</option>
-                        </select>
-                    </div>
-
-                    <div class="col-md-4 d-none" id="ipPrefixProviderWrapper">
-                        <label class="form-label">Provider Name</label>
-                        <input type="text" name="ip_prefix_provider" class="form-control" placeholder="Enter provider" value="{{ old('ip_prefix_provider') }}">
-                    </div>
-
-                    <!-- Peering Connectivity -->
-                    <div class="col-12">
-                        <h6 class="mb-3 text-primary mt-3">Peering Connectivity</h6>
-                    </div>
-
-                    <div class="col-md-6">
-                        <label class="form-label">Member's Pre-NIXI peering connectivity <span class="text-danger">*</span></label>
-                        <div class="d-flex gap-3">
-                            <div class="form-check">
-                                <input class="form-check-input" type="radio" name="pre_peering_connectivity" id="prePeeringNone" value="none" {{ old('pre_peering_connectivity') === 'none' ? 'checked' : '' }} required>
-                                <label class="form-check-label" for="prePeeringNone">None</label>
-                            </div>
-                            <div class="form-check">
-                                <input class="form-check-input" type="radio" name="pre_peering_connectivity" id="prePeeringSingle" value="single" {{ old('pre_peering_connectivity') === 'single' ? 'checked' : '' }} required>
-                                <label class="form-check-label" for="prePeeringSingle">Single</label>
-                            </div>
-                            <div class="form-check">
-                                <input class="form-check-input" type="radio" name="pre_peering_connectivity" id="prePeeringMultiple" value="multiple" {{ old('pre_peering_connectivity') === 'multiple' ? 'checked' : '' }} required>
-                                <label class="form-check-label" for="prePeeringMultiple">Multiple</label>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="col-md-6">
-                        <label class="form-label">AS Number used for peering in the NIXI</label>
-                        <input type="text" name="asn_number" class="form-control" placeholder="e.g., AS131269" value="{{ old('asn_number') }}">
-                    </div>
-
-                    <!-- Router Details -->
-                    <div class="col-12">
-                        <h6 class="mb-3 text-primary mt-3">Dedicated Router Details (Optional)</h6>
-                    </div>
-
-                    <div class="col-md-4">
-                        <label class="form-label">Height in U</label>
-                        <input type="number" min="1" max="50" name="router_height_u" class="form-control" value="{{ old('router_height_u') }}">
-                    </div>
-
-                    <div class="col-md-4">
-                        <label class="form-label">Make & Model</label>
-                        <input type="text" name="router_make_model" class="form-control" value="{{ old('router_make_model') }}">
-                    </div>
-
-                    <div class="col-md-4">
-                        <label class="form-label">Serial Number</label>
-                        <input type="text" name="router_serial_number" class="form-control" value="{{ old('router_serial_number') }}">
-                    </div>
-
-                    <!-- Documents -->
-                    <div class="col-12">
-                        <h6 class="mb-3 text-primary mt-3">Documents (Optional)</h6>
-                        <p class="text-muted small">Upload clear PDF copies. Maximum size per document is 10 MB. Documents can be uploaded later through the application update module.</p>
-                    </div>
-
-                    <div class="col-md-6">
-                        <label class="form-label">Signed Agreement with NIXI</label>
-                        <input type="file" name="agreement_file" class="form-control" accept="application/pdf">
-                    </div>
-
-                    <div class="col-md-6" id="ispLicenseContainer" style="display: none;">
-                        <label class="form-label">ISP License</label>
-                        <input type="file" name="license_isp_file" id="licenseIspFile" class="form-control" accept="application/pdf">
-                    </div>
-
-                    <div class="col-md-6" id="vnoLicenseContainer" style="display: none;">
-                        <label class="form-label">VNO License</label>
-                        <input type="file" name="license_vno_file" id="licenseVnoFile" class="form-control" accept="application/pdf">
-                    </div>
-
-                    <div class="col-md-6" id="cdnDeclarationContainer" style="display: none;">
-                        <label class="form-label">CDN Declaration</label>
-                        <input type="file" name="cdn_declaration_file" id="cdnDeclarationFile" class="form-control" accept="application/pdf">
-                    </div>
-
-                    <div class="col-md-6" id="generalDeclarationContainer" style="display: none;">
-                        <label class="form-label">General Declaration</label>
-                        <input type="file" name="general_declaration_file" id="generalDeclarationFile" class="form-control" accept="application/pdf">
-                    </div>
-
-                    <div class="col-md-6">
-                        <label class="form-label">Whois Details</label>
-                        <input type="file" name="whois_details_file" class="form-control" accept="application/pdf">
-                    </div>
-
-                    <div class="col-md-6">
-                        <label class="form-label">PAN Document</label>
-                        <input type="file" name="pan_document_file" class="form-control" accept="application/pdf">
-                    </div>
-
-                    <div class="col-md-6">
-                        <label class="form-label">GSTIN Document</label>
-                        <input type="file" name="gstin_document_file" class="form-control" accept="application/pdf">
-                    </div>
-
-                    <div class="col-md-6">
-                        <label class="form-label">MSME (Udyog/Udyam) Certificate</label>
-                        <input type="file" name="msme_document_file" class="form-control" accept="application/pdf">
-                    </div>
-
-                    <div class="col-md-6">
-                        <label class="form-label">Certificate of Incorporation</label>
-                        <input type="file" name="incorporation_document_file" class="form-control" accept="application/pdf">
-                    </div>
-
-                    <div class="col-md-6">
-                        <label class="form-label">Authorized Representative Document</label>
-                        <input type="file" name="authorized_rep_document_file" class="form-control" accept="application/pdf">
-                    </div>
+                <div id="applicationsContainer">
+                    <!-- Application 1 will be added here by JavaScript -->
                 </div>
             </div>
         </div>
 
+        <!-- Application Template (Hidden) -->
+        <template id="applicationTemplate">
+            <div class="application-item card border mb-3" data-app-index="0">
+                <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0">Application <span class="app-number">1</span></h6>
+                    <button type="button" class="btn btn-sm btn-danger" onclick="removeApplication(this)">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16">
+                            <path d="M2.146 2.854a.5.5 0 1 1 .708-.708L8 7.293l5.146-5.147a.5.5 0 0 1 .708.708L8.707 8l5.147 5.146a.5.5 0 0 1-.708.708L8 8.707l-5.146 5.147a.5.5 0 0 1-.708-.708L7.293 8 2.146 2.854Z"/>
+                        </svg>
+                        Remove
+                    </button>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <!-- Member Type -->
+                        <div class="col-md-6">
+                            <label class="form-label">Member Type</label>
+                            <select name="applications[0][member_type]" class="form-select member-type-select">
+                                <option value="">Select Member Type</option>
+                                <option value="isp">ISP</option>
+                                <option value="cdn">CDN</option>
+                                <option value="vno">VNO</option>
+                                <option value="govt">Government Entity</option>
+                                <option value="others">Others</option>
+                            </select>
+                            <input type="text" name="applications[0][member_type_other]" class="form-control mt-2 d-none member-type-other" placeholder="Specify member type">
+                        </div>
+
+                        <!-- Location -->
+                        <div class="col-md-6">
+                            <label class="form-label">NIXI Location</label>
+                            <select name="applications[0][location_id]" class="form-select location-select">
+                                <option value="">Select Location</option>
+                                @foreach($locations as $location)
+                                    <option value="{{ $location->id }}" data-node-type="{{ $location->node_type }}">
+                                        {{ $location->name }} ({{ ucfirst($location->node_type) }} - {{ $location->state }})
+                                    </option>
+                                @endforeach
+                            </select>
+                        </div>
+
+                        <!-- Representative Details -->
+                        <div class="col-12">
+                            <h6 class="mb-3 text-primary mt-3">Authorized Representative Details</h6>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label">Representative Name</label>
+                            <input type="text" name="applications[0][representative_name]" class="form-control">
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label">Representative PAN</label>
+                            <input type="text" name="applications[0][representative_pan]" class="form-control" placeholder="ABCDE1234F" maxlength="10">
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label">Representative Date of Birth</label>
+                            <input type="date" name="applications[0][representative_dob]" class="form-control">
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label">Representative Email</label>
+                            <input type="text" name="applications[0][representative_email]" class="form-control">
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label">Representative Mobile</label>
+                            <input type="text" name="applications[0][representative_mobile]" class="form-control" placeholder="10-digit mobile number" maxlength="10">
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label">GSTIN</label>
+                            <input type="text" name="applications[0][gstin]" class="form-control" placeholder="15-character GSTIN" maxlength="15">
+                            <small class="text-muted">GSTIN will be auto-verified for backend entry</small>
+                        </div>
+
+                        <!-- Port & Billing -->
+                        <div class="col-12">
+                            <h6 class="mb-3 text-primary mt-3">Port & Billing Details</h6>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label">Port Capacity</label>
+                            <select name="applications[0][port_capacity]" class="form-select port-capacity-select">
+                                <option value="">Select capacity</option>
+                                @foreach($portPricings as $nodeType => $entries)
+                                    <optgroup label="{{ ucfirst($nodeType) }} nodes">
+                                        @foreach($entries as $pricing)
+                                            <option value="{{ $pricing->port_capacity }}" data-node-type="{{ $nodeType }}" data-arc="{{ $pricing->price_arc }}" data-mrc="{{ $pricing->price_mrc }}" data-quarterly="{{ $pricing->price_quarterly }}">
+                                                {{ $pricing->port_capacity }}
+                                            </option>
+                                        @endforeach
+                                    </optgroup>
+                                @endforeach
+                            </select>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label">Billing Plan</label>
+                            <div class="d-flex gap-3">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="applications[0][billing_plan]" value="arc">
+                                    <label class="form-check-label">Annual (ARC)</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="applications[0][billing_plan]" value="mrc">
+                                    <label class="form-check-label">Monthly (MRC)</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="applications[0][billing_plan]" value="quarterly">
+                                    <label class="form-check-label">Quarterly</label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- IP Prefix -->
+                        <div class="col-12">
+                            <h6 class="mb-3 text-primary mt-3">IP Prefix Information</h6>
+                        </div>
+
+                        <div class="col-md-4">
+                            <label class="form-label">Number of IP Prefixes</label>
+                            <input type="number" name="applications[0][ip_prefix_count]" class="form-control" min="1" max="500">
+                        </div>
+
+                        <div class="col-md-4">
+                            <label class="form-label">IP Prefix Allocation Source</label>
+                            <select name="applications[0][ip_prefix_source]" class="form-select ip-prefix-source-select">
+                                <option value="">Select Source</option>
+                                <option value="irinn">IRINN</option>
+                                <option value="apnic">APNIC</option>
+                                <option value="others">Others</option>
+                            </select>
+                        </div>
+
+                        <div class="col-md-4 d-none ip-prefix-provider-wrapper">
+                            <label class="form-label">Provider Name</label>
+                            <input type="text" name="applications[0][ip_prefix_provider]" class="form-control" placeholder="Enter provider">
+                        </div>
+
+                        <!-- Peering Connectivity -->
+                        <div class="col-12">
+                            <h6 class="mb-3 text-primary mt-3">Peering Connectivity</h6>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label">Member's Pre-NIXI peering connectivity</label>
+                            <div class="d-flex gap-3">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="applications[0][pre_peering_connectivity]" value="none">
+                                    <label class="form-check-label">None</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="applications[0][pre_peering_connectivity]" value="single">
+                                    <label class="form-check-label">Single</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="applications[0][pre_peering_connectivity]" value="multiple">
+                                    <label class="form-check-label">Multiple</label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label">AS Number used for peering in the NIXI</label>
+                            <input type="text" name="applications[0][asn_number]" class="form-control" placeholder="e.g., AS131269">
+                        </div>
+
+                        <!-- Router Details -->
+                        <div class="col-12">
+                            <h6 class="mb-3 text-primary mt-3">Dedicated Router Details (Optional)</h6>
+                        </div>
+
+                        <div class="col-md-4">
+                            <label class="form-label">Height in U</label>
+                            <input type="number" name="applications[0][router_height_u]" class="form-control" min="1" max="50">
+                        </div>
+
+                        <div class="col-md-4">
+                            <label class="form-label">Make & Model</label>
+                            <input type="text" name="applications[0][router_make_model]" class="form-control">
+                        </div>
+
+                        <div class="col-md-4">
+                            <label class="form-label">Serial Number</label>
+                            <input type="text" name="applications[0][router_serial_number]" class="form-control">
+                        </div>
+
+                        <!-- Documents -->
+                        <div class="col-12">
+                            <h6 class="mb-3 text-primary mt-3">Documents (Optional)</h6>
+                            <p class="text-muted small">Upload clear PDF copies. Maximum size per document is 10 MB. Documents can be uploaded later through the application update module.</p>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label">Signed Agreement with NIXI</label>
+                            <input type="file" name="applications[0][agreement_file]" class="form-control" accept="application/pdf">
+                        </div>
+
+                        <div class="col-md-6 isp-license-container" style="display: none;">
+                            <label class="form-label">ISP License</label>
+                            <input type="file" name="applications[0][license_isp_file]" class="form-control" accept="application/pdf">
+                        </div>
+
+                        <div class="col-md-6 vno-license-container" style="display: none;">
+                            <label class="form-label">VNO License</label>
+                            <input type="file" name="applications[0][license_vno_file]" class="form-control" accept="application/pdf">
+                        </div>
+
+                        <div class="col-md-6 cdn-declaration-container" style="display: none;">
+                            <label class="form-label">CDN Declaration</label>
+                            <input type="file" name="applications[0][cdn_declaration_file]" class="form-control" accept="application/pdf">
+                        </div>
+
+                        <div class="col-md-6 general-declaration-container" style="display: none;">
+                            <label class="form-label">General Declaration</label>
+                            <input type="file" name="applications[0][general_declaration_file]" class="form-control" accept="application/pdf">
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label">Whois Details</label>
+                            <input type="file" name="applications[0][whois_details_file]" class="form-control" accept="application/pdf">
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label">PAN Document</label>
+                            <input type="file" name="applications[0][pan_document_file]" class="form-control" accept="application/pdf">
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label">GSTIN Document</label>
+                            <input type="file" name="applications[0][gstin_document_file]" class="form-control" accept="application/pdf">
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label">MSME (Udyog/Udyam) Certificate</label>
+                            <input type="file" name="applications[0][msme_document_file]" class="form-control" accept="application/pdf">
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label">Certificate of Incorporation</label>
+                            <input type="file" name="applications[0][incorporation_document_file]" class="form-control" accept="application/pdf">
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label">Authorized Representative Document</label>
+                            <input type="file" name="applications[0][authorized_rep_document_file]" class="form-control" accept="application/pdf">
+                        </div>
+                    </div>
+                </div>
+            </template>
+
         <div class="d-flex justify-content-end gap-2">
             <a href="{{ route('admin.dashboard') }}" class="btn btn-secondary">Cancel</a>
-            <button type="submit" class="btn btn-primary">Register User & Create Application</button>
+            <button type="submit" class="btn btn-primary">Register User & Create Applications</button>
         </div>
     </form>
 </div>
@@ -448,24 +464,18 @@
     document.getElementById('mobileOtpInput').value = mobileOtp;
     document.getElementById('generatedPasswordInput').value = generatedPassword;
 
-    // PAN Verification
+    // PAN Verification (optional - no validation)
     async function verifyPan() {
         const panNo = document.getElementById('pancardno').value.trim().toUpperCase();
         const fullName = document.getElementById('fullname').value.trim();
         const dob = document.getElementById('dateofbirth').value;
 
-        if (!panNo || !/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(panNo)) {
-            alert('Please enter a valid PAN number');
-            return;
-        }
-
-        if (!fullName) {
-            alert('Please enter full name');
-            return;
-        }
-
-        if (!dob) {
-            alert('Please enter date of birth');
+        // All fields are optional - only verify if all are provided
+        if (!panNo || !fullName || !dob) {
+            const statusDiv = document.getElementById('panVerificationStatus');
+            statusDiv.style.display = 'block';
+            statusDiv.className = 'alert alert-info';
+            statusDiv.innerHTML = '<i class="bi bi-info-circle"></i> PAN verification skipped (fields optional).';
             return;
         }
 
@@ -510,51 +520,132 @@
         }
     }
 
-    // Member Type change handler
-    document.getElementById('memberType').addEventListener('change', function() {
-        const memberType = this.value;
-        const ispContainer = document.getElementById('ispLicenseContainer');
-        const vnoContainer = document.getElementById('vnoLicenseContainer');
-        const cdnContainer = document.getElementById('cdnDeclarationContainer');
-        const generalContainer = document.getElementById('generalDeclarationContainer');
-        const memberTypeOther = document.getElementById('memberTypeOther');
+    // Application counter
+    let applicationCounter = 0;
 
-        // Hide all first
-        ispContainer.style.display = 'none';
-        vnoContainer.style.display = 'none';
-        cdnContainer.style.display = 'none';
-        generalContainer.style.display = 'none';
-        memberTypeOther.classList.add('d-none');
+    // Add new application
+    function addApplication() {
+        const template = document.getElementById('applicationTemplate');
+        const container = document.getElementById('applicationsContainer');
+        const clone = template.content.cloneNode(true);
+        
+        applicationCounter++;
+        const appIndex = applicationCounter;
+        
+        // Update all field names with new index
+        clone.querySelectorAll('[name]').forEach(field => {
+            const name = field.getAttribute('name');
+            if (name && name.startsWith('applications[0]')) {
+                field.setAttribute('name', name.replace('applications[0]', `applications[${appIndex}]`));
+            }
+        });
+        
+        // Update IDs to be unique (for radio buttons and other elements)
+        clone.querySelectorAll('[id]').forEach(el => {
+            if (el.id) {
+                el.id = el.id + '_' + appIndex;
+            }
+        });
+        
+        // Update 'for' attributes in labels
+        clone.querySelectorAll('label[for]').forEach(label => {
+            const forAttr = label.getAttribute('for');
+            if (forAttr) {
+                label.setAttribute('for', forAttr + '_' + appIndex);
+            }
+        });
+        
+        // Update data attribute
+        clone.querySelector('.application-item').setAttribute('data-app-index', appIndex);
+        clone.querySelector('.app-number').textContent = appIndex + 1;
+        
+        // Update IDs to be unique
+        clone.querySelectorAll('[id]').forEach(el => {
+            if (el.id) {
+                el.id = el.id + '_' + appIndex;
+            }
+        });
+        
+        container.appendChild(clone);
+        
+        // Initialize handlers for new application
+        initializeApplicationHandlers(container.lastElementChild, appIndex);
+    }
 
-        // Show relevant fields
-        if (memberType === 'isp') {
-            ispContainer.style.display = 'block';
-        } else if (memberType === 'vno') {
-            vnoContainer.style.display = 'block';
-        } else if (memberType === 'cdn') {
-            cdnContainer.style.display = 'block';
-        } else if (memberType !== 'isp' && memberType !== 'vno' && memberType !== 'cdn') {
-            generalContainer.style.display = 'block';
-        }
-
-        if (memberType === 'others') {
-            memberTypeOther.classList.remove('d-none');
-            memberTypeOther.required = true;
+    // Remove application
+    function removeApplication(btn) {
+        const appItem = btn.closest('.application-item');
+        if (document.querySelectorAll('.application-item').length > 1) {
+            appItem.remove();
+            updateApplicationNumbers();
         } else {
-            memberTypeOther.required = false;
+            alert('At least one application is required.');
         }
-    });
+    }
 
-    // IP Prefix Source change handler
-    document.getElementById('ipPrefixSource').addEventListener('change', function() {
-        const providerWrapper = document.getElementById('ipPrefixProviderWrapper');
-        if (this.value === 'others') {
-            providerWrapper.classList.remove('d-none');
-            providerWrapper.querySelector('input').required = true;
-        } else {
-            providerWrapper.classList.add('d-none');
-            providerWrapper.querySelector('input').required = false;
+    // Update application numbers
+    function updateApplicationNumbers() {
+        document.querySelectorAll('.application-item').forEach((item, index) => {
+            item.querySelector('.app-number').textContent = index + 1;
+        });
+    }
+
+    // Initialize handlers for an application
+    function initializeApplicationHandlers(appElement, appIndex) {
+        // Member Type handler
+        const memberTypeSelect = appElement.querySelector('.member-type-select');
+        if (memberTypeSelect) {
+            memberTypeSelect.addEventListener('change', function() {
+                const memberType = this.value;
+                const appItem = this.closest('.application-item');
+                const ispContainer = appItem.querySelector('.isp-license-container');
+                const vnoContainer = appItem.querySelector('.vno-license-container');
+                const cdnContainer = appItem.querySelector('.cdn-declaration-container');
+                const generalContainer = appItem.querySelector('.general-declaration-container');
+                const memberTypeOther = appItem.querySelector('.member-type-other');
+
+                // Hide all first
+                if (ispContainer) ispContainer.style.display = 'none';
+                if (vnoContainer) vnoContainer.style.display = 'none';
+                if (cdnContainer) cdnContainer.style.display = 'none';
+                if (generalContainer) generalContainer.style.display = 'none';
+                if (memberTypeOther) memberTypeOther.classList.add('d-none');
+
+                // Show relevant fields
+                if (memberType === 'isp' && ispContainer) {
+                    ispContainer.style.display = 'block';
+                } else if (memberType === 'vno' && vnoContainer) {
+                    vnoContainer.style.display = 'block';
+                } else if (memberType === 'cdn' && cdnContainer) {
+                    cdnContainer.style.display = 'block';
+                } else if (memberType !== 'isp' && memberType !== 'vno' && memberType !== 'cdn' && generalContainer) {
+                    generalContainer.style.display = 'block';
+                }
+
+                if (memberType === 'others' && memberTypeOther) {
+                    memberTypeOther.classList.remove('d-none');
+                }
+            });
         }
+
+        // IP Prefix Source handler
+        const ipPrefixSource = appElement.querySelector('.ip-prefix-source-select');
+        if (ipPrefixSource) {
+            ipPrefixSource.addEventListener('change', function() {
+                const appItem = this.closest('.application-item');
+                const providerWrapper = appItem.querySelector('.ip-prefix-provider-wrapper');
+                if (this.value === 'others' && providerWrapper) {
+                    providerWrapper.classList.remove('d-none');
+                } else if (providerWrapper) {
+                    providerWrapper.classList.add('d-none');
+                }
+            });
+        }
+    }
+
+    // Initialize first application on page load
+    document.addEventListener('DOMContentLoaded', function() {
+        addApplication();
     });
 
     // Registration type change handler

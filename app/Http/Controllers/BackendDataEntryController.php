@@ -65,15 +65,22 @@ class BackendDataEntryController extends Controller
     public function verifyPan(Request $request)
     {
         try {
-            $request->validate([
-                'pancardno' => 'required|string|size:10|regex:/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/',
-                'fullname' => 'required|string|max:255',
-                'dateofbirth' => 'required|date|before:today',
-            ]);
-
-            $panNo = strtoupper(trim(preg_replace('/[^A-Z0-9]/', '', $request->input('pancardno'))));
-            $fullName = trim(strip_tags($request->input('fullname')));
+            // No validation - all fields optional
+            $panNo = $request->input('pancardno') ? strtoupper(trim(preg_replace('/[^A-Z0-9]/', '', $request->input('pancardno')))) : null;
+            $fullName = $request->input('fullname') ? trim(strip_tags($request->input('fullname'))) : null;
             $dateOfBirth = $request->input('dateofbirth');
+
+            // If PAN is not provided, return success (no verification needed)
+            if (!$panNo || !$fullName || !$dateOfBirth) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'PAN verification skipped (fields optional).',
+                    'data' => [
+                        'is_verified' => false,
+                        'pan_status' => 'skipped',
+                    ],
+                ]);
+            }
 
             $idfyService = new IdfyPanService;
             $result = $idfyService->verifyPan($panNo, $fullName, $dateOfBirth);
@@ -123,64 +130,31 @@ class BackendDataEntryController extends Controller
     }
 
     /**
-     * Store registration and application in backend data entry.
+     * Store registration and applications in backend data entry.
      */
     public function store(Request $request)
     {
         try {
-            // Validate registration data
-            $registrationRules = [
-                'registration_type' => 'required|string|in:individual,entity',
-                'pancardno' => 'required|string|size:10|regex:/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/|unique:registrations,pancardno',
-                'fullname' => 'required|string|max:255|min:2|regex:/^[a-zA-Z\s\'-]+$/',
-                'email' => 'required|email:rfc,dns|max:255|unique:registrations,email',
-                'mobile' => 'required|string|size:10|regex:/^[0-9]{10}$/|unique:registrations,mobile',
-                'dateofbirth' => 'required|date|before:today',
-            ];
+            // No validation - allow all fields to be optional
+            // Get registration data (all optional)
+            $registrationType = $request->input('registration_type', 'entity');
+            $panNo = $request->input('pancardno') ? strtoupper(trim(preg_replace('/[^A-Z0-9]/', '', $request->input('pancardno')))) : null;
+            $fullName = $request->input('fullname') ? trim(strip_tags($request->input('fullname'))) : null;
+            $email = $request->input('email') ? strtolower(trim($request->input('email'))) : null;
+            $mobile = $request->input('mobile') ? preg_replace('/[^0-9]/', '', $request->input('mobile')) : null;
+            $dateOfBirth = $request->input('dateofbirth');
 
-            // Validate application data (IX application)
-            $applicationRules = [
-                'member_type' => 'required|string|in:isp,cdn,vno,govt,others',
-                'member_type_other' => 'nullable|required_if:member_type,others|string|max:255',
-                'representative_name' => 'required|string|max:255',
-                'representative_pan' => 'required|string|size:10|regex:/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/',
-                'representative_dob' => 'required|date|before:today',
-                'representative_email' => 'required|email|max:255',
-                'representative_mobile' => 'required|string|size:10|regex:/^[0-9]{10}$/',
-                'gstin' => 'required|string|size:15|regex:/^[0-9A-Z]{15}$/',
-                'location_id' => 'required|integer|exists:ix_locations,id',
-                'port_capacity' => 'required|string|max:50',
-                'billing_plan' => 'required|string|in:arc,mrc,quarterly',
-                'ip_prefix_count' => 'required|integer|min:1|max:500',
-                'ip_prefix_source' => 'required|string|in:irinn,apnic,others',
-                'ip_prefix_provider' => 'nullable|required_if:ip_prefix_source,others|string|max:255',
-                'pre_peering_connectivity' => 'required|string|in:none,single,multiple',
-                'asn_number' => 'nullable|string|max:50',
-                'router_height_u' => 'nullable|integer|min:1|max:50',
-                'router_make_model' => 'nullable|string|max:255',
-                'router_serial_number' => 'nullable|string|max:255',
-                // Document files (all optional for backend entry)
-                'agreement_file' => 'nullable|file|mimes:pdf|max:10240',
-                'license_isp_file' => 'nullable|file|mimes:pdf|max:10240',
-                'license_vno_file' => 'nullable|file|mimes:pdf|max:10240',
-                'cdn_declaration_file' => 'nullable|file|mimes:pdf|max:10240',
-                'general_declaration_file' => 'nullable|file|mimes:pdf|max:10240',
-                'whois_details_file' => 'nullable|file|mimes:pdf|max:10240',
-                'pan_document_file' => 'nullable|file|mimes:pdf|max:10240',
-                'gstin_document_file' => 'nullable|file|mimes:pdf|max:10240',
-                'msme_document_file' => 'nullable|file|mimes:pdf|max:10240',
-                'incorporation_document_file' => 'nullable|file|mimes:pdf|max:10240',
-                'authorized_rep_document_file' => 'nullable|file|mimes:pdf|max:10240',
-            ];
-
-            $validated = $request->validate(array_merge($registrationRules, $applicationRules));
-
-            // Verify PAN was verified via API
-            $panVerificationData = session('pan_verification_data');
-            if (! $panVerificationData || ! ($panVerificationData['is_verified'] ?? false)) {
-                return back()->with('error', 'Please verify PAN Card before submitting.')
+            // Get applications array
+            $applications = $request->input('applications', []);
+            
+            if (empty($applications)) {
+                return back()->with('error', 'At least one application is required.')
                     ->withInput();
             }
+
+            // PAN verification is optional for backend entry
+            $panVerificationData = session('pan_verification_data');
+            $panVerified = $panVerificationData && ($panVerificationData['is_verified'] ?? false);
 
             // Generate OTPs (for display only, not sent)
             // Use provided OTPs from request if available, otherwise generate new ones
@@ -202,172 +176,55 @@ class BackendDataEntryController extends Controller
             DB::beginTransaction();
 
             try {
-                // Create registration
+                // Create registration (all fields optional)
                 $registration = Registration::create([
                     'registrationid' => $registrationId,
-                    'pancardno' => $panNo,
-                    'registration_type' => $validated['registration_type'],
-                    'pan_verified' => true,
-                    'fullname' => $fullName,
-                    'email' => $email,
+                    'pancardno' => $panNo ?? '',
+                    'registration_type' => $registrationType,
+                    'pan_verified' => $panVerified,
+                    'fullname' => $fullName ?? '',
+                    'email' => $email ?? '',
                     'email_otp' => $emailOtp,
                     'email_verified' => true, // Auto-verified in backend entry
-                    'mobile' => $mobile,
+                    'mobile' => $mobile ?? '',
                     'mobile_otp' => $mobileOtp,
                     'mobile_verified' => true, // Auto-verified in backend entry
                     'password' => Hash::make($generatedPassword),
-                    'dateofbirth' => $validated['dateofbirth'],
+                    'dateofbirth' => $dateOfBirth,
                     'registrationdate' => now('Asia/Kolkata')->toDateString(),
                     'registrationtime' => now('Asia/Kolkata')->toTimeString(),
                     'status' => 'approved',
                 ]);
 
-                // Create PAN verification record
-                PanVerification::create([
-                    'user_id' => $registration->id,
-                    'pan_number' => $panNo,
-                    'request_id' => $panVerificationData['request_id'],
-                    'status' => 'completed',
-                    'is_verified' => true,
-                    'verification_data' => $panVerificationData['full_result'] ?? null,
-                    'full_name' => $fullName,
-                    'date_of_birth' => $validated['dateofbirth'],
-                    'pan_status' => $panVerificationData['pan_status'] ?? null,
-                    'name_match' => $panVerificationData['name_match'] ?? false,
-                    'dob_match' => $panVerificationData['dob_match'] ?? false,
-                ]);
-
-                // Handle GST verification - auto-verify for backend entry (do this early)
-                $gstin = strtoupper(preg_replace('/[^A-Z0-9]/', '', $validated['gstin']));
-                $gstVerification = GstVerification::where('user_id', $registration->id)
-                    ->where('gstin', $gstin)
-                    ->latest()
-                    ->first();
-
-                if (! $gstVerification) {
-                    // Generate a unique request_id for backend entry
-                    $backendRequestId = 'BACKEND-'.now()->format('YmdHis').'-'.strtoupper(Str::random(8));
-                    
-                    // Ensure uniqueness
-                    while (GstVerification::where('request_id', $backendRequestId)->exists()) {
-                        $backendRequestId = 'BACKEND-'.now()->format('YmdHis').'-'.strtoupper(Str::random(8));
-                    }
-                    
-                    // Create GST verification (auto-verified in backend)
-                    $gstVerification = GstVerification::create([
+                // Create PAN verification record if PAN was verified
+                if ($panVerified && $panNo && $panVerificationData) {
+                    PanVerification::create([
                         'user_id' => $registration->id,
-                        'gstin' => $gstin,
-                        'request_id' => $backendRequestId,
-                        'is_verified' => true,
+                        'pan_number' => $panNo,
+                        'request_id' => $panVerificationData['request_id'] ?? null,
                         'status' => 'completed',
-                        'verification_data' => ['backend_entry' => true],
-                    ]);
-                } else {
-                    // Update existing to verified
-                    $gstVerification->update([
                         'is_verified' => true,
-                        'status' => 'completed',
+                        'verification_data' => $panVerificationData['full_result'] ?? null,
+                        'full_name' => $fullName,
+                        'date_of_birth' => $dateOfBirth,
+                        'pan_status' => $panVerificationData['pan_status'] ?? null,
+                        'name_match' => $panVerificationData['name_match'] ?? false,
+                        'dob_match' => $panVerificationData['dob_match'] ?? false,
                     ]);
                 }
-
-                // Get location and pricing
-                $location = IxLocation::active()->findOrFail($validated['location_id']);
-                $pricing = IxPortPricing::active()
-                    ->where('node_type', $location->node_type)
-                    ->where('port_capacity', $validated['port_capacity'])
-                    ->firstOrFail();
-
-                $payableAmount = $pricing->getAmountForPlan($validated['billing_plan']);
-
-                // Handle file uploads
-                $documentFields = [
-                    'agreement_file',
-                    'license_isp_file',
-                    'license_vno_file',
-                    'cdn_declaration_file',
-                    'general_declaration_file',
-                    'whois_details_file',
-                    'pan_document_file',
-                    'gstin_document_file',
-                    'msme_document_file',
-                    'incorporation_document_file',
-                    'authorized_rep_document_file',
-                ];
-
-                $storedDocuments = [];
-                $storagePrefix = 'applications/'.$registration->id.'/ix/'.now()->format('YmdHis');
-
-                foreach ($documentFields as $field) {
-                    if ($request->hasFile($field)) {
-                        $file = $request->file($field);
-                        $originalName = $file->getClientOriginalName();
-                        $extension = $file->getClientOriginalExtension();
-                        $fileName = 'IX-'.pathinfo($originalName, PATHINFO_FILENAME).'.'.$extension;
-                        $storedDocuments[$field] = $file->storeAs($storagePrefix, $fileName, 'public');
-                    }
-                }
-
-                // Determine member type
-                $memberType = $validated['member_type'] === 'others'
-                    ? ($validated['member_type_other'] ?? 'Others')
-                    : strtoupper($validated['member_type']);
-
-                // Prepare application data
-                $applicationData = [
-                    'member_type' => $memberType,
-                    'representative' => [
-                        'name' => $validated['representative_name'],
-                        'pan' => strtoupper(preg_replace('/[^A-Z0-9]/', '', $validated['representative_pan'])),
-                        'dob' => $validated['representative_dob'],
-                        'email' => strtolower(trim($validated['representative_email'])),
-                        'mobile' => preg_replace('/[^0-9]/', '', $validated['representative_mobile']),
-                    ],
-                    'gstin' => $gstin,
-                    'location' => [
-                        'id' => $location->id,
-                        'name' => $location->name,
-                        'state' => $location->state,
-                        'node_type' => $location->node_type,
-                        'switch_details' => $location->switch_details,
-                        'nodal_officer' => $location->nodal_officer,
-                    ],
-                    'port_selection' => [
-                        'capacity' => $validated['port_capacity'],
-                        'billing_plan' => $validated['billing_plan'],
-                        'amount' => $payableAmount,
-                        'currency' => $pricing->currency,
-                    ],
-                    'ip_prefix' => [
-                        'count' => $validated['ip_prefix_count'],
-                        'source' => $validated['ip_prefix_source'],
-                        'provider' => $validated['ip_prefix_provider'] ?? null,
-                    ],
-                    'peering' => [
-                        'pre_nixi_connectivity' => $validated['pre_peering_connectivity'],
-                        'asn_number' => $validated['asn_number'] ?? null,
-                    ],
-                    'router_details' => [
-                        'height_u' => $validated['router_height_u'] ?? null,
-                        'make_model' => $validated['router_make_model'] ?? null,
-                        'serial_number' => $validated['router_serial_number'] ?? null,
-                    ],
-                    'documents' => $storedDocuments,
-                ];
-
-                $applicationData['gst_verification_id'] = $gstVerification->id;
 
                 // Prepare registration details
                 $registrationDetails = [
                     'registration_id' => $registrationId,
-                    'registration_type' => $validated['registration_type'],
-                    'pancardno' => $panNo,
-                    'fullname' => $fullName,
-                    'email' => $email,
-                    'mobile' => $mobile,
-                    'dateofbirth' => $validated['dateofbirth'],
+                    'registration_type' => $registrationType,
+                    'pancardno' => $panNo ?? '',
+                    'fullname' => $fullName ?? '',
+                    'email' => $email ?? '',
+                    'mobile' => $mobile ?? '',
+                    'dateofbirth' => $dateOfBirth,
                     'registrationdate' => $registration->registrationdate,
                     'registrationtime' => $registration->registrationtime,
-                    'pan_verified' => true,
+                    'pan_verified' => $panVerified,
                     'email_verified' => true,
                     'mobile_verified' => true,
                     'status' => $registration->status,
@@ -399,96 +256,246 @@ class BackendDataEntryController extends Controller
                     ];
                 }
 
-                // Prepare authorized representative details
-                // For first application: use KYC contact details
-                // For subsequent applications: use form's authorized representative details
-                $isFirstApplication = !Application::where('user_id', $registration->id)
-                    ->where('application_type', 'IX')
-                    ->exists();
-
-                if ($isFirstApplication && $kycProfile) {
-                    // First application: use KYC contact details
-                    $authorizedRepresentativeDetails = [
-                        'name' => $kycProfile->contact_name,
-                        'pan' => $kycProfile->contact_pan,
-                        'dob' => $kycProfile->contact_dob?->format('Y-m-d'),
-                        'email' => $kycProfile->contact_email,
-                        'mobile' => $kycProfile->contact_mobile,
-                    ];
-                } else {
-                    // Subsequent application: use form's authorized representative details
-                    $authorizedRepresentativeDetails = [
-                        'name' => $validated['representative_name'],
-                        'pan' => strtoupper(preg_replace('/[^A-Z0-9]/', '', $validated['representative_pan'])),
-                        'dob' => $validated['representative_dob'],
-                        'email' => strtolower(trim($validated['representative_email'])),
-                        'mobile' => preg_replace('/[^0-9]/', '', $validated['representative_mobile']),
-                    ];
-                }
-
                 // Get application pricing
                 $applicationPricing = IxApplicationPricing::getActive();
                 $applicationFee = $applicationPricing ? (float) $applicationPricing->total_amount : 1000.00;
 
-                // Generate transaction ID for backend entry
-                $transactionId = 'BACKEND-'.now()->format('YmdHis').'-'.strtoupper(Str::random(8));
-                
-                $applicationData['payment'] = [
-                    'status' => 'pending',
-                    'plan' => $validated['billing_plan'],
-                    'amount' => $applicationFee,
-                    'application_fee' => $applicationPricing ? (float) $applicationPricing->application_fee : 1000.00,
-                    'gst_percentage' => $applicationPricing ? (float) $applicationPricing->gst_percentage : 18.00,
-                    'total_amount' => $applicationFee,
-                    'currency' => 'INR',
-                    'declaration_confirmed_at' => now('Asia/Kolkata')->toDateTimeString(),
-                    'transaction_id' => $transactionId,
-                    'payment_mode' => 'backend_entry',
-                    'completed_at' => now('Asia/Kolkata')->toDateTimeString(),
-                ];
-
-                // Create application with submitted status (payment is already completed in backend entry)
-                $application = Application::create([
-                    'user_id' => $registration->id,
-                    'pan_card_no' => $panNo,
-                    'application_id' => Application::generateApplicationId(),
-                    'application_type' => 'IX',
-                    'status' => 'submitted', // Directly submitted since payment is completed
-                    'application_data' => $applicationData,
-                    'registration_details' => $registrationDetails,
-                    'kyc_details' => $kycDetails,
-                    'authorized_representative_details' => $authorizedRepresentativeDetails,
-                    'gst_verification_id' => $gstVerification->id,
-                    'is_active' => true, // Member is active by default
-                    'submitted_at' => now('Asia/Kolkata'),
-                ]);
-
-                // Create payment transaction record
-                // Note: Using 'test' for now. After running migration 2025_12_20_180000, change to 'backend_entry'
-                $paymentTransaction = PaymentTransaction::create([
-                    'user_id' => $registration->id,
-                    'application_id' => $application->id,
-                    'transaction_id' => $transactionId,
-                    'payment_status' => 'success',
-                    'payment_mode' => 'test', // TODO: Change to 'backend_entry' after running migration
-                    'amount' => $applicationFee,
-                    'currency' => 'INR',
-                    'product_info' => 'IX Application Fee',
-                    'response_message' => 'Payment completed via backend data entry',
-                ]);
-
-                // Log status change - determine if admin or superadmin
+                // Process each application
+                $createdApplications = [];
                 $changedById = session('admin_id') ?? session('superadmin_id') ?? null;
                 $changedByType = session('admin_id') ? 'admin' : (session('superadmin_id') ? 'superadmin' : 'system');
-                
-                ApplicationStatusHistory::log(
-                    $application->id,
-                    null,
-                    'submitted',
-                    $changedByType,
-                    $changedById ?? 0,
-                    'Application created and submitted via backend data entry - Payment completed'
-                );
+
+                foreach ($applications as $appIndex => $appData) {
+                    // Get GSTIN for this application
+                    $gstin = isset($appData['gstin']) ? strtoupper(preg_replace('/[^A-Z0-9]/', '', $appData['gstin'])) : null;
+                    
+                    // Handle GST verification - auto-verify for backend entry
+                    $gstVerification = null;
+                    if ($gstin) {
+                        $gstVerification = GstVerification::where('user_id', $registration->id)
+                            ->where('gstin', $gstin)
+                            ->latest()
+                            ->first();
+
+                        if (! $gstVerification) {
+                            // Generate a unique request_id for backend entry
+                            $backendRequestId = 'BACKEND-'.now()->format('YmdHis').'-'.strtoupper(Str::random(8));
+                            
+                            // Ensure uniqueness
+                            while (GstVerification::where('request_id', $backendRequestId)->exists()) {
+                                $backendRequestId = 'BACKEND-'.now()->format('YmdHis').'-'.strtoupper(Str::random(8));
+                            }
+                            
+                            // Create GST verification (auto-verified in backend)
+                            $gstVerification = GstVerification::create([
+                                'user_id' => $registration->id,
+                                'gstin' => $gstin,
+                                'request_id' => $backendRequestId,
+                                'is_verified' => true,
+                                'status' => 'completed',
+                                'verification_data' => ['backend_entry' => true],
+                            ]);
+                        } else {
+                            // Update existing to verified
+                            $gstVerification->update([
+                                'is_verified' => true,
+                                'status' => 'completed',
+                            ]);
+                        }
+                    }
+
+                    // Get location and pricing (optional)
+                    $location = null;
+                    $pricing = null;
+                    $payableAmount = 0;
+                    
+                    if (!empty($appData['location_id'])) {
+                        try {
+                            $location = IxLocation::active()->find($appData['location_id']);
+                            
+                            if ($location && !empty($appData['port_capacity'])) {
+                                $pricing = IxPortPricing::active()
+                                    ->where('node_type', $location->node_type)
+                                    ->where('port_capacity', $appData['port_capacity'])
+                                    ->first();
+
+                                if ($pricing && !empty($appData['billing_plan'])) {
+                                    $payableAmount = $pricing->getAmountForPlan($appData['billing_plan']);
+                                }
+                            }
+                        } catch (\Exception $e) {
+                            Log::warning('Error fetching location/pricing for application: '.$e->getMessage());
+                        }
+                    }
+
+                    // Handle file uploads for this application
+                    $documentFields = [
+                        'agreement_file',
+                        'license_isp_file',
+                        'license_vno_file',
+                        'cdn_declaration_file',
+                        'general_declaration_file',
+                        'whois_details_file',
+                        'pan_document_file',
+                        'gstin_document_file',
+                        'msme_document_file',
+                        'incorporation_document_file',
+                        'authorized_rep_document_file',
+                    ];
+
+                    $storedDocuments = [];
+                    $storagePrefix = 'applications/'.$registration->id.'/ix/'.now()->format('YmdHis').'-'.$appIndex;
+
+                    foreach ($documentFields as $field) {
+                        $fileKey = "applications.{$appIndex}.{$field}";
+                        if ($request->hasFile($fileKey)) {
+                            $file = $request->file($fileKey);
+                            $originalName = $file->getClientOriginalName();
+                            $extension = $file->getClientOriginalExtension();
+                            $fileName = 'IX-'.pathinfo($originalName, PATHINFO_FILENAME).'.'.$extension;
+                            $storedDocuments[$field] = $file->storeAs($storagePrefix, $fileName, 'public');
+                        }
+                    }
+
+                    // Determine member type
+                    $memberType = null;
+                    if (!empty($appData['member_type'])) {
+                        $memberType = $appData['member_type'] === 'others'
+                            ? ($appData['member_type_other'] ?? 'Others')
+                            : strtoupper($appData['member_type']);
+                    }
+
+                    // Prepare application data (all fields optional)
+                    $applicationData = [
+                        'member_type' => $memberType,
+                        'representative' => [
+                            'name' => $appData['representative_name'] ?? null,
+                            'pan' => !empty($appData['representative_pan']) ? strtoupper(preg_replace('/[^A-Z0-9]/', '', $appData['representative_pan'])) : null,
+                            'dob' => $appData['representative_dob'] ?? null,
+                            'email' => !empty($appData['representative_email']) ? strtolower(trim($appData['representative_email'])) : null,
+                            'mobile' => !empty($appData['representative_mobile']) ? preg_replace('/[^0-9]/', '', $appData['representative_mobile']) : null,
+                        ],
+                        'gstin' => $gstin,
+                        'location' => $location ? [
+                            'id' => $location->id,
+                            'name' => $location->name,
+                            'state' => $location->state,
+                            'node_type' => $location->node_type,
+                            'switch_details' => $location->switch_details,
+                            'nodal_officer' => $location->nodal_officer,
+                        ] : null,
+                        'port_selection' => [
+                            'capacity' => $appData['port_capacity'] ?? null,
+                            'billing_plan' => $appData['billing_plan'] ?? null,
+                            'amount' => $payableAmount,
+                            'currency' => $pricing->currency ?? 'INR',
+                        ],
+                        'ip_prefix' => [
+                            'count' => $appData['ip_prefix_count'] ?? null,
+                            'source' => $appData['ip_prefix_source'] ?? null,
+                            'provider' => $appData['ip_prefix_provider'] ?? null,
+                        ],
+                        'peering' => [
+                            'pre_nixi_connectivity' => $appData['pre_peering_connectivity'] ?? null,
+                            'asn_number' => $appData['asn_number'] ?? null,
+                        ],
+                        'router_details' => [
+                            'height_u' => $appData['router_height_u'] ?? null,
+                            'make_model' => $appData['router_make_model'] ?? null,
+                            'serial_number' => $appData['router_serial_number'] ?? null,
+                        ],
+                        'documents' => $storedDocuments,
+                    ];
+
+                    if ($gstVerification) {
+                        $applicationData['gst_verification_id'] = $gstVerification->id;
+                    }
+
+                    // Prepare authorized representative details
+                    // For first application: use KYC contact details if available
+                    // For subsequent applications: use form's authorized representative details
+                    $isFirstApplication = !Application::where('user_id', $registration->id)
+                        ->where('application_type', 'IX')
+                        ->exists();
+
+                    if ($isFirstApplication && $kycProfile && $kycProfile->contact_name) {
+                        // First application: use KYC contact details
+                        $authorizedRepresentativeDetails = [
+                            'name' => $kycProfile->contact_name,
+                            'pan' => $kycProfile->contact_pan,
+                            'dob' => $kycProfile->contact_dob?->format('Y-m-d'),
+                            'email' => $kycProfile->contact_email,
+                            'mobile' => $kycProfile->contact_mobile,
+                        ];
+                    } else {
+                        // Use form's authorized representative details (all optional)
+                        $authorizedRepresentativeDetails = [
+                            'name' => $appData['representative_name'] ?? null,
+                            'pan' => !empty($appData['representative_pan']) ? strtoupper(preg_replace('/[^A-Z0-9]/', '', $appData['representative_pan'])) : null,
+                            'dob' => $appData['representative_dob'] ?? null,
+                            'email' => !empty($appData['representative_email']) ? strtolower(trim($appData['representative_email'])) : null,
+                            'mobile' => !empty($appData['representative_mobile']) ? preg_replace('/[^0-9]/', '', $appData['representative_mobile']) : null,
+                        ];
+                    }
+
+                    // Generate transaction ID for backend entry
+                    $transactionId = 'BACKEND-'.now()->format('YmdHis').'-'.strtoupper(Str::random(8));
+                    
+                    $applicationData['payment'] = [
+                        'status' => 'pending',
+                        'plan' => $appData['billing_plan'] ?? null,
+                        'amount' => $applicationFee,
+                        'application_fee' => $applicationPricing ? (float) $applicationPricing->application_fee : 1000.00,
+                        'gst_percentage' => $applicationPricing ? (float) $applicationPricing->gst_percentage : 18.00,
+                        'total_amount' => $applicationFee,
+                        'currency' => 'INR',
+                        'declaration_confirmed_at' => now('Asia/Kolkata')->toDateTimeString(),
+                        'transaction_id' => $transactionId,
+                        'payment_mode' => 'backend_entry',
+                        'completed_at' => now('Asia/Kolkata')->toDateTimeString(),
+                    ];
+
+                    // Create application with submitted status (payment is already completed in backend entry)
+                    $application = Application::create([
+                        'user_id' => $registration->id,
+                        'pan_card_no' => $panNo ?? '',
+                        'application_id' => Application::generateApplicationId(),
+                        'application_type' => 'IX',
+                        'status' => 'submitted', // Directly submitted since payment is completed
+                        'application_data' => $applicationData,
+                        'registration_details' => $registrationDetails,
+                        'kyc_details' => $kycDetails,
+                        'authorized_representative_details' => $authorizedRepresentativeDetails,
+                        'gst_verification_id' => $gstVerification?->id,
+                        'is_active' => true, // Member is active by default
+                        'submitted_at' => now('Asia/Kolkata'),
+                    ]);
+
+                    // Create payment transaction record
+                    PaymentTransaction::create([
+                        'user_id' => $registration->id,
+                        'application_id' => $application->id,
+                        'transaction_id' => $transactionId,
+                        'payment_status' => 'success',
+                        'payment_mode' => 'test', // TODO: Change to 'backend_entry' after running migration
+                        'amount' => $applicationFee,
+                        'currency' => 'INR',
+                        'product_info' => 'IX Application Fee',
+                        'response_message' => 'Payment completed via backend data entry',
+                    ]);
+
+                    // Log status change
+                    ApplicationStatusHistory::log(
+                        $application->id,
+                        null,
+                        'submitted',
+                        $changedByType,
+                        $changedById ?? 0,
+                        'Application created and submitted via backend data entry - Payment completed'
+                    );
+
+                    $createdApplications[] = $application->application_id;
+                }
 
                 DB::commit();
 
@@ -497,14 +504,14 @@ class BackendDataEntryController extends Controller
 
                 // Return success with credentials
                 return redirect()->route('admin.backend-data-entry')
-                    ->with('success', 'User registered and application created successfully!')
+                    ->with('success', 'User registered and '.count($createdApplications).' application(s) created successfully!')
                     ->with('credentials', [
                         'registration_id' => $registrationId,
-                        'email' => $email,
+                        'email' => $email ?? '',
                         'password' => $generatedPassword,
                         'email_otp' => $emailOtp,
                         'mobile_otp' => $mobileOtp,
-                        'application_id' => $application->application_id,
+                        'application_ids' => $createdApplications,
                     ]);
             } catch (Exception $e) {
                 DB::rollBack();
@@ -517,7 +524,8 @@ class BackendDataEntryController extends Controller
                 throw $e;
             }
         } catch (ValidationException $e) {
-            return back()->withErrors($e->errors())->withInput();
+            // No validation errors - all fields are optional
+            return back()->with('error', 'An error occurred: '.$e->getMessage())->withInput();
         } catch (QueryException $e) {
             $errorCode = $e->getCode();
             $errorMessage = $e->getMessage();
